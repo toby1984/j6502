@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import de.codesourcery.j6502.assembler.AddressingMode;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class CPU
@@ -49,37 +50,6 @@ Zero Page,X   LDA $44,X     $B5  2   4
 Indirect,X    LDA ($44,X)   $A1  2   6
 Indirect,Y    LDA ($44),Y   $B1  2   5+
  */
-	private static enum AdrMode
-	{
-		/**
-		 * This mode is only used with the X register.
-         * Consider a situation where the instruction is
-         *
-         * LDA ($20,X)
-         *
-         * - X contains $04
-         * - and memory at $24 contains 0024: 74 20
-         *
-         * First, X is added to $20 to get $24.
-         * The target address will be fetched from $24 resulting in a target address of $2074.
-         * Register A will be loaded with the contents of memory at $2074.
-		 */
-		INDEXED_INDIRECT_X,
-		/** LDA $10 **/
-		ZERO_PAGE,
-		/** LDA #$10 */
-		IMMEDIATE,
-		/** LDA $da00 */
-		ABSOLUTE,
-		/** LDA ( $10 ) , Y */
-		INDIRECT_INDEXED_Y,
-		/** LDA ( $10 , X ) */
-		ZERO_PAGE_X,
-		/** LDA $1000 , Y */
-		ABSOLUTE_INDEXED_Y,
-		/** LDA $1000 , X */
-		ABSOLUTE_INDEXED_X;
-	}
 
 	public CPU(IMemoryRegion memory)
 	{
@@ -133,24 +103,24 @@ bbb	addressing mode
 		{
 			final int opcode = (value >> 5 ) & 0b111;
 			final int modeBits = ( value >> 2 ) & 0b111;
-			final AdrMode mode;
+			final AddressingMode mode;
 			switch( modeBits ) {
 				case 0b000:
-					mode = AdrMode.INDEXED_INDIRECT_X; break; // LDA ($44,X)
+					mode = AddressingMode.INDEXED_INDIRECT_X; break; // LDA ($44,X)
 				case 0b001:
-					mode = AdrMode.ZERO_PAGE; break; // LDA $44
+					mode = AddressingMode.ZERO_PAGE; break; // LDA $44
 				case 0b010:
-					mode = AdrMode.IMMEDIATE; break; // LDA #$44
+					mode = AddressingMode.IMMEDIATE; break; // LDA #$44
 				case 0b011:
-					mode = AdrMode.ABSOLUTE; break; // LDA $4400
+					mode = AddressingMode.ABSOLUTE; break; // LDA $4400
 				case 0b100:
-					mode = AdrMode.INDIRECT_INDEXED_Y; break; // LDA ($44), Y
+					mode = AddressingMode.INDIRECT_INDEXED_Y; break; // LDA ($44), Y
 				case 0b101:
-					mode = AdrMode.ZERO_PAGE_X; break; // LDA $44, X
+					mode = AddressingMode.ZERO_PAGE_X; break; // LDA $44, X
 				case 0b110:
-					mode = AdrMode.ABSOLUTE_INDEXED_Y; break; // LDA $4400, Y
+					mode = AddressingMode.ABSOLUTE_INDEXED_Y; break; // LDA $4400, Y
 				case 0b111:
-					mode = AdrMode.ABSOLUTE_INDEXED_X; break; // LDA $4400, X
+					mode = AddressingMode.ABSOLUTE_INDEXED_X; break; // LDA $4400, X
 				default:
 					throw new InvalidOpcodeException("Unknown addressing mode",pc, memory.readByte(pc ) );
 			}
@@ -184,7 +154,7 @@ bbb	addressing mode
 		}
 	}
 
-	private int handleLDA(int opcode,AdrMode mode)
+	private int handleLDA(int opcode,AddressingMode mode)
 	{
 		int cycles = 0;
 		/*
@@ -256,7 +226,7 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
 		return cycles;
 	}
 
-	private byte loadValue(AdrMode mode) {
+	private byte loadValue(AddressingMode mode) {
 		switch(mode)
 		{
 			case ABSOLUTE:
@@ -293,37 +263,37 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
 		}
 	}
 
-	private int handleSBC(int opcode,AdrMode mode) {
+	private int handleSBC(int opcode,AddressingMode mode) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("handleSBC not implemented yet");
 	}
 
-	private int handleCMP(int opcode,AdrMode mode) {
+	private int handleCMP(int opcode,AddressingMode mode) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("handleCMP not implemented yet");
 	}
 
-	private int handleSTA(int opcode,AdrMode mode) {
+	private int handleSTA(int opcode,AddressingMode mode) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("handleSTA not implemented yet");
 	}
 
-	private int handleADC(int opcode,AdrMode mode) {
+	private int handleADC(int opcode,AddressingMode mode) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("handleADC not implemented yet");
 	}
 
-	private int handleEOR(int opcode,AdrMode mode) {
+	private int handleEOR(int opcode,AddressingMode mode) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("handleEOR not implemented yet");
 	}
 
-	private int handleAND(int opcode,AdrMode mode) {
+	private int handleAND(int opcode,AddressingMode mode) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("handleAND not implemented yet");
 	}
 
-	private int handleORA(int opcode,AdrMode mode) {
+	private int handleORA(int opcode,AddressingMode mode) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("handleORA not implemented yet");
 	}
