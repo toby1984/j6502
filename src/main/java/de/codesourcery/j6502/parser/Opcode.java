@@ -23,13 +23,13 @@ public enum Opcode
 					writer.writeByte( (byte) 0xad ); // LDA $4400
 					writer.writeWord( child0.child(0) );
 					break;
-				case ABSOLUTE_ZERO_PAGE_X:
+				case ABSOLUTE_INDEXED_X:
 					// MODE           SYNTAX         HEX LEN TIM
 					// Absolute,X    LDA $4400,X   $BD  3   4+
 					writer.writeByte( (byte) 0xbd ); // LDA $4400
 					writer.writeWord( child0.child(0) );
 					break;
-				case ABSOLUTE_ZERO_PAGE_Y:
+				case ABSOLUTE_INDEXED_Y:
 					// MODE           SYNTAX         HEX LEN TIM
 					// Absolute,Y      LDA $4400,Y   $B9  3   4+
 					writer.writeByte( (byte) 0xb9 ); // LDA $4400
@@ -47,7 +47,7 @@ public enum Opcode
 					writer.writeByte( (byte) 0xa9 ); // LDA #$44
 					writer.writeByte( ins.child(0).child(0) );
 					break;
-				case INDIRECT_ZERO_PAGE_X:
+				case INDEXED_INDIRECT_X:
 					// MODE           SYNTAX         HEX LEN TIM
 					// Indirect,X      LDA ($44,X)   $A1  2   6
 					writer.writeByte( (byte) 0xa1 );

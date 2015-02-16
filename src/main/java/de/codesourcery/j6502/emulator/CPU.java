@@ -64,7 +64,7 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
          * The target address will be fetched from $24 resulting in a target address of $2074.
          * Register A will be loaded with the contents of memory at $2074.
 		 */
-		INDIRECT_ZERO_PAGE_X,
+		INDEXED_INDIRECT_X,
 		/** LDA $10 **/
 		ZERO_PAGE,
 		/** LDA #$10 */
@@ -76,9 +76,9 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
 		/** LDA ( $10 , X ) */
 		ZERO_PAGE_X,
 		/** LDA $1000 , Y */
-		ABSOLUTE_ZERO_PAGE_Y,
+		ABSOLUTE_INDEXED_Y,
 		/** LDA $1000 , X */
-		ABSOLUTE_ZERO_PAGE_X;
+		ABSOLUTE_INDEXED_X;
 	}
 
 	public CPU(IMemoryRegion memory)
@@ -136,7 +136,7 @@ bbb	addressing mode
 			final AdrMode mode;
 			switch( modeBits ) {
 				case 0b000:
-					mode = AdrMode.INDIRECT_ZERO_PAGE_X; break; // LDA ($44,X)
+					mode = AdrMode.INDEXED_INDIRECT_X; break; // LDA ($44,X)
 				case 0b001:
 					mode = AdrMode.ZERO_PAGE; break; // LDA $44
 				case 0b010:
@@ -148,9 +148,9 @@ bbb	addressing mode
 				case 0b101:
 					mode = AdrMode.ZERO_PAGE_X; break; // LDA $44, X
 				case 0b110:
-					mode = AdrMode.ABSOLUTE_ZERO_PAGE_Y; break; // LDA $4400, Y
+					mode = AdrMode.ABSOLUTE_INDEXED_Y; break; // LDA $4400, Y
 				case 0b111:
-					mode = AdrMode.ABSOLUTE_ZERO_PAGE_X; break; // LDA $4400, X
+					mode = AdrMode.ABSOLUTE_INDEXED_X; break; // LDA $4400, X
 				default:
 					throw new InvalidOpcodeException("Unknown addressing mode",pc, memory.readByte(pc ) );
 			}
@@ -209,13 +209,13 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
 				accumulator = memory.readByte( pc++ );
 				cycles = 2;
 				break;
-			case ABSOLUTE_ZERO_PAGE_X: // LDA $44,X
+			case ABSOLUTE_INDEXED_X: // LDA $44,X
 				final short base = memory.readWord( pc );
 				pc += 2;
 				int sum = (base+x) & 0xffff;
 				accumulator = memory.readByte( sum );
 				break;
-			case ABSOLUTE_ZERO_PAGE_Y: // LDA $4400, Y
+			case ABSOLUTE_INDEXED_Y: // LDA $4400, Y
 				final short base2 = memory.readWord( pc );
 				pc += 2;
 				sum = (base2 + y) & 0xffff;
@@ -229,7 +229,7 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
 				accumulator = memory.readByte( memory.readByte( pc++ ) );
 				cycles = 3;
 				break;
-			case INDIRECT_ZERO_PAGE_X:
+			case INDEXED_INDIRECT_X:
 				break;
 			case ZERO_PAGE_X:
 				final short base3 = memory.readByte( pc++ );
@@ -261,12 +261,12 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
 		{
 			case ABSOLUTE:
 				return memory.readByte( pc++ );
-			case ABSOLUTE_ZERO_PAGE_X:
+			case ABSOLUTE_INDEXED_X:
 				final short base = memory.readWord( pc );
 				pc += 2;
 				int sum = (base+x) & 0xffff;
 				return memory.readByte( sum );
-			case ABSOLUTE_ZERO_PAGE_Y:
+			case ABSOLUTE_INDEXED_Y:
 				final short base2 = memory.readWord( pc );
 				pc += 2;
 				sum = (base2 + y) & 0xffff;
@@ -275,7 +275,7 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
 				return memory.readByte( pc++ );
 			case ZERO_PAGE:
 				return memory.readByte( memory.readByte( pc++ ) );
-			case INDIRECT_ZERO_PAGE_X:
+			case INDEXED_INDIRECT_X:
 				final short base3 = memory.readByte( pc++ );
 				sum = (base3+x) & 0xffff;
 				final int adr = memory.readWord( sum );

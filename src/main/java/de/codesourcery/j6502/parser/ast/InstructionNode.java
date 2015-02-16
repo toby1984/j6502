@@ -47,7 +47,7 @@ public class InstructionNode extends ASTNode
 			if ( child0 instanceof IndirectOperandX)
 			{
 				Opcode.getByteValue( child(0).child(0) );
-				return AddressingMode.INDIRECT_ZERO_PAGE_X;
+				return AddressingMode.INDEXED_INDIRECT_X;
 			}
 			else if ( child0 instanceof IndirectOperandY)
 			{
@@ -81,9 +81,9 @@ public class InstructionNode extends ASTNode
 						if ( Opcode.isZeroPage( value ) ) {
 							return AddressingMode.ZERO_PAGE_X;
 						}
-						return AddressingMode.ABSOLUTE_ZERO_PAGE_X;
+						return AddressingMode.ABSOLUTE_INDEXED_X;
 					case Y:
-						return AddressingMode.ABSOLUTE_ZERO_PAGE_Y;
+						return AddressingMode.ABSOLUTE_INDEXED_Y;
 					default:
 						// $$FALL-THROUGH$$
 				}

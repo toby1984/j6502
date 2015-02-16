@@ -5,7 +5,7 @@ public enum AddressingMode
 	/**
 	 * LDA ($44,X)
 	 */
-	INDIRECT_ZERO_PAGE_X, // 000	(zero page,X)
+	INDEXED_INDIRECT_X, // 000	(zero page,X)
 	/**
 	 * LDA $44
 	 */
@@ -27,11 +27,11 @@ public enum AddressingMode
 	 */
 	ZERO_PAGE_X, // 101	zero page,X
 	/**
-	 * LDA $44,Y
+	 * LDA $4400,Y
 	 */
-	ABSOLUTE_ZERO_PAGE_Y, // 110	absolute,Y
+	ABSOLUTE_INDEXED_Y, // 110	absolute,Y
 	/**
 	 * LDA $da00,X
 	 */
-	ABSOLUTE_ZERO_PAGE_X; // 111	absolute,X
+	ABSOLUTE_INDEXED_X; // 111	absolute,X
 }

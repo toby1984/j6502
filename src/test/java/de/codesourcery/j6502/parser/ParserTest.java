@@ -176,7 +176,7 @@ public class ParserTest extends TestCase {
 		assertTrue( ast.child(0).child(0).child(0).child(0) instanceof NumberLiteral);
 
 		final InstructionNode ins = (InstructionNode) ast.child(0).child(0);
-		assertEquals( AddressingMode.ABSOLUTE_ZERO_PAGE_X , ins.getAddressingMode() );
+		assertEquals( AddressingMode.ABSOLUTE_INDEXED_X , ins.getAddressingMode() );
 		assertEquals( Opcode.LDA, ins.opcode );
 
 		final NumberLiteral lit = (NumberLiteral) ast.child(0).child(0).child(0).child(0);
@@ -197,7 +197,7 @@ public class ParserTest extends TestCase {
 		assertTrue( ast.child(0).child(0).child(0).child(0) instanceof NumberLiteral);
 
 		final InstructionNode ins = (InstructionNode) ast.child(0).child(0);
-		assertEquals( AddressingMode.ABSOLUTE_ZERO_PAGE_Y , ins.getAddressingMode() );
+		assertEquals( AddressingMode.ABSOLUTE_INDEXED_Y , ins.getAddressingMode() );
 		assertEquals( Opcode.LDA, ins.opcode );
 
 		final NumberLiteral lit = (NumberLiteral) ast.child(0).child(0).child(0).child(0);
@@ -260,7 +260,7 @@ public class ParserTest extends TestCase {
 		assertTrue( ast.child(0).child(0).child(0).child(0) instanceof NumberLiteral);
 
 		final InstructionNode ins = (InstructionNode) ast.child(0).child(0);
-		assertEquals( AddressingMode.INDIRECT_ZERO_PAGE_X , ins.getAddressingMode() );
+		assertEquals( AddressingMode.INDEXED_INDIRECT_X , ins.getAddressingMode() );
 		assertEquals( Opcode.LDA, ins.opcode );
 
 		final NumberLiteral lit = (NumberLiteral) ast.child(0).child(0).child(0).child(0);
