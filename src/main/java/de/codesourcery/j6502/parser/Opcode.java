@@ -45,25 +45,25 @@ public enum Opcode
 					// MODE           SYNTAX         HEX LEN TIM
 					// # Immediate     LDA #$44      $A9  2   2
 					writer.writeByte( (byte) 0xa9 ); // LDA #$44
-					writer.writeByte( ins.child(0).child(0) );
+					writer.writeByte( child0.child(0) );
 					break;
 				case INDEXED_INDIRECT_X:
 					// MODE           SYNTAX         HEX LEN TIM
 					// Indirect,X      LDA ($44,X)   $A1  2   6
 					writer.writeByte( (byte) 0xa1 );
-					writer.writeByte( ins.child(0).child(0) );
+					writer.writeByte( child0.child(0) );
 					break;
 				case INDIRECT_INDEXED_Y:
 					// MODE           SYNTAX         HEX LEN TIM
 					// Indirect,Y      LDA ($44),Y   $B1  2   5+
 					writer.writeByte( (byte) 0xb1 );
-					writer.writeByte( ins.child(0).child(0) );
+					writer.writeByte( child0.child(0) );
 					break;
 				case ZERO_PAGE:
 					// MODE           SYNTAX         HEX LEN TIM
 					// Zero Page     LDA $44       $A5  2   3		#
 					writer.writeByte( (byte) 0xa5 ); // LDA $4400
-					writer.writeByte( ins.child(0).child(0) );
+					writer.writeByte( child0.child(0) );
 					break;
 				default:
 					throw new InvalidAddressingModeException( ins );
