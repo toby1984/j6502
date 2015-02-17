@@ -23,6 +23,19 @@ public final class AddressRange {
 		}
 	}
 
+	public static AddressRange range(int start,int end) {
+		if ( end < start ) {
+			throw new IllegalArgumentException("end < start ?");
+		}
+		if ( start < 0 || start > 65535 ) {
+			throw new IllegalArgumentException("start out-of-range: "+start);
+		}
+		if ( end < 0 || end > 65535 ) {
+			throw new IllegalArgumentException("end out-of-range: "+end);
+		}
+		return new AddressRange( start , (end - start)+1 );
+	}
+
 	public boolean contains(AddressRange other)
 	{
 		return this.startAddress <= other.startAddress && other.endAddress <= this.endAddress;

@@ -29,12 +29,18 @@ public class Emulator implements IEmulator {
 	@Override
 	public void reset()
 	{
-		cpu.reset();
 		memory.reset();
+
+		// all 6502 CPUs read their initial PC value from $FFFC
+		memory.writeWord( CPU.RESET_VECTOR_LOCATION , (short) 0xfce2 );
+
 		if ( this.memoryProvider != null )
 		{
 			this.memoryProvider.loadInto( memory );
 		}
+
+		// reset CPU, will initialize PC from RESET_VECTOR_LOCATION
+		cpu.reset();
 	}
 
 	@Override

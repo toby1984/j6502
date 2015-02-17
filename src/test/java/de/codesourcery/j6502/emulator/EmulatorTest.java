@@ -16,6 +16,7 @@ import de.codesourcery.j6502.utils.HexDump;
 public class EmulatorTest  extends TestCase
 {
 	private Emulator emulator;
+	private static final int PRG_LOAD_ADDRESS = MemorySubsystem.Bank.BANK1.range.getStartAddress();
 
 	@Override
 	protected void setUp() throws Exception
@@ -57,11 +58,15 @@ public class EmulatorTest  extends TestCase
 		final IMemoryProvider provider = new IMemoryProvider()
 		{
 			@Override
-			public void loadInto(IMemoryRegion region) {
-				region.bulkWrite( 0 , actual , 0 , actual.length );
+			public void loadInto(IMemoryRegion region)
+			{
+				region.bulkWrite( PRG_LOAD_ADDRESS , actual , 0 , actual.length );
+				region.writeWord( CPU.RESET_VECTOR_LOCATION , (short) PRG_LOAD_ADDRESS );
 			}
 		};
+
 		emulator.setMemoryProvider( provider );
+		emulator.getCPU().pc = MemorySubsystem.Bank.BANK1.range.getStartAddress();
 		emulator.singleStep();
 
 		System.out.println("\n---------------------");
@@ -91,4 +96,5 @@ public class EmulatorTest  extends TestCase
 		final int actual = emulator.getCPU().accumulator;
 		assertEquals( expected & 0xff , actual & 0xff );
 	}
+
 }

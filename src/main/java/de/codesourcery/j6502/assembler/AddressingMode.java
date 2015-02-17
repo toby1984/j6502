@@ -3,6 +3,10 @@ package de.codesourcery.j6502.assembler;
 public enum AddressingMode
 {
 	/**
+	 * ASL
+	 */
+	IMPLIED,
+	/**
 	 * LDA ($44,X)
 	 */
 	INDEXED_INDIRECT_X, // 000	(zero page,X)
@@ -26,6 +30,10 @@ public enum AddressingMode
 	 * LDA $44 , X
 	 */
 	ZERO_PAGE_X, // 101	zero page,X
+	/**
+	 * LDA $44 , Y
+	 */
+	ZERO_PAGE_Y,
 	/**
 	 * LDA $4400,Y
 	 */

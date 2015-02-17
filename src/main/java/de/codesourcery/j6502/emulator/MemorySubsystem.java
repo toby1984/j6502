@@ -1,58 +1,408 @@
 package de.codesourcery.j6502.emulator;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.io.IOException;
+import java.io.InputStream;
 
-public class MemorySubsystem extends IMemoryRegion {
 
-	public static final String RAM_IDENTIFIER = "RAM";
+public class MemorySubsystem extends IMemoryRegion
+{
+	public static enum Bank
+	{
+		/**
+		 * $0000 - $0FFF
+		 */
+		BANK0(0,AddressRange.range(0x0000,0x0FFF) ),
+		/**
+		 * $1000 - $7FFF
+		 */
+		BANK1(1,AddressRange.range(0x1000,0x7FFF) ),
+		/**
+		 * $8000 - $9FFF
+		 */
+		BANK2(2,AddressRange.range(0x8000,0x9FFF) ),
+		/**
+		 * $A000 - $BFFF
+		 */
+		BANK3(3,AddressRange.range(0xA000,0xBFFF) ),
+		/**
+		 * $C000 - $CFFF
+		 */
+		BANK4(4,AddressRange.range(0xC000,0xCFFF) ),
+		/**
+		 * $D000 - $DFFF
+		 */
+		BANK5(5,AddressRange.range(0xD000,0xDFFF) ),
+		/**
+		 * $E000 - $FFFF
+		 */
+		BANK6(6,AddressRange.range(0xE000,0xFFFF) );
 
-	private final List<IMemoryRegion> regions = new ArrayList<>();
+		public final int index;
+		public final AddressRange range;
 
-	private final IMemoryRegion[] memoryMap = new IMemoryRegion[65536];
+		private Bank(int index,AddressRange range)
+		{
+			this.index = index;
+			this.range = range;
+		}
+	}
 
-	public MemorySubsystem() {
+	// line is LOW-ACTIVE
+	private boolean exrom;
+
+	// line is LOW-ACTIVE
+	private boolean game;
+
+	/* CPU on-chip data direction register.
+	 *
+	 * See http://unusedino.de/ec64/technical/project64/mapping_c64.html
+	 *
+     * Bit 0: Direction of Bit 0 I/O on port at next address.  Default = 1 (output)
+     * Bit 1: Direction of Bit 1 I/O on port at next address.  Default = 1 (output)
+     * Bit 2: Direction of Bit 2 I/O on port at next address.  Default = 1 (output)
+     * Bit 3: Direction of Bit 3 I/O on port at next address.  Default = 1 (output)
+     * Bit 4: Direction of Bit 4 I/O on port at next address.  Default = 0 (input)
+     * Bit 5: Direction of Bit 5 I/O on port at next address.  Default = 1 (output)
+     * Bit 6: Direction of Bit 6 I/O on port at next address.  Not used.
+     * Bit 7: Direction of Bit 7 I/O on port at next address.  Not used.
+	 */
+	private byte plaDataDirection = 0b00101111; // port directional data register, address $00
+
+
+	/* CPU on-chip data register
+	 *
+	 * See http://unusedino.de/ec64/technical/project64/mapping_c64.html
+	 *
+	 * Bit 0: LORAM signal.  Selects ROM or RAM at 40960 ($A000).  1=BASIC, 0=RAM
+     * Bit 1: HIRAM signal.  Selects ROM or RAM at 57344 ($E000).  1=Kernal, 0=RAM
+     * Bit 2: CHAREN signal.  Selects character ROM or I/O devices.  1=I/O, 0=ROM
+     * Bit 3: Cassette Data Output line.
+     * Bit 4: Cassette Switch Sense.  Reads 0 if a button is pressed, 1 if not.
+     * Bit 5: Cassette Motor Switch Control.  A 1 turns the motor on, 0 turns it off.
+     * Bits 6-7: Not connected--no function presently defined.
+	 */
+	private byte plaLatchBits = 0; // address $01
+
+	private IMemoryRegion ram0;
+	private IMemoryRegion ram1;
+	private IMemoryRegion ram2;
+	private IMemoryRegion ram3;
+	private IMemoryRegion ram4;
+	private IMemoryRegion ram5;
+	private IMemoryRegion ram6;
+
+	private IMemoryRegion kernelROM;
+	private IMemoryRegion charROM;
+	private IMemoryRegion basicROM;
+	private IMemoryRegion ioArea;
+	private IMemoryRegion cartROMLow;
+	private IMemoryRegion cartROMHi;
+
+	// regions used when reading from an address
+	private IMemoryRegion[] readRegions = new IMemoryRegion[ Bank.values().length ];
+
+	// regions used when writing to an address
+	private IMemoryRegion[] writeRegions = new IMemoryRegion[ Bank.values().length ];
+
+	// mapping from memory addresses to readRegions
+	private final int[] readMap = new int[65536];
+
+	// mapping from memory addresses to writeRegions
+	private final int[] writeMap = new int[65536];
+
+	public MemorySubsystem()
+	{
 		super("main memory" , new AddressRange(0,65536 ) );
+
+		// setup memory from addresses to different memory banks
+		for ( Bank bank : Bank.values() )
+		{
+			for ( int start = bank.range.getStartAddress() , len = bank.range.getSizeInBytes() ; len > 0 ; start++,len-- )
+			{
+				readMap [start] = bank.index;
+				writeMap[start] = bank.index;
+			}
+		}
 		reset();
 	}
 
 	@Override
 	public void reset()
 	{
-		regions.clear();
-		mapRegion( new Memory( RAM_IDENTIFIER ,new AddressRange(0,65536 ) ) );
-	}
+		exrom = true; // line is LOW = ACTIVE so setting it to 'true' means disabled/not present
+		game = true;  // line is LOW = ACTIVE so setting it to 'true' means disabled/not present
 
-	public void mapRegion(IMemoryRegion mem)
-	{
-		regions.add( mem );
-		for ( int adr = mem.getAddressRange().getStartAddress() , len = mem.getAddressRange().getSizeInBytes() ; len > 0 ; len-- ) {
-			memoryMap[adr++]=mem;
+		plaDataDirection = 0b00101111;
+		plaLatchBits = 0b00110111; // BASIC ROM , KERNEL ROM , I/O AREA
+
+		setupMemoryLayout();
+
+		for ( Bank bank : Bank.values() )
+		{
+			final IMemoryRegion r1 = readRegions[ bank.index ];
+			final IMemoryRegion r2 = readRegions[ bank.index ];
+			if ( r1 != null ) {
+				r1.reset();
+			}
+			if ( r2 != null )
+			{
+				if ( r1 == null || r1 != r2 ) {
+					r2.reset();
+				}
+			}
 		}
 	}
 
-	@Override
-	public byte readByte(int offset)
+	/*
+     * LORAM (bit 0, weight 1)
+     * Is a control line which banks the 8 kByte BASIC ROM in or out of the CPU address space.
+     * Normally, this line is logically high (set to 1) for BASIC operation.
+     * If this line is logically low (cleared to 0), the BASIC ROM will typically disappear
+     * from the memory map and be replaced by 8 kBytes of RAM from $A000-$BFFF.
+     * Some exceptions to this rule exist; see the table below for a full overview.
+     *
+     * HIRAM (bit 1, weight 2) is a control line which banks the 8 kByte KERNAL ROM in or out of the CPU address space.
+     * Normally, this line is logically high (set to 1) for KERNAL ROM operation.
+     * If this line is logically low (cleared to 0), the KERNAL ROM will typically disappear from the memory map and
+     * be replaced by 8 kBytes of RAM from $E000-$FFFF.
+     * Some exceptions to this rule exist; see the table below for a full overview.
+     *
+     * CHAREN (bit 2, weight 4) is a control line which banks the 4 kByte character generator ROM in or out of the CPU address space.
+     * From the CPU point of view, the character generator ROM occupies the same address space as the I/O devices ($D000-$DFFF).
+     * When the CHAREN line is set to 1 (as is normal), the I/O devices appear in the CPU address space,
+     * and the character generator ROM is not accessible.
+     * When the CHAREN bit is cleared to 0, the character generator ROM appears in the CPU address space, and the I/O devices are not accessible.
+     * The CPU only needs to access the character generator ROM when downloading the character set from ROM to RAM.
+     * CHAREN can be overridden by other control lines in certain memory configurations.
+     * CHAREN will have no effect on any memory configuration without I/O devices. RAM will appear from $D000-$DFFF instead.
+	 */
+
+	private void setupMemoryLayout()
 	{
-		final IMemoryRegion region = memoryMap[offset];
-		final int realOffset = offset - region.getAddressRange().getStartAddress();
-		return region.readByte( realOffset );
+		// create table index from EXROM, EXGAME and PLA latch bits 0-3
+		int index = plaLatchBits & 0b111;
+		if ( exrom ) {
+			index |= 1 << 4;
+		}
+		if ( game ) {
+			index |= 1 << 3;
+		}
+
+		createRegions( index );
+
+		// setup memory mappings (see http://www.c64-wiki.com/index.php/Bank_Switching)
+		switch(index)
+		{
+			case 0:
+			case 1:
+			case 4:
+			case 8:
+			case 12:
+			case 24:
+			case 28:
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3 , ram4 , ram5 , ram6 };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3 , ram4 , ram5 , ram6 };
+				break;
+			case 2:
+				//  RAM 	RAM 	RAM 	CART_ROM_HI 	RAM 	CHAR_ROM 	KERNAL_ROM
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , ram2 , cartROMHi , ram4 , charROM , kernelROM };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3      , ram4 , ram5    , ram6 };
+				break;
+			case 3:
+				// RAM 	RAM 	CART_ROM_LO 	CART_ROM_HI 	RAM 	CHAR_ROM 	KERNAL_ROM
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , cartROMLow , cartROMHi, ram4 , charROM, kernelROM };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2       , ram3     , ram4 , ram5   , ram6 };
+				break;
+			case 5:
+				// RAM 	RAM 	RAM 	RAM 	RAM 	I/O 	RAM
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3 , ram4 , ioArea , ram6 };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3 , ram4 , ioArea , ram6 };
+				break;
+			case 6:
+				// RAM 	RAM 	RAM 	CART_ROM_HI 	RAM 	I/O 	KERNAL_ROM
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , ram2 , cartROMHi , ram4 , ioArea , kernelROM };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3      , ram4 , ioArea , ram6 };
+				break;
+			case 7:
+				// RAM 	RAM 	CART_ROM_LO 	CART_ROM_HI 	RAM 	I/O 	KERNAL_ROM
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , cartROMLow , cartROMHi , ram4 , ioArea , kernelROM };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2       , ram3      , ram4 , ioArea , ram6 };
+				break;
+			case 9:
+			case 25:
+				// RAM 	RAM 	RAM 	RAM 	RAM 	CHAR ROM 	RAM
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3 , ram4 , charROM , ram6 };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3 , ram4 , ram5    , ram6 };
+				break;
+			case 10:
+			case 26:
+				// RAM 	RAM 	RAM 	RAM 	RAM 	CHAR ROM 	KERNAL ROM
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3 , ram4 , charROM , kernelROM };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3 , ram4 , ram5    , ram6 };
+				break;
+			case 11:
+				// RAM 	RAM 	CART ROM LO 	BASIC ROM 	RAM 	CHAR ROM 	KERNAL ROM
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , cartROMLow , basicROM , ram4 , charROM , kernelROM };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2       , ram3     , ram4 , ram5    , ram6 };
+				break;
+			case 13:
+			case 29:
+				// RAM 	RAM 	RAM 	RAM 	RAM 	I/O 	RAM
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3 , ram4 , ioArea , ram6 };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3 , ram4 , ioArea , ram6 };
+				break;
+			case 14:
+			case 30:
+				// RAM 	RAM 	RAM 	RAM 	RAM 	I/O 	KERNAL ROM
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3 , ram4 , ioArea , kernelROM};
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3 , ram4 , ioArea , ram6 };
+				break;
+			case 15:
+				// RAM 	RAM 	CART ROM LO 	BASIC ROM 	RAM 	I/O 	KERNAL
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , cartROMLow , basicROM , ram4 , ioArea , kernelROM };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2       , ram3     , ram4 , ioArea , ram6 };
+				break;
+			case 16:
+			case 17:
+			case 18:
+			case 19:
+			case 20:
+			case 21:
+			case 22:
+			case 23:
+				// RAM 	- 	CART ROM LO 	- 	- 	I/O 	CART ROM HI
+				readRegions  = new IMemoryRegion[] { ram0 , null , cartROMLow, null , null , ioArea, cartROMHi};
+				writeRegions = new IMemoryRegion[] { ram0 , null , ram2      , null , null , ioArea, ram6 };
+				break;
+			case 27:
+				// RAM 	RAM 	RAM 	BASIC ROM 	RAM 	CHAR ROM 	KERNAL ROM
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , ram2 , basicROM , ram4 , charROM , kernelROM };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3     , ram4 , ram5 , ram6 };
+				break;
+			case 31: /* >>>>> DEFAULT MEMORY LAYOUT AFTER RESET if no cartridges are present <<<<<< */
+				// RAM 	RAM 	RAM 	BASIC ROM 	RAM 	I/O 	KERNAL ROM
+				readRegions  = new IMemoryRegion[] { ram0 , ram1 , ram2 , basicROM , ram4 , ioArea , kernelROM };
+				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2 , ram3     , ram4 , ioArea , ram6 };
+				break;
+			default:
+				throw new RuntimeException("memory layout unknown, unhandled combination of PLA latch bits: 0b"+Integer.toBinaryString( index ));
+		}
+
+		// assertions: make sure memory regions are continuous
+		if ( readRegions.length != writeRegions.length) {
+			throw new RuntimeException("Memory region lengths do not match");
+		}
+		IMemoryRegion previous = null;
+		for (final IMemoryRegion next : readRegions)
+		{
+			if ( next != null)
+			{
+				if ( previous != null && next.getAddressRange().getStartAddress() != previous.getAddressRange().getEndAddress() )
+				{
+					throw new RuntimeException("Internal error,non-continous memory mapping for reads: "+previous+" | "+next);
+				}
+				previous = next;
+			}
+		}
+		previous = null;
+		for (final IMemoryRegion next : writeRegions)
+		{
+			if ( next != null)
+			{
+				if ( previous != null && next.getAddressRange().getStartAddress() != previous.getAddressRange().getEndAddress() )
+				{
+					throw new RuntimeException("Internal error,non-continous memory mapping for writes: "+previous+" | "+next);
+				}
+				previous = next;
+			}
+		}
+
+		System.out.println( this );
 	}
 
-	@Override
-	public void writeWord(int offset,short value)
+	private void createRegions(int index)
 	{
-		final byte low = (byte) value;
-		final byte hi = (byte) (value>>8);
+		ram0 = new Memory("RAM #0",Bank.BANK0.range);
+		ram1 = new Memory("RAM #1",Bank.BANK1.range);
+		ram2 = new Memory("RAM #2",Bank.BANK2.range);
+		ram3 = new Memory("RAM #3",Bank.BANK3.range);
+		ram4 = new Memory("RAM #4",Bank.BANK4.range);
+		ram5 = new Memory("RAM #5",Bank.BANK5.range);
+		ram6 = new Memory("RAM #6",Bank.BANK6.range);
 
-		IMemoryRegion region = memoryMap[offset];
-		int realOffset = offset - region.getAddressRange().getStartAddress();
-		region.writeByte( realOffset , low );
+		// kernel ROM
+		kernelROM = new Memory("Kernel ROM" , Bank.BANK6.range );
+		loadROM("kernel_v3.rom" , kernelROM );
 
-		region = memoryMap[offset+1];
-		realOffset = offset - region.getAddressRange().getStartAddress();
-		region.writeByte( realOffset , hi );
+		// char ROM
+		charROM = new Memory("Char ROM" , Bank.BANK5.range );
+		loadROM("character.rom" , kernelROM );
+
+		// basic ROM
+		basicROM = new Memory("Basic ROM" , Bank.BANK3.range );
+		loadROM( "basic_v2.rom" , basicROM );
+
+		// I/O area
+		ioArea = new Memory("I/O area", Bank.BANK5.range );
+
+		cartROMLow = null;
+		cartROMHi = null;
+
+		switch( index )
+		{
+			case 2:
+			case 6:
+				cartROMHi = new Memory("Cart ROM hi" , Bank.BANK3.range );
+				break;
+			case 3:
+			case 7:
+				cartROMLow = new Memory("Cart ROM low" , Bank.BANK2.range );
+				cartROMHi = new Memory("Cart ROM hi" , Bank.BANK3.range );
+				break;
+			case 11:
+			case 15:
+				cartROMLow = new Memory("Cart ROM low" , Bank.BANK2.range );
+				break;
+			case 16:
+			case 17:
+			case 18:
+			case 19:
+			case 20:
+			case 21:
+			case 22:
+			case 23:
+				cartROMLow = new Memory("Cart ROM low" , Bank.BANK2.range );
+				cartROMHi = new Memory("Cart ROM hi" , Bank.BANK6.range );
+				break;
+		}
+
+	}
+
+	private void loadROM(String string, IMemoryRegion region)
+	{
+		final String path ="/roms/"+string;
+		System.out.println("Loading ROM: "+string);
+		InputStream in = getClass().getResourceAsStream( path );
+		if ( in == null ) {
+			throw new RuntimeException("Failed to load ROM from classpath: "+string);
+		}
+		try
+		{
+			int offset = 0;
+			final byte[] buffer = new byte[1024];
+			int bytesRead = 0;
+			while ( (bytesRead= in.read(buffer) ) > 0 )
+			{
+				region.bulkWrite( offset , buffer , 0 , bytesRead );
+				offset += bytesRead;
+			}
+		} catch (IOException e) {
+			throw new RuntimeException("Failed to load ROM from classpath: "+string,e);
+		}
+		finally
+		{
+			try { in.close(); } catch(Exception e) {}
+		}
 	}
 
 	@Override
@@ -64,30 +414,53 @@ public class MemorySubsystem extends IMemoryRegion {
 	}
 
 	@Override
+	public byte readByte(int offset)
+	{
+		switch(offset)
+		{
+			case 0:
+				return plaDataDirection;
+			case 1:
+				return plaLatchBits;
+			default:
+				final IMemoryRegion region = readRegions[ readMap[ offset ] ];
+				final int realOffset = offset - region.getAddressRange().getStartAddress();
+				return region.readByte( realOffset );
+		}
+	}
+
+	@Override
+	public void writeWord(int offset,short value)
+	{
+		final byte low = (byte) value;
+		final byte hi = (byte) (value>>8);
+
+		writeByte( offset , low );
+		writeByte( offset+1 , hi );
+	}
+
+	@Override
 	public void writeByte(int offset, byte value)
 	{
-		final IMemoryRegion region = memoryMap[offset];
-		final int realOffset = offset - region.getAddressRange().getStartAddress();
-		region.writeByte( realOffset , value );
+		switch(offset)
+		{
+			case 0:
+				plaDataDirection = value;
+				break;
+			case 1:
+				plaLatchBits = value;
+				setupMemoryLayout();
+				break;
+			default:
+				final IMemoryRegion region = writeRegions[ writeMap[ offset ] ];
+				final int realOffset = offset - region.getAddressRange().getStartAddress();
+				region.writeByte( realOffset , value );
+		}
 	}
 
 	@Override
 	public void bulkWrite(int startingAddress, byte[] data, int datapos, int len)
 	{
-		final AddressRange range = new AddressRange( startingAddress , len );
-		for ( final IMemoryRegion r : regions )
-		{
-			if ( r.getAddressRange().contains( range ) )
-			{
-				// fast path, write does not cross region boundaries
-				final int realOffset = startingAddress - r.getAddressRange().getStartAddress();
-				r.bulkWrite( realOffset , data , datapos ,len );
-				return;
-			}
-		}
-
-		// slow path, memory write across region boundaries
-		// (TODO: Speed of this could be improved greatly by segmenting the writes according to the configured memory regions instead of doing byte-wise copying)
 		for ( int dstAdr = startingAddress , bytesLeft = len , src = datapos ; bytesLeft > 0 ; bytesLeft-- ) {
 			writeByte( dstAdr++ , data[ src++ ] );
 		}
@@ -97,10 +470,20 @@ public class MemorySubsystem extends IMemoryRegion {
 	public String toString()
 	{
 		final StringBuilder buffer = new StringBuilder("=== Memory layout ===\n");
-		for (final Iterator<IMemoryRegion> it = regions.iterator(); it.hasNext();) {
-			final IMemoryRegion r = it.next();
-			buffer.append( r );
-			if ( it.hasNext() ) {
+		for ( int i = 0 ; i < readRegions.length ; i++ )
+		{
+			IMemoryRegion readBank = readRegions[i];
+			IMemoryRegion writeBank = writeRegions[i];
+
+			buffer.append( readBank.getAddressRange().toString() ).append(": ");
+			if ( readBank == writeBank ) {
+				buffer.append( readBank.getIdentifier() );
+			} else {
+				buffer.append( "READ:" ).append( readBank.getIdentifier() );
+				buffer.append( " WRITE:" ).append( writeBank.getIdentifier() );
+			}
+			if ( (i+1) < readRegions.length )
+			{
 				buffer.append("\n");
 			}
 		}

@@ -9,6 +9,8 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class CPU
 {
+	public static final int RESET_VECTOR_LOCATION = 0xfffc;
+
 	private final IMemoryRegion memory;
 
 	public short accumulator;
@@ -21,14 +23,14 @@ public class CPU
 
 	public static enum Flag
 	{
-		CARRY(1 <<0 , "C"),
-		ZERO(1 <<1 , "Z" ),
-		IRQ_DISABLE(1 <<2 , "I"),
-		DECIMAL_MODE(1 <<3 , "D"),
-		BREAK(1 <<4 , "B"),
-		EXPANSION(1 <<5 , "X" ),
-		OVERFLOW(1 <<6  , "O" ),
-		NEGATIVE(1 <<7 , "N");
+		CARRY(1 <<0 , "C"), // 1
+		ZERO(1 <<1 , "Z" ), // 2
+		IRQ_DISABLE(1 <<2 , "I"), // 4
+		DECIMAL_MODE(1 <<3 , "D"), // 8
+		BREAK(1 <<4 , "B"), // 16
+		EXPANSION(1 <<5 , "X" ), // 32
+		OVERFLOW(1 <<6  , "O" ), // 64
+		NEGATIVE(1 <<7 , "N"); // 128
 
 		public final int value;
 		public final char symbol;
@@ -56,12 +58,12 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
 		this.memory = memory;
 	}
 
-	public void reset() {
-		accumulator = 0;
-		pc = 0;
-		x = 0;
-		y = 0;
-		sp = 0;
+	public void reset()
+	{
+		pc = memory.readWord( RESET_VECTOR_LOCATION );
+		accumulator = 0xaa;
+		x = y = 0;
+		sp = 0xfd;
 		flags = 0;
 	}
 
@@ -70,6 +72,8 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
 		// read op-code
 
 		final int pcBackup = pc;
+
+		System.out.println("Executing instruction @ "+HexDump.toHexBigEndian( (short) pc ) );
 		final int value = memory.readByte( pc++ );
 
 		/*

@@ -9,6 +9,7 @@ import de.codesourcery.j6502.parser.ast.CommentNode;
 import de.codesourcery.j6502.parser.ast.Identifier;
 import de.codesourcery.j6502.parser.ast.IdentifierNode;
 import de.codesourcery.j6502.parser.ast.ImmediateOperand;
+import de.codesourcery.j6502.parser.ast.IndirectOperand;
 import de.codesourcery.j6502.parser.ast.IndirectOperandX;
 import de.codesourcery.j6502.parser.ast.IndirectOperandY;
 import de.codesourcery.j6502.parser.ast.InstructionNode;
@@ -164,7 +165,7 @@ public class Parser
 
 				if ( ! (lexer.peek(TokenType.EOF) || lexer.peek( TokenType.EOF) || lexer.peek( TokenType.SEMICOLON ) ) )
 				{
-					final ASTNode left = parseLeftArgument();
+					final ASTNode left = parseLeftArgument( op );
 					if ( left != null )
 					{
 						ins.addChild( left );
@@ -202,7 +203,7 @@ public class Parser
 	 *           STA ($15,X) ( accumulator will be written to the address that $15+x points to )
 	 */
 
-	private ASTNode parseLeftArgument()
+	private ASTNode parseLeftArgument(Opcode currentIns)
 	{
 		ASTNode result = null;
 		if ( lexer.peek(TokenType.PARENS_OPEN ) ) { // indirect addressing
@@ -217,6 +218,13 @@ public class Parser
 			if ( lexer.peek(TokenType.PARENS_CLOSE) ) // ( $ff ) , y
 			{
 				lexer.next();
+
+				if ( currentIns == Opcode.JMP )
+				{
+					result = new IndirectOperand();
+					result.addChild( number );
+					return result;
+				}
 				lexer.next(TokenType.COMMA);
 				final RegisterReference reg = parseRegister();
 				if ( reg.register == Register.Y ) {

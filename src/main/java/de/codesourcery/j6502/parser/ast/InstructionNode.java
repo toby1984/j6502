@@ -1,7 +1,6 @@
 package de.codesourcery.j6502.parser.ast;
 
 import de.codesourcery.j6502.assembler.AddressingMode;
-import de.codesourcery.j6502.assembler.InvalidAddressingModeException;
 import de.codesourcery.j6502.parser.Opcode;
 import de.codesourcery.j6502.parser.Register;
 
@@ -40,10 +39,19 @@ public class InstructionNode extends ASTNode
 	ABSOLUTE_Y, // 110	absolute,Y OK
 	ABSOLUTE_X; // 111	absolute,X OK
 		 */
+
+		if ( hasNoChildren() )
+		{
+			return AddressingMode.IMPLIED;
+		}
+
 		final ASTNode child0 = child(0);
 		final ASTNode child1 = getChildCount() > 1 ? child(1) : null;
 		if ( child1 == null )
 		{
+			// Intentionally NOT handling IndirectOperand node here
+			// since it's only used by the JMP opcode and nothing else ;
+			// JMP opcode handles this case
 			if ( child0 instanceof IndirectOperandX)
 			{
 				Opcode.getByteValue( child(0).child(0) );
@@ -83,13 +91,16 @@ public class InstructionNode extends ASTNode
 						}
 						return AddressingMode.ABSOLUTE_INDEXED_X;
 					case Y:
+						if ( Opcode.isZeroPage( value ) ) {
+							return AddressingMode.ZERO_PAGE_Y;
+						}
 						return AddressingMode.ABSOLUTE_INDEXED_Y;
 					default:
 						// $$FALL-THROUGH$$
 				}
 			}
 		}
-		throw new InvalidAddressingModeException( this );
+		throw new RuntimeException( "Unhandled addressing mode: child0="+child0+",child1="+child1);
 	}
 
 }

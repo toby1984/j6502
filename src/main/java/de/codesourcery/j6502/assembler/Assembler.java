@@ -20,6 +20,7 @@ public class Assembler
 
 	public interface BufferWriter
 	{
+		public int getCurrentAddress();
 		public void writeByte(byte b);
 		public void writeWord(short b);
 		public void writeByte(ASTNode node);
@@ -56,6 +57,11 @@ public class Assembler
 		@Override
 		public void writeWord(ASTNode node) {
 			writeWord( Opcode.getWordValue( node ) );
+		}
+
+		@Override
+		public int getCurrentAddress() {
+			return currentOffset;
 		}
 	};
 
