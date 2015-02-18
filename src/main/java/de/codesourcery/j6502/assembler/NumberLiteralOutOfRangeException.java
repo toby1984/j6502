@@ -2,9 +2,9 @@ package de.codesourcery.j6502.assembler;
 
 public class NumberLiteralOutOfRangeException extends RuntimeException  {
 
-	public final short actualValue;
+	public final int actualValue;
 
-	public NumberLiteralOutOfRangeException(String msg,short actualValue) {
+	public NumberLiteralOutOfRangeException(String msg,int actualValue) {
 		super(msg);
 		this.actualValue = actualValue;
 	}
@@ -13,7 +13,7 @@ public class NumberLiteralOutOfRangeException extends RuntimeException  {
 		return new NumberLiteralOutOfRangeException("Number literal out of range (0...255 or -127...+128): "+actualValue,actualValue);
 	}
 
-	public static NumberLiteralOutOfRangeException wordRange(short actualValue) {
+	public static NumberLiteralOutOfRangeException wordRange(int actualValue) {
 		return new NumberLiteralOutOfRangeException("Number literal out of range (-32767...32768 or 0...65535): "+actualValue,actualValue);
 	}
 }

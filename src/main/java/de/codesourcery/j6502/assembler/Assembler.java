@@ -5,32 +5,30 @@ import java.util.Map;
 
 import de.codesourcery.j6502.parser.Opcode;
 import de.codesourcery.j6502.parser.ast.AST;
-import de.codesourcery.j6502.parser.ast.ASTNode;
+import de.codesourcery.j6502.parser.ast.IASTNode;
+import de.codesourcery.j6502.parser.ast.ICompilationContextAware;
 import de.codesourcery.j6502.parser.ast.Identifier;
 import de.codesourcery.j6502.parser.ast.InstructionNode;
 import de.codesourcery.j6502.parser.ast.LabelNode;
 import de.codesourcery.j6502.parser.ast.Statement;
 
+
+
 public class Assembler
 {
 	protected byte[] buffer = new byte[1024];
 	protected int currentOffset;
+	protected LabelNode previousGlobalLabel;
 
 	private final Map<Identifier,Integer> labelOffsets = new HashMap<>();
 
-	public interface BufferWriter
+	private final ISymbolTable symbolTable = new SymbolTable();
+
+	private final ICompilationContext context = new ICompilationContext()
 	{
-		public int getCurrentAddress();
-		public void writeByte(byte b);
-		public void writeWord(short b);
-		public void writeByte(ASTNode node);
-		public void writeWord(ASTNode node);
-	}
-
-	private final BufferWriter writer = new BufferWriter() {
-
 		@Override
-		public void writeByte(byte b) {
+		public void writeByte(byte b)
+		{
 			if ( currentOffset  >= buffer.length ) {
 				expandBuffer();
 			}
@@ -50,18 +48,28 @@ public class Assembler
 		}
 
 		@Override
-		public void writeByte(ASTNode node) {
+		public ISymbolTable getSymbolTable() {
+			return symbolTable;
+		}
+
+		@Override
+		public void writeByte(IASTNode node) {
 			writeByte( Opcode.getByteValue( node ) );
 		}
 
 		@Override
-		public void writeWord(ASTNode node) {
+		public void writeWord(IASTNode node) {
 			writeWord( Opcode.getWordValue( node ) );
 		}
 
 		@Override
 		public int getCurrentAddress() {
 			return currentOffset;
+		}
+
+		@Override
+		public LabelNode getPreviousGlobalLabel() {
+			return previousGlobalLabel;
 		}
 	};
 
@@ -71,11 +79,15 @@ public class Assembler
 		buffer = newBuffer;
 	}
 
-	public byte[] assemble(AST ast)
+	public byte[] assemble(AST ast) {
+		return assemble(ast,context);
+	}
+
+	public byte[] assemble(AST ast,ICompilationContext context)
 	{
-		for ( final ASTNode node : ast )
+		for ( final IASTNode node : ast )
 		{
-			assemble( (Statement) node );
+			assemble( (Statement) node , context );
 		}
 
 		// return actual buffer
@@ -86,34 +98,38 @@ public class Assembler
 		return result;
 	}
 
-	private void assemble(Statement stmt)
+	private void assemble(Statement stmt,ICompilationContext context)
 	{
-		int i = 0;
-		ASTNode node = stmt.child(0);
-		if ( stmt.child(0) instanceof LabelNode)
+		final int i = 0;
+		IASTNode node = stmt.child(0);
+
+		// process labels
+		stmt.visitBreadthFirst( n ->
 		{
-			registerLabel((LabelNode) stmt.child(0) );
-			i++;
-		}
+			if ( n instanceof LabelNode)
+			{
+				final LabelNode label = (LabelNode) n;
+				final Label symbol;
+				if ( label.isLocal() ) {
+					symbol = new Label( label.identifier , null );
+				} else {
+					symbol = new Label( label.identifier , label.parentIdentifier.identifier );
+					previousGlobalLabel = label;
+				}
+				symbol.setValue( currentOffset );
+				context.getSymbolTable().defineSymbol( symbol );
+			}
+			else if ( n instanceof ICompilationContextAware)
+			{
+				((ICompilationContextAware) n).visit( context );
+			}
+		});
+
 		node = stmt.child(i);
 		if ( node instanceof InstructionNode)
 		{
-			assemble((InstructionNode) node);
+			final InstructionNode ins = (InstructionNode) node;
+			ins.opcode.assemble( ins , context );
 		}
-	}
-
-	private void registerLabel(LabelNode label) {
-		if ( ! label.isGlobal() ) {
-			throw new RuntimeException("Local labels not implemented yet");
-		}
-		if ( labelOffsets.containsKey( label.identifier ) ) {
-			throw new DuplicateLabelException( label );
-		}
-		labelOffsets.put( label.identifier , currentOffset );
-	}
-
-	private void assemble(InstructionNode node)
-	{
-		node.opcode.assemble( node , writer );
 	}
 }

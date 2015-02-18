@@ -6,8 +6,9 @@ import de.codesourcery.j6502.parser.ast.AST;
 import de.codesourcery.j6502.parser.ast.ASTNode;
 import de.codesourcery.j6502.parser.ast.AbsoluteOperand;
 import de.codesourcery.j6502.parser.ast.CommentNode;
+import de.codesourcery.j6502.parser.ast.IASTNode;
 import de.codesourcery.j6502.parser.ast.Identifier;
-import de.codesourcery.j6502.parser.ast.IdentifierNode;
+import de.codesourcery.j6502.parser.ast.IdentifierReferenceNode;
 import de.codesourcery.j6502.parser.ast.ImmediateOperand;
 import de.codesourcery.j6502.parser.ast.IndirectOperand;
 import de.codesourcery.j6502.parser.ast.IndirectOperandX;
@@ -172,7 +173,7 @@ public class Parser
 						if ( lexer.peek(TokenType.COMMA ) )
 						{
 							lexer.next();
-							final ASTNode right = parseRightArgument();
+							final IASTNode right = parseRightArgument();
 							if ( right != null ) {
 								ins.addChild( right );
 							} else {
@@ -210,7 +211,7 @@ public class Parser
 
 			lexer.next();
 
-			final ASTNode number = parseNumber();
+			final IASTNode number = parseExpression();
 			if ( number == null ) {
 				fail("Indirect addressing requires an address");
 			}
@@ -253,14 +254,14 @@ public class Parser
 		else if ( lexer.peek(TokenType.HASH ) ) { // immediate addressing
 			lexer.next();
 			result = new ImmediateOperand();
-			final ASTNode value = parseNumber();
+			final IASTNode value = parseExpression();
 			if ( value == null ) {
 				fail("Immediate mode requires an argument");
 			}
 			result.addChild( value );
 		} else if ( lexer.peek(TokenType.DOLLAR) || lexer.peek(TokenType.DIGITS ) ) { // absolute addressing
 			result = new AbsoluteOperand();
-			result.addChild( parseNumber() );
+			result.addChild( parseExpression() );
 		}
 		else if ( lexer.peek(TokenType.CHARACTERS ) && Identifier.isValidIdentifier( lexer.peek().text ) ) // absolute addressing: reference to label
 		{
@@ -269,14 +270,13 @@ public class Parser
 		return result;
 	}
 
-	private ASTNode parseRightArgument()
+	private IASTNode parseRightArgument()
 	{
 		final RegisterReference reg = parseRegister();
 		if ( reg != null ) {
 			return reg;
 		}
-		// FIXME: Add support for labels on RHS
-		return parseNumber();
+		return parseExpression();
 	}
 
 	private RegisterReference parseRegister()
@@ -292,7 +292,7 @@ public class Parser
 		return null;
 	}
 
-	public NumberLiteral parseNumber()
+	public IASTNode parseExpression()
 	{
 		final Notation notation;
 		final StringBuilder buffer = new StringBuilder();
@@ -321,7 +321,14 @@ public class Parser
 			buffer.append( lexer.next().text );
 			value = Long.parseLong( buffer.toString() );
 		}
-		else {
+		else if ( lexer.peek(TokenType.CHARACTERS ) )
+		{
+			final Token tok = lexer.peek();
+			if ( Identifier.isValidIdentifier( tok.text ) ) {
+				return new IdentifierReferenceNode( new Identifier( tok.text ) );
+			}
+			return null;
+		} else {
 			return null;
 		}
 
@@ -337,13 +344,4 @@ public class Parser
 	{
 		return VALID_HEX_NUMBER.matcher(text).matches();
 	}
-
-
-	private void parseLabel()
-	{
-		if ( lexer.peek().hasType(TokenType.CHARACTERS ) && Identifier.isValidIdentifier( lexer.peek().text ) ) {
-			currentNode.addChild( new IdentifierNode( new Identifier( lexer.next().text ) ) );
-		}
-	}
-
 }

@@ -1,27 +1,26 @@
 package de.codesourcery.j6502.parser;
 
 import de.codesourcery.j6502.assembler.AddressingMode;
-import de.codesourcery.j6502.assembler.Assembler.BufferWriter;
 import de.codesourcery.j6502.assembler.BranchTargetOutOfRangeException;
+import de.codesourcery.j6502.assembler.ICompilationContext;
 import de.codesourcery.j6502.assembler.InvalidAddressingModeException;
-import de.codesourcery.j6502.assembler.NumberLiteralOutOfRangeException;
-import de.codesourcery.j6502.parser.ast.ASTNode;
+import de.codesourcery.j6502.parser.ast.IASTNode;
 import de.codesourcery.j6502.parser.ast.IndirectOperand;
 import de.codesourcery.j6502.parser.ast.InstructionNode;
-import de.codesourcery.j6502.parser.ast.NumberLiteral;
+import de.codesourcery.j6502.parser.ast.NumericValue;
 
 public enum Opcode
 {
 	// generic #1
 	LDA("LDA")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleGeneric1(ins,writer, 0b101 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b101 ); }
 
 	},
 	STA("STA")
 	{
 		@Override
-		public void assemble(InstructionNode ins, BufferWriter writer)
+		public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			if ( ins.getAddressingMode() == AddressingMode.IMMEDIATE ) // STA #$xx makes no sense
 			{
@@ -32,32 +31,32 @@ public enum Opcode
 	},
 	ORA("ORA")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleGeneric1(ins,writer, 0b000 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b000 ); }
 	},
 	AND("AND")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleGeneric1(ins,writer, 0b001 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b001 ); }
 	},
 	EOR("EOR")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleGeneric1(ins,writer, 0b010 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b010 ); }
 	},
 	ADC("ADC")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleGeneric1(ins,writer, 0b011 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b011 ); }
 	},
 	CMP("CMP")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleGeneric1(ins,writer, 0b110 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b110 ); }
 	},
 	SBC("SBC")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleGeneric1(ins,writer, 0b111 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b111 ); }
 	},
 	// generic #2
 	ASL("ASL")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			if ( ins.getAddressingMode() == AddressingMode.IMMEDIATE ) // ASL #$xx makes no sense
 			{
@@ -68,7 +67,7 @@ public enum Opcode
 	},
 	ROL("ROL")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			if ( ins.getAddressingMode() == AddressingMode.IMMEDIATE ) // ROL #$xx makes no sense
 			{
@@ -79,7 +78,7 @@ public enum Opcode
 	},
 	LSR("LSR")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			if ( ins.getAddressingMode() == AddressingMode.IMMEDIATE ) // LSR #$xx makes no sense
 			{
@@ -90,7 +89,7 @@ public enum Opcode
 	},
 	ROR("ROR")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			if ( ins.getAddressingMode() == AddressingMode.IMMEDIATE ) // ROR #$xx makes no sense
 			{
@@ -101,7 +100,7 @@ public enum Opcode
 	},
 	STX("STX")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			switch( ins.getAddressingMode() )
 			{
@@ -117,7 +116,7 @@ public enum Opcode
 	},
 	LDX("LDX")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			switch( ins.getAddressingMode() )
 			{
@@ -135,7 +134,7 @@ public enum Opcode
 	},
 	DEC("DEC")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			switch( ins.getAddressingMode() )
 			{
@@ -152,7 +151,7 @@ public enum Opcode
 	},
 	INC("INC")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			switch( ins.getAddressingMode() )
 			{
@@ -170,7 +169,7 @@ public enum Opcode
 	// generic #3
 	BIT("BIT")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			switch( ins.getAddressingMode() )
 			{
@@ -186,7 +185,7 @@ public enum Opcode
 	},
 	JMP("JMP")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			/*
 			 * Indirect      JMP ($5597)   $6C  3   5
@@ -194,8 +193,8 @@ public enum Opcode
 			 */
 			if ( ins.hasChildren() )
 			{
-				ASTNode child0 = ins.child(0);
-				ASTNode child1 = ins.getChildCount() > 1 ? ins.child(1) : null;
+				final IASTNode child0 = ins.child(0);
+				final IASTNode child1 = ins.getChildCount() > 1 ? ins.child(1) : null;
 				if ( child0 != null && child0 instanceof IndirectOperand && child1 == null ) { // JMP ($xxxx)
 					writer.writeByte( (byte) 0x6c );
 					writer.writeWord( child0.child(0) );
@@ -218,7 +217,7 @@ public enum Opcode
 	},
 	STY("STY")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			switch( ins.getAddressingMode() )
 			{
@@ -234,7 +233,7 @@ public enum Opcode
 	},
 	LDY("LDY")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			switch( ins.getAddressingMode() )
 			{
@@ -253,7 +252,7 @@ public enum Opcode
 	},
 	CPY("CPY")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			switch( ins.getAddressingMode() )
 			{
@@ -270,7 +269,7 @@ public enum Opcode
 	},
 	CPX("CPX")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer)
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			switch( ins.getAddressingMode() )
 			{
@@ -301,40 +300,40 @@ public enum Opcode
      */
 	BPL("BPL")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleConditionalBranch( ins , writer , (byte) 0x10 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x10 ); }
 	},
 	BMI("BMI")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleConditionalBranch( ins , writer , (byte) 0x30 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x30 ); }
 	},
 	BVC("BVC")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleConditionalBranch( ins , writer , (byte) 0x50 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x50 ); }
 	},
 	BVS("BVS")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleConditionalBranch( ins , writer , (byte) 0x70 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x70 ); }
 	},
 	BCC("BCC")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleConditionalBranch( ins , writer , (byte) 0x90 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x90 ); }
 	},
 	BCS("BCS")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleConditionalBranch( ins , writer , (byte) 0xb0 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0xb0 ); }
 	},
 	BNE("BNE")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleConditionalBranch( ins , writer , (byte) 0xd0 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0xd0 ); }
 	},
 	BEQ("BEQ")
 	{
-		@Override public void assemble(InstructionNode ins, BufferWriter writer) { assembleConditionalBranch( ins , writer , (byte) 0xf0 ); }
+		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0xf0 ); }
 	},
 	BRK("BRK") {
 
 		@Override
-		public void assemble(InstructionNode ins, BufferWriter writer)
+		public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			if ( ins.getAddressingMode() != AddressingMode.IMPLIED ) {
 				throw new InvalidAddressingModeException( ins );
@@ -345,7 +344,7 @@ public enum Opcode
 	JSR("JSR") {
 
 		@Override
-		public void assemble(InstructionNode ins, BufferWriter writer)
+		public void assemble(InstructionNode ins, ICompilationContext writer)
 		{
 			switch( ins.getAddressingMode() ) {
 				case ABSOLUTE:
@@ -397,7 +396,7 @@ public enum Opcode
 		this.opcode = opcode;
 	}
 
-	private static void assembleConditionalBranch(InstructionNode ins,BufferWriter writer,byte opcode)
+	private static void assembleConditionalBranch(InstructionNode ins,ICompilationContext writer,byte opcode)
 	{
 		if ( ins.getAddressingMode() != AddressingMode.ABSOLUTE && ins.getAddressingMode() != AddressingMode.ZERO_PAGE) // ASL #$xx makes no sense
 		{
@@ -408,7 +407,7 @@ public enum Opcode
 		writer.writeByte( relOffset );
 	}
 
-	private static byte getRelativeOffset(InstructionNode ins, BufferWriter writer) {
+	private static byte getRelativeOffset(InstructionNode ins, ICompilationContext writer) {
 		final int relOffset = getWordValue( ins.child(0).child(0) ) - writer.getCurrentAddress();
 		if( relOffset < -128 || relOffset > 127 ) {
 			throw new BranchTargetOutOfRangeException(ins, relOffset);
@@ -436,21 +435,11 @@ public enum Opcode
 		return mnemonic;
 	}
 
-	public static byte getByteValue(ASTNode node)
-	{
-		final NumberLiteral lit = (NumberLiteral) node;
-		if ( lit.value < -128 || lit.value > 255 )
-		{
-			throw NumberLiteralOutOfRangeException.byteRange( lit.value );
-		}
-		return (byte) lit.value;
-	}
-
 	public static boolean isZeroPage(short value) {
 		return value >= -128 && value <= 127;
 	}
 
-	private static void assembleGeneric1(InstructionNode ins, BufferWriter writer,int aaa)
+	private static void assembleGeneric1(InstructionNode ins, ICompilationContext writer,int aaa)
 	{
 		final int cc = 0b01;
 		/*
@@ -470,7 +459,7 @@ public enum Opcode
 		 * 110	absolute,Y
 		 * 111	absolute,X
 		 */
-		final ASTNode child0 = ins.child(0);
+		final IASTNode child0 = ins.child(0);
 		int opCode=0;
 		switch( ins.getAddressingMode() )
 		{
@@ -535,7 +524,7 @@ public enum Opcode
 		}
 	}
 
-	private static void assembleGeneric2(InstructionNode ins, BufferWriter writer,int aaa)
+	private static void assembleGeneric2(InstructionNode ins, ICompilationContext writer,int aaa)
 	{
 		final int cc = 0b10;
 		/*
@@ -562,7 +551,7 @@ public enum Opcode
 			return;
 		}
 
-		final ASTNode child0 = ins.child(0);
+		final IASTNode child0 = ins.child(0);
 		switch( ins.getAddressingMode() )
 		{
 			case IMMEDIATE: // OK
@@ -613,7 +602,7 @@ public enum Opcode
 		}
 	}
 
-	private static void assembleGeneric3(InstructionNode ins, BufferWriter writer,int aaa)
+	private static void assembleGeneric3(InstructionNode ins, ICompilationContext writer,int aaa)
 	{
 		final int cc = 0b00;
 		/*
@@ -630,7 +619,7 @@ public enum Opcode
 		 * 101	zero page,X
 		 * 111	absolute,X
 		 */
-		final ASTNode child0 = ins.child(0);
+		final IASTNode child0 = ins.child(0);
 		int opCode=0;
 		switch( ins.getAddressingMode() )
 		{
@@ -674,18 +663,25 @@ public enum Opcode
 		}
 	}
 
-	public static short getWordValue(ASTNode node)
+	public static byte getByteValue(IASTNode node)
 	{
-		final NumberLiteral lit = (NumberLiteral) node;
-		if ( lit.value < -32768 || lit.value > 65535 )
-		{
-			throw NumberLiteralOutOfRangeException.wordRange( lit.value );
+		final NumericValue lit = (NumericValue) node;
+		if ( ! lit.isValueAvailable() ) {
+			return (byte) 0xff;
 		}
-		// 6502 uses little endian, swap bytes
-		return lit.value;
+		return lit.getByteValue();
 	}
 
-	public void assemble(InstructionNode ins, BufferWriter writer)
+	public static short getWordValue(IASTNode node)
+	{
+		final NumericValue lit = (NumericValue) node;
+		if ( ! lit.isValueAvailable() ) {
+			return (short) 0xffff;
+		}
+		return lit.getWordValue();
+	}
+
+	public void assemble(InstructionNode ins, ICompilationContext writer)
 	{
 		if ( ins.getAddressingMode() != AddressingMode.IMPLIED ) {
 			throw new InvalidAddressingModeException( ins );

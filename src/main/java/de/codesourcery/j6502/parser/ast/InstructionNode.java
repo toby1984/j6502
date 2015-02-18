@@ -45,8 +45,8 @@ public class InstructionNode extends ASTNode
 			return AddressingMode.IMPLIED;
 		}
 
-		final ASTNode child0 = child(0);
-		final ASTNode child1 = getChildCount() > 1 ? child(1) : null;
+		final IASTNode child0 = child(0);
+		final IASTNode child1 = getChildCount() > 1 ? child(1) : null;
 		if ( child1 == null )
 		{
 			// Intentionally NOT handling IndirectOperand node here

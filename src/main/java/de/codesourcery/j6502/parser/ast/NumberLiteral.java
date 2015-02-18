@@ -1,6 +1,8 @@
 package de.codesourcery.j6502.parser.ast;
 
-public class NumberLiteral extends ASTNode {
+import de.codesourcery.j6502.assembler.NumberLiteralOutOfRangeException;
+
+public class NumberLiteral extends ASTNode implements NumericValue {
 
 	public static enum Notation {
 		DECIMAL,HEXADECIMAL;
@@ -21,5 +23,29 @@ public class NumberLiteral extends ASTNode {
 			return "$"+Integer.toHexString( value );
 		}
 		return Short.toString( value );
+	}
+
+	@Override
+	public byte getByteValue()
+	{
+		if ( value < -128 || value > 255 )
+		{
+			throw NumberLiteralOutOfRangeException.byteRange( value );
+		}
+		return (byte) value;
+	}
+
+	@Override
+	public short getWordValue() {
+		if ( value < -32768 || value > 65535 )
+		{
+			throw NumberLiteralOutOfRangeException.wordRange( value );
+		}
+		return value;
+	}
+
+	@Override
+	public boolean isValueAvailable() {
+		return true;
 	}
 }
