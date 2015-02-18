@@ -4,23 +4,38 @@ import junit.framework.TestCase;
 import de.codesourcery.j6502.parser.Lexer;
 import de.codesourcery.j6502.parser.Parser;
 import de.codesourcery.j6502.parser.Scanner;
+import de.codesourcery.j6502.parser.ast.Identifier;
+import de.codesourcery.j6502.utils.HexDump;
 
 public class AssemblerTest extends TestCase {
 
 	private static final int PRG_LOAD_ADDRESS = 0;
 
-	private void assertCompilesTo(String s, int... expected)
+	private void assertCompilesTo(String s, int expected1, int... expected2)
 	{
 		final Parser p = new Parser(new Lexer(new Scanner(s)));
 
 		final Assembler a = new Assembler();
 		final byte[] actual = a.assemble( p.parse() );
+		assertArrayEquals( actual, expected1,expected2 );
+	}
+
+	private void assertArrayEquals(byte[] actual,int expected1,int... expected2)
+	{
+		final int len = 1 + ( expected2 != null ? expected2.length : 0 );
+		final byte[] expected = new byte[ len ];
+		expected[0] = (byte) expected1;
+		if ( expected2 != null ) {
+			for ( int i = 0 ; i < expected2.length ; i++ ) {
+				expected[1+i] = (byte) expected2[i];
+			}
+		}
 		if ( actual.length != expected.length ) {
 			fail("Length mismatch: actual = "+actual.length+" , expected = "+expected.length);
 		}
 		for ( int i =  0 ; i < expected.length ; i++ ) {
 			final byte ex = (byte) (expected[i] & 0xff);
-			assertEquals( "Mismatch on byte #"+i+" , got "+actual[i]+" but expected "+ex, ex , actual[i] );
+			assertEquals( "Mismatch on byte #"+i+" , got "+actual[i]+" but expected "+ex+"\n\n"+HexDump.INSTANCE.dump((short) 0, actual, 0, actual.length), ex , actual[i] );
 		}
 	}
 
@@ -33,9 +48,59 @@ public class AssemblerTest extends TestCase {
 		try {
 			a.assemble( p.parse() );
 			fail("Compiling "+s+" should've failed");
-		} catch(Exception e) {
+		} catch(final Exception e) {
 			// ok
 		}
+	}
+
+	public void testBackwardsReferenceToGlobalLabelInZeroPage()
+	{
+		final String s = "NOP\n"+
+				          "label:\n"+
+	                      "       JMP label";
+
+		final Parser p = new Parser(new Lexer(new Scanner(s)));
+
+		final Assembler a = new Assembler();
+		final byte[] actual = a.assemble( p.parse() );
+
+		final ISymbolTable symbolTable = a.context.getSymbolTable();
+
+		final Identifier id = new Identifier("label");
+		assertTrue( symbolTable.isDefined( id , null ) );
+		final ISymbol<?> symbol = symbolTable.getSymbol( id , null );
+		assertNotNull( symbol );
+		assertEquals( Label.class , symbol.getClass() );
+		final Label label = (Label) symbol;
+		assertTrue( label.hasValue() );
+		assertEquals( new Integer(1) , label.getValue() );
+
+		assertArrayEquals( actual , 0xea, 0x4c,0x01 , 0x00 );
+	}
+
+	public void testForwardsReferenceToGlobalLabel()
+	{
+		final String s = "JMP label\n"+
+	                      "NOP\n"+
+				          "label:";
+
+		final Parser p = new Parser(new Lexer(new Scanner(s)));
+
+		final Assembler a = new Assembler();
+		final byte[] actual = a.assemble( p.parse() );
+
+		final ISymbolTable symbolTable = a.context.getSymbolTable();
+
+		final Identifier id = new Identifier("label");
+		assertTrue( symbolTable.isDefined( id , null ) );
+		final ISymbol<?> symbol = symbolTable.getSymbol( id , null );
+		assertNotNull( symbol );
+		assertEquals( Label.class , symbol.getClass() );
+		final Label label = (Label) symbol;
+		assertTrue( label.hasValue() );
+		assertEquals( new Integer(4) , label.getValue() );
+
+		assertArrayEquals( actual , 0x4c,0x04 , 0x00 , 0xea );
 	}
 
 	public void testLDA() {

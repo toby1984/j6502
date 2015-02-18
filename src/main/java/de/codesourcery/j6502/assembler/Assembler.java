@@ -24,7 +24,7 @@ public class Assembler
 
 	private final ISymbolTable symbolTable = new SymbolTable();
 
-	private final ICompilationContext context = new ICompilationContext()
+	protected final ICompilationContext context = new ICompilationContext()
 	{
 		@Override
 		public void writeByte(byte b)
@@ -110,8 +110,8 @@ public class Assembler
 			{
 				final LabelNode label = (LabelNode) n;
 				final Label symbol;
-				if ( label.isLocal() ) {
-					symbol = new Label( label.identifier , null );
+				if ( label.isGlobal() ) {
+					symbol = new Label( label.identifier );
 				} else {
 					symbol = new Label( label.identifier , label.parentIdentifier.identifier );
 					previousGlobalLabel = label;

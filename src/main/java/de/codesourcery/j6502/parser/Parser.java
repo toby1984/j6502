@@ -166,7 +166,7 @@ public class Parser
 
 				if ( ! (lexer.peek(TokenType.EOF) || lexer.peek( TokenType.EOF) || lexer.peek( TokenType.SEMICOLON ) ) )
 				{
-					final ASTNode left = parseLeftArgument( op );
+					final IASTNode left = parseLeftArgument( op );
 					if ( left != null )
 					{
 						ins.addChild( left );
@@ -204,9 +204,9 @@ public class Parser
 	 *           STA ($15,X) ( accumulator will be written to the address that $15+x points to )
 	 */
 
-	private ASTNode parseLeftArgument(Opcode currentIns)
+	private IASTNode parseLeftArgument(Opcode currentIns)
 	{
-		ASTNode result = null;
+		IASTNode result = null;
 		if ( lexer.peek(TokenType.PARENS_OPEN ) ) { // indirect addressing
 
 			lexer.next();
@@ -265,7 +265,11 @@ public class Parser
 		}
 		else if ( lexer.peek(TokenType.CHARACTERS ) && Identifier.isValidIdentifier( lexer.peek().text ) ) // absolute addressing: reference to label
 		{
-			throw new RuntimeException("TODO: Support labels as operand values");
+			final IASTNode tmp = parseExpression();
+			if ( tmp != null ) {
+				result = new AbsoluteOperand();
+				result.addChild( tmp );
+			}
 		}
 		return result;
 	}
@@ -325,6 +329,7 @@ public class Parser
 		{
 			final Token tok = lexer.peek();
 			if ( Identifier.isValidIdentifier( tok.text ) ) {
+				lexer.next();
 				return new IdentifierReferenceNode( new Identifier( tok.text ) );
 			}
 			return null;
