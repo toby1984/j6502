@@ -1,5 +1,9 @@
 package de.codesourcery.j6502.parser;
 
+import de.codesourcery.j6502.assembler.parser.Lexer;
+import de.codesourcery.j6502.assembler.parser.Scanner;
+import de.codesourcery.j6502.assembler.parser.Token;
+import de.codesourcery.j6502.assembler.parser.TokenType;
 import junit.framework.TestCase;
 
 public class LexerTest extends TestCase

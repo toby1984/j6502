@@ -2,16 +2,23 @@ package de.codesourcery.j6502.parser;
 
 import junit.framework.TestCase;
 import de.codesourcery.j6502.assembler.AddressingMode;
-import de.codesourcery.j6502.parser.ast.AST;
-import de.codesourcery.j6502.parser.ast.AbsoluteOperand;
-import de.codesourcery.j6502.parser.ast.CommentNode;
-import de.codesourcery.j6502.parser.ast.ImmediateOperand;
-import de.codesourcery.j6502.parser.ast.IndirectOperandX;
-import de.codesourcery.j6502.parser.ast.IndirectOperandY;
-import de.codesourcery.j6502.parser.ast.InstructionNode;
-import de.codesourcery.j6502.parser.ast.NumberLiteral;
-import de.codesourcery.j6502.parser.ast.NumberLiteral.Notation;
-import de.codesourcery.j6502.parser.ast.Statement;
+import de.codesourcery.j6502.assembler.parser.Lexer;
+import de.codesourcery.j6502.assembler.parser.Opcode;
+import de.codesourcery.j6502.assembler.parser.Parser;
+import de.codesourcery.j6502.assembler.parser.Scanner;
+import de.codesourcery.j6502.assembler.parser.ast.AST;
+import de.codesourcery.j6502.assembler.parser.ast.AbsoluteOperand;
+import de.codesourcery.j6502.assembler.parser.ast.CommentNode;
+import de.codesourcery.j6502.assembler.parser.ast.IValueNode;
+import de.codesourcery.j6502.assembler.parser.ast.ImmediateOperand;
+import de.codesourcery.j6502.assembler.parser.ast.IndirectOperandX;
+import de.codesourcery.j6502.assembler.parser.ast.IndirectOperandY;
+import de.codesourcery.j6502.assembler.parser.ast.InitializedMemoryNode;
+import de.codesourcery.j6502.assembler.parser.ast.InstructionNode;
+import de.codesourcery.j6502.assembler.parser.ast.NumberLiteral;
+import de.codesourcery.j6502.assembler.parser.ast.NumberLiteral.Notation;
+import de.codesourcery.j6502.assembler.parser.ast.SetOriginNode;
+import de.codesourcery.j6502.assembler.parser.ast.Statement;
 
 public class ParserTest extends TestCase {
 
@@ -27,6 +34,34 @@ public class ParserTest extends TestCase {
 		parse("");
 		assertNotNull(ast);
 		assertEquals(0,ast.children.size());
+	}
+
+	public void testSetOrigin() {
+		parse("    *= $1234");
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof SetOriginNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof NumberLiteral);
+
+		assertEquals( (short) 0x1234 , ((NumberLiteral) ast.child(0).child(0).child(0) ).getWordValue() ) ;
+	}
+
+	public void testByteInitializedMemory() {
+		parse("    .byte $01,2,3,$4");
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof InitializedMemoryNode);
+
+		final InitializedMemoryNode node = (InitializedMemoryNode) ast.child(0).child(0);
+		assertEquals( 4 , node.getChildCount() );
+		assertEquals( (short) 1 , ((IValueNode) node.child(0)).getWordValue() );
+		assertEquals( (short) 2 , ((IValueNode) node.child(1)).getWordValue() );
+		assertEquals( (short) 3 , ((IValueNode) node.child(2)).getWordValue() );
+		assertEquals( (short) 4 , ((IValueNode) node.child(3)).getWordValue() );
 	}
 
 	public void testParseEmptySource2() {

@@ -7,10 +7,10 @@ import junit.framework.TestCase;
 import org.apache.commons.lang.ArrayUtils;
 
 import de.codesourcery.j6502.assembler.Assembler;
+import de.codesourcery.j6502.assembler.parser.Lexer;
+import de.codesourcery.j6502.assembler.parser.Parser;
+import de.codesourcery.j6502.assembler.parser.Scanner;
 import de.codesourcery.j6502.emulator.CPU.Flag;
-import de.codesourcery.j6502.parser.Lexer;
-import de.codesourcery.j6502.parser.Parser;
-import de.codesourcery.j6502.parser.Scanner;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class EmulatorTest  extends TestCase

@@ -1,31 +1,44 @@
 package de.codesourcery.j6502.assembler;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.function.Consumer;
 
-import de.codesourcery.j6502.parser.Opcode;
-import de.codesourcery.j6502.parser.ast.AST;
-import de.codesourcery.j6502.parser.ast.IASTNode;
-import de.codesourcery.j6502.parser.ast.ICompilationContextAware;
-import de.codesourcery.j6502.parser.ast.Identifier;
-import de.codesourcery.j6502.parser.ast.InstructionNode;
-import de.codesourcery.j6502.parser.ast.LabelNode;
-import de.codesourcery.j6502.parser.ast.Statement;
+import de.codesourcery.j6502.assembler.exceptions.ValueUnavailableException;
+import de.codesourcery.j6502.assembler.parser.ast.AST;
+import de.codesourcery.j6502.assembler.parser.ast.IASTNode;
+import de.codesourcery.j6502.assembler.parser.ast.ICompilationContextAware;
+import de.codesourcery.j6502.assembler.parser.ast.IValueNode;
+import de.codesourcery.j6502.utils.HexDump;
 
 
 
 public class Assembler
 {
-	protected byte[] buffer = new byte[1024];
-	protected int currentOffset;
-	protected LabelNode previousGlobalLabel;
+	protected DefaultContext context = new DefaultContext();
 
-	private final Map<Identifier,Integer> labelOffsets = new HashMap<>();
-
-	private final ISymbolTable symbolTable = new SymbolTable();
-
-	protected final ICompilationContext context = new ICompilationContext()
+	protected final class DefaultContext implements ICompilationContext
 	{
+		protected byte[] buffer = new byte[1024];
+		protected int currentOffset;
+		protected int currentPassNo = 0;
+
+		private final ISymbolTable symbolTable = new SymbolTable();
+
+		@Override
+		public void setCurrentAddress(short adr)
+		{
+			int value = adr;
+			value = value & 0xffff;
+			if ( value < currentOffset ) {
+				throw new RuntimeException("Internal error, cannot decrease ORIGIN to "+HexDump.toAdr( adr )
+						+ " (already at "+HexDump.toAdr( (short) currentOffset )+")" );
+			}
+
+			for ( int delta = value - currentOffset; delta > 0 ; delta-- )
+			{
+				writeByte((byte) 0);
+			}
+		}
+
 		@Override
 		public void writeByte(byte b)
 		{
@@ -33,6 +46,39 @@ public class Assembler
 				expandBuffer();
 			}
 			buffer[currentOffset++] = b;
+		}
+
+		@Override
+		public void debug(IASTNode node, String msg) {
+			System.out.println("PASS #"+currentPassNo+" : "+node+" ("+node.toString()+") : "+msg);
+		}
+
+		public void onePass(AST ast)
+		{
+			currentOffset = 0;
+			buffer = new byte[1024];
+
+			final Consumer<IASTNode> visitor1 = n ->
+			{
+				if ( n instanceof ICompilationContextAware)
+				{
+					((ICompilationContextAware) n).visit( context );
+				}
+			};
+
+			ast.visitParentFirst( visitor1);
+
+			final Consumer<IASTNode> visitor2 = n ->
+			{
+				if ( n instanceof ICompilationContextAware)
+				{
+					((ICompilationContextAware) n).passFinished( context );
+				}
+			};
+
+			ast.visitParentFirst( visitor2 );
+
+			currentPassNo++;
 		}
 
 		@Override
@@ -53,13 +99,37 @@ public class Assembler
 		}
 
 		@Override
-		public void writeByte(IASTNode node) {
-			writeByte( Opcode.getByteValue( node ) );
+		public void writeByte(IASTNode node)
+		{
+			final IValueNode lit = (IValueNode) node;
+			byte value;
+			if ( ! lit.isValueAvailable() )
+			{
+				if ( getPassNo() != 0 ) {
+					throw new ValueUnavailableException(lit);
+				}
+				value = (byte) 0xff;
+			} else {
+				value = lit.getByteValue();
+			}
+			writeByte( value );
 		}
 
 		@Override
-		public void writeWord(IASTNode node) {
-			writeWord( Opcode.getWordValue( node ) );
+		public void writeWord(IASTNode node)
+		{
+			final IValueNode lit = (IValueNode) node;
+			short value;
+			if ( ! lit.isValueAvailable() )
+			{
+				if ( getPassNo() != 0 ) {
+					throw new ValueUnavailableException(lit);
+				}
+				value = (short) 0xffff;
+			} else {
+				value = lit.getWordValue();
+			}
+			writeWord( value );
 		}
 
 		@Override
@@ -68,68 +138,30 @@ public class Assembler
 		}
 
 		@Override
-		public LabelNode getPreviousGlobalLabel() {
-			return previousGlobalLabel;
+		public int getPassNo() {
+			return currentPassNo;
+		}
+
+		private void expandBuffer() {
+			final byte[] newBuffer = new byte[buffer.length*2];
+			System.arraycopy( buffer, 0 , newBuffer , 0 , buffer.length );
+			buffer = newBuffer;
+		}
+
+		public byte[] getBytes() {
+			final byte[] result = new byte[currentOffset];
+			if ( currentOffset > 0 ) {
+				System.arraycopy( buffer , 0 , result , 0 , currentOffset );
+			}
+			return result;
 		}
 	};
 
-	private void expandBuffer() {
-		final byte[] newBuffer = new byte[buffer.length*2];
-		System.arraycopy( buffer, 0 , newBuffer , 0 , buffer.length );
-		buffer = newBuffer;
-	}
-
-	public byte[] assemble(AST ast) {
-		return assemble(ast,context);
-	}
-
-	public byte[] assemble(AST ast,ICompilationContext context)
+	public byte[] assemble(AST ast)
 	{
-		for ( final IASTNode node : ast )
-		{
-			assemble( (Statement) node , context );
-		}
-
-		// return actual buffer
-		final byte[] result = new byte[currentOffset];
-		if ( currentOffset > 0 ) {
-			System.arraycopy( buffer , 0 , result , 0 , currentOffset );
-		}
-		return result;
-	}
-
-	private void assemble(Statement stmt,ICompilationContext context)
-	{
-		final int i = 0;
-		IASTNode node = stmt.child(0);
-
-		// process labels
-		stmt.visitBreadthFirst( n ->
-		{
-			if ( n instanceof LabelNode)
-			{
-				final LabelNode label = (LabelNode) n;
-				final Label symbol;
-				if ( label.isGlobal() ) {
-					symbol = new Label( label.identifier );
-				} else {
-					symbol = new Label( label.identifier , label.parentIdentifier.identifier );
-					previousGlobalLabel = label;
-				}
-				symbol.setValue( currentOffset );
-				context.getSymbolTable().defineSymbol( symbol );
-			}
-			else if ( n instanceof ICompilationContextAware)
-			{
-				((ICompilationContextAware) n).visit( context );
-			}
-		});
-
-		node = stmt.child(i);
-		if ( node instanceof InstructionNode)
-		{
-			final InstructionNode ins = (InstructionNode) node;
-			ins.opcode.assemble( ins , context );
-		}
+		context = new DefaultContext();
+		context.onePass( ast );
+		context.onePass( ast );
+		return context.getBytes();
 	}
 }

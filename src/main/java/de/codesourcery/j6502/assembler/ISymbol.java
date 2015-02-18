@@ -1,6 +1,6 @@
 package de.codesourcery.j6502.assembler;
 
-import de.codesourcery.j6502.parser.ast.Identifier;
+import de.codesourcery.j6502.assembler.parser.Identifier;
 
 public interface ISymbol<T> {
 

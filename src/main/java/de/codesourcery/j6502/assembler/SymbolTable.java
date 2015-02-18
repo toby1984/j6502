@@ -1,14 +1,44 @@
 package de.codesourcery.j6502.assembler;
 
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
-import de.codesourcery.j6502.parser.ast.Identifier;
+import de.codesourcery.j6502.assembler.exceptions.DuplicateSymbolException;
+import de.codesourcery.j6502.assembler.exceptions.UnknownSymbolException;
+import de.codesourcery.j6502.assembler.parser.Identifier;
 
 public class SymbolTable implements ISymbolTable {
 
 	private final Map<Identifier,ISymbol<?>> globalSymbols = new HashMap<>();
 	private final Map<Identifier,Map<Identifier,ISymbol<?>>> localSymbols = new HashMap<>();
+
+	@Override
+	public String toString() {
+		StringBuilder buffer = new StringBuilder("=== Symbol table ===\n\n");
+
+		final List<Identifier> globalKeys = globalSymbols.keySet().stream().sorted( Comparator.comparing( n -> n.value ) ).collect(Collectors.toList());
+		for ( Identifier globalIdentifier : globalKeys )
+		{
+			ISymbol<?> symbol = globalSymbols.get( globalIdentifier );
+			buffer.append("\n").append( globalIdentifier ).append(" : ").append( symbol == null ? "<undefined>" : symbol.toString() );
+			Map<Identifier, ISymbol<?>> localSyms = localSymbols.get( globalIdentifier );
+			if ( localSyms != null && ! localSyms.isEmpty() )
+			{
+				final List<Identifier> localKeys = localSyms.keySet().stream().sorted( Comparator.comparing( n -> n.value ) ).collect(Collectors.toList());
+				for ( Identifier localIdentifier : localKeys )
+				{
+					symbol = localSyms.get( localIdentifier );
+					buffer.append("\n    ").append( localIdentifier ).append(" : ").append( symbol == null ? "<undefined>" : symbol.toString() );
+				}
+			}
+			buffer.append("\n");
+		}
+
+		return buffer.toString();
+	}
 
 	@Override
 	public void declareSymbol(Identifier identifier, Identifier parentIdentifier)

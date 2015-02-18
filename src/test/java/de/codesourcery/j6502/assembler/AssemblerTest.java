@@ -1,10 +1,10 @@
 package de.codesourcery.j6502.assembler;
 
 import junit.framework.TestCase;
-import de.codesourcery.j6502.parser.Lexer;
-import de.codesourcery.j6502.parser.Parser;
-import de.codesourcery.j6502.parser.Scanner;
-import de.codesourcery.j6502.parser.ast.Identifier;
+import de.codesourcery.j6502.assembler.parser.Identifier;
+import de.codesourcery.j6502.assembler.parser.Lexer;
+import de.codesourcery.j6502.assembler.parser.Parser;
+import de.codesourcery.j6502.assembler.parser.Scanner;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class AssemblerTest extends TestCase {
@@ -20,7 +20,7 @@ public class AssemblerTest extends TestCase {
 		assertArrayEquals( actual, expected1,expected2 );
 	}
 
-	private void assertArrayEquals(byte[] actual,int expected1,int... expected2)
+	public static void assertArrayEquals(byte[] actual,int expected1,int... expected2)
 	{
 		final int len = 1 + ( expected2 != null ? expected2.length : 0 );
 		final byte[] expected = new byte[ len ];
@@ -30,12 +30,21 @@ public class AssemblerTest extends TestCase {
 				expected[1+i] = (byte) expected2[i];
 			}
 		}
-		if ( actual.length != expected.length ) {
-			fail("Length mismatch: actual = "+actual.length+" , expected = "+expected.length);
-		}
-		for ( int i =  0 ; i < expected.length ; i++ ) {
+		assertArrayEquals(expected,actual);
+	}
+
+	public static void assertArrayEquals(byte[] expected, byte[] actual)
+	{
+
+		final int min = Math.min( expected.length , actual.length );
+
+		for ( int i =  0 ; i < min ; i++ ) {
 			final byte ex = (byte) (expected[i] & 0xff);
-			assertEquals( "Mismatch on byte #"+i+" , got "+actual[i]+" but expected "+ex+"\n\n"+HexDump.INSTANCE.dump((short) 0, actual, 0, actual.length), ex , actual[i] );
+			assertEquals( "Mismatch on byte @ "+HexDump.toAdr(i)+" , got $"+
+			HexDump.toHex( actual[i] )+" but expected $"+HexDump.toHex( ex )+"\n\n"+HexDump.INSTANCE.dump((short) 0, actual, 0, actual.length), ex , actual[i] );
+		}
+		if ( actual.length != expected.length ) {
+			fail("Length mismatch: actual = "+actual.length+" , expected = "+expected.length+"\n\n"+HexDump.INSTANCE.dump((short) 0, actual, 0, actual.length) );
 		}
 	}
 
@@ -51,6 +60,26 @@ public class AssemblerTest extends TestCase {
 		} catch(final Exception e) {
 			// ok
 		}
+	}
+
+	public void testJMPAbs() {
+		final String s = "JMP  $3146; 00d1:  4c 46 31 lF1";
+		assertCompilesTo(s , 0x4c , 0x46 , 0x31 );
+	}
+
+	public void testASL3() {
+		final String s = "ASL  $ff9e , X; 005a:  1e 9e 5a ..Z";
+		assertCompilesTo(s , 0x1e , 0x9e , 0xff );
+	}
+
+	public void testORA2() {
+		final String s = "ORA  $e1; 000f:  05 e1    ..";
+		assertCompilesTo(s , 0x05 , 0xe1 );
+	}
+
+	public void testASL2() {
+		final String s = "ASL  $ff9e , X; 005a:  1e 9e 5a ..Z";
+		assertCompilesTo(s , 0x1e , 0x9e , 0xff );
 	}
 
 	public void testBackwardsReferenceToGlobalLabelInZeroPage()
@@ -78,6 +107,40 @@ public class AssemblerTest extends TestCase {
 		assertArrayEquals( actual , 0xea, 0x4c,0x01 , 0x00 );
 	}
 
+	public void testByteInitializedMemory() {
+		assertCompilesTo(".byte $01,2,3,$4" , 1 , 2, 3, 4 );
+	}
+
+	public void testSetOriginForwards()
+	{
+		final String s = "*= $0a\n"
+				           + " NOP";
+
+		final Parser p = new Parser(new Lexer(new Scanner(s)));
+
+		final Assembler a = new Assembler();
+		final byte[] actual = a.assemble( p.parse() );
+		assertEquals(11, actual.length );
+		assertArrayEquals( actual , 00,00,00,00,00,00,00,00,00,00,0xea );
+	}
+
+	public void testSetOriginBackwardsFails()
+	{
+		final String s = " NOP\n"+
+				          " *= $0";
+
+		final Parser p = new Parser(new Lexer(new Scanner(s)));
+
+		final Assembler a = new Assembler();
+		try {
+			final byte[] actual = a.assemble( p.parse() );
+			fail("Should've failed");
+		} catch(final Exception e) {
+			e.printStackTrace();
+			// ok
+		}
+	}
+
 	public void testForwardsReferenceToGlobalLabel()
 	{
 		final String s = "JMP label\n"+
@@ -103,6 +166,42 @@ public class AssemblerTest extends TestCase {
 		assertArrayEquals( actual , 0x4c,0x04 , 0x00 , 0xea );
 	}
 
+	public void testForwardsReferenceToLocalLabel()
+	{
+		final String s = "global:"+
+	                     "NOP\n"+ // 1 byte
+				         "JMP local1\n"+ // 3 bytes
+	                     "NOP\n"+ // 1 byte
+				         ".local1";
+
+		final Parser p = new Parser(new Lexer(new Scanner(s)));
+
+		final Assembler a = new Assembler();
+		final byte[] actual = a.assemble( p.parse() );
+
+		final ISymbolTable symbolTable = a.context.getSymbolTable();
+
+		final Identifier globalName = new Identifier("global");
+		final Identifier localName = new Identifier("local1");
+		assertTrue( symbolTable.isDefined( globalName , null ) );
+		assertTrue( symbolTable.isDefined( localName , globalName ) );
+
+		final ISymbol<?> globalSymbol = symbolTable.getSymbol( globalName , null );
+		assertNotNull( globalSymbol );
+		assertEquals( Label.class , globalSymbol.getClass() );
+		final Label globalLabel = (Label) globalSymbol;
+		assertTrue( globalLabel.hasValue() );
+		assertEquals( new Integer(0) , globalLabel.getValue() );
+
+		final ISymbol<?> localSymbol = symbolTable.getSymbol( localName , globalName );
+		assertNotNull( localSymbol );
+		assertEquals( Label.class , globalSymbol.getClass() );
+		final Label localLabel = (Label) localSymbol;
+		assertTrue( localLabel.hasValue() );
+		assertEquals( new Integer(5) , localLabel.getValue() );
+
+		assertArrayEquals( actual , 0xea, 0x4c, 0x05 , 0x00 , 0xea );
+	}
 	public void testLDA() {
 
 		// MODE           SYNTAX         HEX LEN TIM
@@ -540,6 +639,10 @@ public class AssemblerTest extends TestCase {
 	public void testSTX()
 	{
 		// MODE           SYNTAX         HEX LEN TIM
+		// Absolute,Y      STX $4400,Y   $B9  3   4+
+		assertDoesNotCompile( "STX $4400,Y");
+
+		// MODE           SYNTAX         HEX LEN TIM
 		// # Accumulator   STX A         $A9  1   2
 		assertDoesNotCompile( "STX" );
 
@@ -562,10 +665,6 @@ public class AssemblerTest extends TestCase {
 		// MODE           SYNTAX         HEX LEN TIM
 		// # Immediate     STX #$44      $A9  2   2
 		assertDoesNotCompile( "STX #$44" );
-
-		// MODE           SYNTAX         HEX LEN TIM
-		// Absolute,Y      STX $4400,Y   $B9  3   4+
-		assertDoesNotCompile( "STX $4400,Y");
 
 		// MODE           SYNTAX         HEX LEN TIM
 		// Indirect,X      STX ($44,X)   $A1  2   6

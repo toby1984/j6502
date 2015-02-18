@@ -1,6 +1,6 @@
 package de.codesourcery.j6502.assembler;
 
-import de.codesourcery.j6502.parser.ast.Identifier;
+import de.codesourcery.j6502.assembler.parser.Identifier;
 
 public final class Label implements ISymbol<Integer>
 {
@@ -16,6 +16,11 @@ public final class Label implements ISymbol<Integer>
 		this.parentName = null;
 	}
 
+	@Override
+	public String toString() {
+		return isGlobal() ? "global label '"+name.value+"'" : "local label '"+name.value+"' , child of '"+parentName.value+"'";
+	}
+
 	public Label(Identifier name,Identifier parentName) {
 		if ( name == null ) {
 			throw new IllegalArgumentException("name must not be NULL");
@@ -25,6 +30,14 @@ public final class Label implements ISymbol<Integer>
 		}
 		this.name = name;
 		this.parentName = parentName;
+	}
+
+	public boolean isLocal() {
+		return parentName != null;
+	}
+
+	public boolean isGlobal() {
+		return parentName == null;
 	}
 
 	@Override

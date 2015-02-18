@@ -7,14 +7,20 @@ import de.codesourcery.j6502.emulator.IMemoryRegion;
 
 public class HexDump {
 
-	private final short bytesPerLine = 16;
+	private int bytesPerLine = 16;
 
 	public static final HexDump INSTANCE = new HexDump();
+
+	private boolean printAddress = true;
 
 	public static void main(String[] args) {
 
 		final byte[] test = "dasisteinlangertext".getBytes();
 		System.out.println( new HexDump().dump((short) 0,test,0, test.length ) );
+	}
+
+	public void setPrintAddress(boolean printAddress) {
+		this.printAddress = printAddress;
 	}
 
 	public String dump(short startingAddress, IMemoryRegion region, int offset, int len)
@@ -33,7 +39,9 @@ public class HexDump {
 				lineBuffer.append("\n");
 			}
 
-			lineBuffer.append( toHexBigEndian( currentAddress ) ).append(": ");
+			if ( printAddress ) {
+				lineBuffer.append( toHexBigEndian( currentAddress ) ).append(": ");
+			}
 			currentAddress += bytesPerLine;
 
 			int bytesOnLine = 0;
@@ -106,7 +114,12 @@ public class HexDump {
 	{
 		int value = b;
 		value &= 0xff;
-		return StringUtils.leftPad( Integer.toString( value , 16 ) , 2 , '0' );
+		final String byteString = Integer.toString( value , 16 );
+		return StringUtils.leftPad( byteString , 2 , '0' );
+	}
+
+	public static String toAdr(int b) {
+		return "$"+toHexBigEndian((short) b);
 	}
 
 	public static String toHexBigEndian(short b)
@@ -114,7 +127,9 @@ public class HexDump {
 		final int value = b;
 		final int low = value & 0xff;
 		final int hi = (value>>8) & 0xff;
-		return StringUtils.leftPad( Integer.toString( hi , 16 )+Integer.toString(low,16) , 4 , '0' );
+		final String hiNibble = StringUtils.leftPad( Integer.toString( hi , 16 ) , 2 , '0' );
+		final String loNibble = StringUtils.leftPad( Integer.toString( low , 16) , 2 , '0' );
+		return hiNibble+loNibble;
 	}
 
 	public static String toHex(short b)
@@ -122,6 +137,12 @@ public class HexDump {
 		final int value = b;
 		final int low = value & 0xff;
 		final int hi = (value>>8) & 0xff;
-		return StringUtils.leftPad( Integer.toString( low, 16 )+Integer.toString(hi,16) , 4 , '0' );
+		final String hiNibble = StringUtils.leftPad( Integer.toString( hi , 16 ) , 2 , '0' );
+		final String loNibble = StringUtils.leftPad( Integer.toString( low , 16) , 2 , '0' );
+		return loNibble+hiNibble;
+	}
+
+	public void setBytesPerLine(int i) {
+		this.bytesPerLine = i;
 	}
 }
