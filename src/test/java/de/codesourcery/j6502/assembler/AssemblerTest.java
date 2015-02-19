@@ -5,6 +5,7 @@ import de.codesourcery.j6502.assembler.parser.Identifier;
 import de.codesourcery.j6502.assembler.parser.Lexer;
 import de.codesourcery.j6502.assembler.parser.Parser;
 import de.codesourcery.j6502.assembler.parser.Scanner;
+import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class AssemblerTest extends TestCase {
@@ -35,12 +36,17 @@ public class AssemblerTest extends TestCase {
 
 	public static void assertArrayEquals(byte[] expected, byte[] actual)
 	{
+		assertArrayEquals(0,expected,actual);
+	}
+
+	public static void assertArrayEquals(int offset, byte[] expected, byte[] actual)
+	{
 
 		final int min = Math.min( expected.length , actual.length );
 
 		for ( int i =  0 ; i < min ; i++ ) {
 			final byte ex = (byte) (expected[i] & 0xff);
-			assertEquals( "Mismatch on byte @ "+HexDump.toAdr(i)+" , got $"+
+			assertEquals( "Mismatch on byte @ "+HexDump.toAdr(offset+i)+" , got $"+
 			HexDump.toHex( actual[i] )+" but expected $"+HexDump.toHex( ex )+"\n\n"+HexDump.INSTANCE.dump((short) 0, actual, 0, actual.length), ex , actual[i] );
 		}
 		if ( actual.length != expected.length ) {
@@ -150,7 +156,15 @@ public class AssemblerTest extends TestCase {
 		final Parser p = new Parser(new Lexer(new Scanner(s)));
 
 		final Assembler a = new Assembler();
-		final byte[] actual = a.assemble( p.parse() );
+		final byte[] actual;
+		try {
+			actual = a.assemble( p.parse() );
+		}
+		catch(final Exception e)
+		{
+			DisassemblerTest.maybePrintError( new StringBuilder(s) , e );
+			throw e;
+		}
 
 		final ISymbolTable symbolTable = a.context.getSymbolTable();
 
@@ -202,6 +216,7 @@ public class AssemblerTest extends TestCase {
 
 		assertArrayEquals( actual , 0xea, 0x4c, 0x05 , 0x00 , 0xea );
 	}
+
 	public void testLDA() {
 
 		// MODE           SYNTAX         HEX LEN TIM
@@ -636,6 +651,11 @@ public class AssemblerTest extends TestCase {
 		assertDoesNotCompile( "ROR ($44),Y" );
 	}
 
+	public void testBCSForward() {
+		// BCC   $0013     ; 000e:  90 05    ..
+		assertCompilesTo( "*= $0e\n"
+				+ "BCC $0015" , 0 ,0 ,0,0,0,0,0,0,0,0,0,0,0,0 , 0x90,0x05);
+	}
 	public void testSTX()
 	{
 		// MODE           SYNTAX         HEX LEN TIM
@@ -1072,14 +1092,14 @@ public class AssemblerTest extends TestCase {
 		final byte relOffset = 4;
 
 		// binary gets loaded at $0000
-		assertCompilesTo( "BPL $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0x10 , 0x04 );
-		assertCompilesTo( "BMI $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0x30 , 0x04 );
-		assertCompilesTo( "BVC $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0x50 , 0x04 );
-		assertCompilesTo( "BVS $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0x70 , 0x04 );
-		assertCompilesTo( "BCC $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0x90 , 0x04 );
-		assertCompilesTo( "BCS $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0xb0 , 0x04 );
-		assertCompilesTo( "BNE $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0xd0 , 0x04 );
-		assertCompilesTo( "BEQ $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0xf0 , 0x04 );
+		assertCompilesTo( "BPL $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0x10 , 0x02 );
+		assertCompilesTo( "BMI $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0x30 , 0x02 );
+		assertCompilesTo( "BVC $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0x50 , 0x02 );
+		assertCompilesTo( "BVS $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0x70 , 0x02 );
+		assertCompilesTo( "BCC $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0x90 , 0x02 );
+		assertCompilesTo( "BCS $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0xb0 , 0x02 );
+		assertCompilesTo( "BNE $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0xd0 , 0x02 );
+		assertCompilesTo( "BEQ $"+Integer.toHexString( PRG_LOAD_ADDRESS + relOffset ) , 0xf0 , 0x02 );
 	}
 
 	public void testBRK()

@@ -69,9 +69,18 @@ public class Parser
 
 	private boolean skipComment() {
 
+		if ( lexer.peek( TokenType.EOL ) ) {
+			lexer.next();
+			return true;
+		}
+		if ( lexer.peek(TokenType.EOF) ) {
+			return true;
+		}
+
 		if ( ! lexer.peek(TokenType.SEMICOLON ) ) {
 			return false;
 		}
+
 		final int startOffset = lexer.next( TokenType.SEMICOLON ).offset;
 
 		final StringBuffer buffer = new StringBuffer();
@@ -193,12 +202,16 @@ public class Parser
 				lexer.push( tok );
 			}
 
+			if ( skipComment() ) {
+				return;
+			}
+
 			// parse opCode
 			final IASTNode instruction = parseInstruction();
 			if ( instruction != null ) {
 				currentNode.addChild(instruction);
 			} else {
-				fail("Expected an instruction");
+				fail("Expected an instruction, got "+tok);
 			}
 		}
 		else if ( ! lexer.peek(TokenType.EOL) && ! lexer.peek(TokenType.EOF ) )

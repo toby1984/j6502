@@ -1,5 +1,8 @@
 package de.codesourcery.j6502.utils;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.emulator.AddressRange;
@@ -22,6 +25,10 @@ public class HexDump {
 	public void setPrintAddress(boolean printAddress) {
 		this.printAddress = printAddress;
 	}
+
+	private final Map<Integer,Character> petToASCII = new HashMap<>();
+	private final Map<Integer,Character> asciiToPET = new HashMap<>();
+
 
 	public String dump(short startingAddress, IMemoryRegion region, int offset, int len)
 	{
@@ -47,11 +54,12 @@ public class HexDump {
 			int bytesOnLine = 0;
 			for ( int bytes = bytesPerLine ; bytes > 0 && l > 0 ; l--)
 			{
-				final byte value = region.readByte(index++);
-				int intValue = value;
-				intValue &= 0xff;
+				final int adr = index % region.getAddressRange().getSizeInBytes();
+				index++;
+				final byte value = region.readByte( adr );
+				final char intValue = CharsetConverter.petToASCII( value );
 				if ( intValue >= 32 && intValue < 127 ) {
-					asciiBuffer.append( (char) intValue );
+					asciiBuffer.append( intValue );
 				} else {
 					asciiBuffer.append( '.' );
 				}

@@ -1,7 +1,13 @@
 package de.codesourcery.j6502.disassembler;
 
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
+
+import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.utils.HexDump;
 
@@ -16,7 +22,7 @@ public class Disassembler
 	private int previousOffset;
 	private int currentOffset;
 	private int bytesLeft ;
-	private final List<Line> lines = new ArrayList<>();
+	private Consumer<Line> lineConsumer;
 
 	private boolean writeAddresses = true;
 	private boolean annotate = false;
@@ -49,18 +55,21 @@ public class Disassembler
 		@Override
 		public String toString()
 		{
+			return getAsString();
+		}
 
+		public String getAsString()
+		{
+			String adrCol = EMPTY_STRING;
+			final String insCol = instruction;
+			final String argsCol = arguments;
+			final String commentCol = comment;
 			if ( writeAddresses )
 			{
-				if ( arguments == EMPTY_STRING ) {
-					return HexDump.toHexBigEndian( address )+":    "+instruction+comment;
-				}
-				return HexDump.toHexBigEndian( address )+":    "+instruction+"  "+arguments+comment;
+				adrCol = HexDump.toHexBigEndian( address )+":  ";
 			}
-			if ( arguments == EMPTY_STRING ) {
-				return instruction+comment;
-			}
-			return instruction+"  "+arguments+comment;
+			final String paddedArgs = StringUtils.rightPad( argsCol , 10 );
+			return (adrCol+StringUtils.rightPad(insCol,6)+paddedArgs+commentCol).trim();
 		}
 	}
 
@@ -94,21 +103,57 @@ public class Disassembler
 
 	public List<Line> disassemble(int baseAdrToPrint,byte[] data,int offset,int len)
 	{
-//		this.hexdump.setPrintAddress( false );
+		final List<Line> result = new ArrayList<>();
+		disassemble(baseAdrToPrint, data, offset, len, result::add );
+		return result;
+	}
+
+	public void disassemble(int baseAdrToPrint,byte[] data,int offset,int len,OutputStream out)
+	{
+		final OutputStreamWriter writer = new OutputStreamWriter(out);
+		disassemble(baseAdrToPrint, data, offset, len , writer );
+	}
+
+	public void disassemble(int baseAdrToPrint,byte[] data,int offset,int len,Writer writer)
+	{
+		disassemble(baseAdrToPrint, data, offset, len, new Consumer<Line>()
+		{
+			private boolean firstLine = true;
+			@Override
+			public void accept(Line line)
+			{
+				try
+				{
+					if ( ! firstLine ) {
+						writer.write("\n");
+					}
+					firstLine = false;
+					writer.write( line.getAsString() );
+				}
+				catch (final Exception e)
+				{
+					throw new RuntimeException(e);
+				}
+			}
+		});
+	}
+
+	private void disassemble(int baseAdrToPrint,byte[] data,int offset,int len,Consumer<Line> lineConsumer)
+	{
 		this.hexdump.setBytesPerLine(3);
 
 		this.baseAddressToPrint = baseAdrToPrint;
-		lines.clear();
 		this.data = data;
 		this.currentOffset = offset;
 		this.previousOffset = currentOffset;
 		this.bytesLeft = len;
+		this.lineConsumer = lineConsumer;
+
 		while ( bytesLeft > 0 )
 		{
 			disassembleLine();
 			this.previousOffset = currentOffset;
 		}
-		return new ArrayList<>(lines);
 	}
 
 	private void disassembleLine()
@@ -147,6 +192,14 @@ public class Disassembler
 			case 0xca:
 			case 0xea:
 				disassemblyMixedBag( (byte) value );
+				return;
+			// bail out early on some illegal opcodes that
+			// would otherwise be wrongly classified as being valid instructions
+			// because they do also fix some of the generic patterns I check for (mostly JMP instruction patterns)
+			case 0x64:
+			case 0x74:
+			case 0x7c:
+				unknownOpcode( currentOffset-1 , (byte) value );
 				return;
 			default:
 				// $$FALL-THROUGH$$
@@ -254,41 +307,46 @@ TXA 	TXS 	TAX 	TSX 	DEX 	NOP
 	private void disassembleConditionalBranch(byte opcode)
 	{
 		final int opcodeAddress = currentOffset-1;
+
+		int value = opcode;
+		value = value & 0xff;
+
 		/*
-		 * Pattern is: xxy10000
-xx	flag
-00	negative
-01	overflow
-10	carry
-11	zero
+MNEMONIC                       HEX
+BPL (Branch on PLus)           $10
+BMI (Branch on MInus)          $30
+BVC (Branch on oVerflow Clear) $50
+BVS (Branch on oVerflow Set)   $70
+BCC (Branch on Carry Clear)    $90
+BCS (Branch on Carry Set)      $B0
+BNE (Branch on Not Equal)      $D0
+BEQ (Branch on EQual)          $F0
+
+
 		 */
-
-		final int flag = (opcode >> 6) & 0b11;
-		final boolean branchOnSet = (opcode & 100000) != 0;
-
-		String ins;
-		switch(flag) {
-			case 0b00: // negative
-				ins = branchOnSet ? "BMI" : "BPL";
-				break;
-			case 0b01: // overflow
-				ins = branchOnSet ? "BVS" : "BVC";
-				break;
-			case 0b10: // carry
-				ins = branchOnSet ? "BCS" : "BCC";
-				break;
-			case 0b11:
-				ins = branchOnSet ? "BEQ" : "BNE";
-				break;
+		final String ins;
+		switch( value ) {
+			case 0x10: ins = "BPL" ; break;
+			case 0x30: ins = "BMI" ; break;
+			case 0x50: ins = "BVC" ; break;
+			case 0x70: ins = "BVS" ; break;
+			case 0x90: ins = "BCC" ; break;
+			case 0xB0: ins = "BCS" ; break;
+			case 0xD0: ins = "BNE" ; break;
+			case 0xF0: ins = "BEQ" ; break;
 			default:
-				unknownOpcode( currentOffset-1, opcode );
+				// $$FALL-THROUGH$$
+				unknownOpcode( currentOffset-1 , opcode );
 				return;
 		}
+
 		if ( ! assertOneByteAvailable( opcodeAddress , opcode ) ) {
 			return;
 		}
+
 		final int offset = readByte();
-		final int branchTarget = opcodeAddress  + offset;
+		final int branchTarget = opcodeAddress  + 2 + offset; // +2 because branching is done relative to the END of the branch instruction
+
 		final String args = "$"+HexDump.toHexBigEndian( (short) branchTarget );
 		addLine( (short) opcodeAddress , ins , args );
 	}
@@ -300,7 +358,7 @@ xx	flag
 		if ( annotate ) {
 			comment = "; "+hexdump.dump( (short) adr , data , previousOffset , currentOffset - previousOffset );
 		}
-		lines.add( new Line( (short) adr , instruction , comment ) );
+		lineConsumer.accept( new Line( (short) adr , instruction , comment ) );
 	}
 
 	private void addLine(short address,String instruction,String arguments)
@@ -310,7 +368,7 @@ xx	flag
 		if ( annotate ) {
 			comment = "; "+hexdump.dump( (short) adr , data , previousOffset , currentOffset - previousOffset );
 		}
-		lines.add( new Line( (short) adr , instruction , arguments , comment ) );
+		lineConsumer.accept( new Line( (short) adr , instruction , arguments , comment ) );
 	}
 
 	private void unknownOpcode(int address , byte value)
@@ -320,7 +378,7 @@ xx	flag
 
 	private void appendByte(int address, byte value)
 	{
-		addLine( (short) address , ".byte $"+HexDump.toHex( value ) );
+		addLine( (short) address , ".byte", "$"+HexDump.toHex( value ) );
 
 	}
 

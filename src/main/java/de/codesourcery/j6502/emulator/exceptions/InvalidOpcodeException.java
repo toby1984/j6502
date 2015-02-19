@@ -1,4 +1,4 @@
-package de.codesourcery.j6502.emulator;
+package de.codesourcery.j6502.emulator.exceptions;
 
 public class InvalidOpcodeException extends RuntimeException {
 
