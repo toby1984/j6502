@@ -9,18 +9,19 @@ import de.codesourcery.j6502.utils.HexDump;
 public class CPU
 {
 	public static final int RESET_VECTOR_LOCATION = 0xfffc;
+	public static final int BRK_VECTOR_LOCATION = 0xfffe;
 
 	private final IMemoryRegion memory;
 
-	public short accumulator;
+	public long cycles = 0;
+	public short previousPC;
 	public short pc;
+	public byte accumulator;
 	public byte x;
 	public byte y;
 	public short sp;
 
 	public byte flags;
-
-	public long cycles = 0;
 
 	public static enum Flag
 	{
@@ -29,7 +30,7 @@ public class CPU
 		IRQ_DISABLE(1 <<2 , "I"), // 4
 		DECIMAL_MODE(1 <<3 , "D"), // 8
 		BREAK(1 <<4 , "B"), // 16
-		EXPANSION(1 <<5 , "X" ), // 32
+		UNUSED(1 <<5 , "X" ), // 32
 		OVERFLOW(1 <<6  , "O" ), // 64
 		NEGATIVE(1 <<7 , "N"); // 128
 
@@ -71,11 +72,12 @@ public class CPU
 	public void reset()
 	{
 		cycles = 0;
-		pc = memory.readWord( RESET_VECTOR_LOCATION );
-		accumulator = 0xaa;
+		pc = memory.readWord( (short) RESET_VECTOR_LOCATION );
+		System.out.println("CPU.reset(): Settings PC to "+HexDump.toAdr( pc ) );
+		accumulator = 0;
 		x = y = 0;
-		sp = 0xfd;
-		flags = 0;
+		sp = 0x1ff;
+		flags = CPU.Flag.IRQ_DISABLE.set((byte) 0);
 	}
 
 	@Override
@@ -100,7 +102,7 @@ public class CPU
 		.append("    ")
 		.append( flagBuffer )
 		.append("    ")
-		.append("A: ").append( HexDump.toHex( (byte) accumulator ) )
+		.append("A: ").append( HexDump.toHex( accumulator ) )
 		.append("    ")
 		.append("X: ").append( HexDump.toHex( x ) )
 		.append("    ")
@@ -113,5 +115,27 @@ public class CPU
 
 	public Set<Flag> getFlags() {
 		return Arrays.stream( Flag.values() ).filter( f -> f.isSet( this.flags ) ).collect(Collectors.toSet());
+	}
+
+	public void setSP(byte value)
+	{
+		short expanded = value;
+		expanded &= 0xff;
+		this.sp = (short) ((0x0100 | expanded));
+	}
+
+	public void incSP() {
+		short expanded = this.sp;
+		expanded &= 0xff;
+		expanded++;
+		this.sp = (short) ((0x0100 | expanded));
+	}
+
+	public void decSP() {
+		short expanded = this.sp;
+		expanded &= 0xff;
+		expanded--;
+		expanded &= 0xff;
+		this.sp = (short) ((0x0100 | expanded));
 	}
 }

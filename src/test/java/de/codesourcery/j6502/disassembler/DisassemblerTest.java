@@ -262,7 +262,7 @@ public class DisassemblerTest extends TestCase {
 
 		final List<Line> lines = dis.disassemble( 0 , expected , 0 , expected.length );
 
-		final StringBuilder source = new StringBuilder();
+		final StringBuilder source = new StringBuilder("*=$0000\n");
 		lines.forEach( line -> {
 			source.append( line.toString() ).append("\n");
 		});

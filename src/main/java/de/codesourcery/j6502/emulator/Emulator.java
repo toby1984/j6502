@@ -6,6 +6,8 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class Emulator implements IEmulator
 {
+	protected static final boolean PRINT_CURRENT_INS = true;
+
 	protected static final String EMPTY_STRING = "";
 
 	private final MemorySubsystem memory = new MemorySubsystem();
@@ -39,7 +41,7 @@ public class Emulator implements IEmulator
 		memory.reset();
 
 		// all 6502 CPUs read their initial PC value from $FFFC
-		memory.writeWord( CPU.RESET_VECTOR_LOCATION , (short) 0xfce2 );
+		memory.writeWord( (short) CPU.RESET_VECTOR_LOCATION , (short) 0xfce2 );
 
 		if ( this.memoryProvider != null )
 		{
@@ -65,7 +67,18 @@ public class Emulator implements IEmulator
 	@Override
 	public void singleStep()
 	{
+		doSingleStep();
+		System.out.println("Previous PC: "+HexDump.toAdr(cpu.previousPC));
+		cpu.previousPC = cpu.pc;
+	}
+
+	private void doSingleStep()
+	{
 		int op = memory.readByte( cpu.pc );
+
+		if ( PRINT_CURRENT_INS ) {
+			System.out.println( "**************** Executing $"+HexDump.toHex((byte) op)+" @ "+HexDump.toAdr( cpu.pc ));
+		}
 
 		op = op & 0xff;
 
@@ -143,7 +156,7 @@ public class Emulator implements IEmulator
 
 	private int unknownOpcode( int opcode)
 	{
-		throw new InvalidOpcodeException("Unknown opcode: $"+HexDump.toHex((byte) (opcode & 0xff)) , cpu.pc , (byte) opcode );
+		throw new InvalidOpcodeException("Unknown opcode: $"+HexDump.toHex((byte) (opcode & 0xff)) , cpu.pc & 0xffff , (byte) opcode );
 	}
 
 	private void executeGeneric1(int op)

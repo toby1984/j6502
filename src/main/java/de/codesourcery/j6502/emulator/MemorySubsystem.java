@@ -3,9 +3,14 @@ package de.codesourcery.j6502.emulator;
 import java.io.IOException;
 import java.io.InputStream;
 
+import de.codesourcery.j6502.utils.HexDump;
 
-public class MemorySubsystem extends IMemoryRegion
+
+public final class MemorySubsystem extends IMemoryRegion
 {
+	private static final boolean DEBUG_READS = true;
+	private static final boolean DEBUG_ROM_IMAGES = true;
+
 	public static enum Bank
 	{
 		/**
@@ -91,9 +96,9 @@ public class MemorySubsystem extends IMemoryRegion
 	private IMemoryRegion ram5;
 	private IMemoryRegion ram6;
 
-	private IMemoryRegion kernelROM;
-	private IMemoryRegion charROM;
-	private IMemoryRegion basicROM;
+	private WriteOnceMemory kernelROM;
+	private WriteOnceMemory charROM;
+	private WriteOnceMemory basicROM;
 	private IMemoryRegion ioArea;
 	private IMemoryRegion cartROMLow;
 	private IMemoryRegion cartROMHi;
@@ -115,7 +120,7 @@ public class MemorySubsystem extends IMemoryRegion
 		super("main memory" , new AddressRange(0,65536 ) );
 
 		// setup memory from addresses to different memory banks
-		for ( Bank bank : Bank.values() )
+		for ( final Bank bank : Bank.values() )
 		{
 			for ( int start = bank.range.getStartAddress() , len = bank.range.getSizeInBytes() ; len > 0 ; start++,len-- )
 			{
@@ -137,20 +142,25 @@ public class MemorySubsystem extends IMemoryRegion
 
 		setupMemoryLayout();
 
-		for ( Bank bank : Bank.values() )
-		{
-			final IMemoryRegion r1 = readRegions[ bank.index ];
-			final IMemoryRegion r2 = readRegions[ bank.index ];
-			if ( r1 != null ) {
-				r1.reset();
-			}
-			if ( r2 != null )
-			{
-				if ( r1 == null || r1 != r2 ) {
-					r2.reset();
-				}
-			}
-		}
+//		for ( final Bank bank : Bank.values() )
+//		{
+//			final IMemoryRegion r1 = readRegions[ bank.index ];
+//			final IMemoryRegion r2 = readRegions[ bank.index ];
+//			if ( r1 != null ) {
+//				r1.reset();
+//			}
+//			if ( r2 != null )
+//			{
+//				if ( r1 == null || r1 != r2 ) {
+//					r2.reset();
+//				}
+//			}
+//		}
+	}
+
+	public void setMemoryLayout( byte latchBits) {
+		this.plaLatchBits = latchBits;
+		setupMemoryLayout();
 	}
 
 	/*
@@ -176,7 +186,6 @@ public class MemorySubsystem extends IMemoryRegion
      * CHAREN can be overridden by other control lines in certain memory configurations.
      * CHAREN will have no effect on any memory configuration without I/O devices. RAM will appear from $D000-$DFFF instead.
 	 */
-
 	private void setupMemoryLayout()
 	{
 		// create table index from EXROM, EXGAME and PLA latch bits 0-3
@@ -331,15 +340,15 @@ public class MemorySubsystem extends IMemoryRegion
 		ram6 = new Memory("RAM #6",Bank.BANK6.range);
 
 		// kernel ROM
-		kernelROM = new Memory("Kernel ROM" , Bank.BANK6.range );
+		kernelROM = new WriteOnceMemory("Kernel ROM" , Bank.BANK6.range );
 		loadROM("kernel_v3.rom" , kernelROM );
 
 		// char ROM
-		charROM = new Memory("Char ROM" , Bank.BANK5.range );
-		loadROM("character.rom" , kernelROM );
+		charROM = new WriteOnceMemory("Char ROM" , Bank.BANK5.range );
+		loadROM("character.rom" , charROM );
 
 		// basic ROM
-		basicROM = new Memory("Basic ROM" , Bank.BANK3.range );
+		basicROM = new WriteOnceMemory("Basic ROM" , Bank.BANK3.range );
 		loadROM( "basic_v2.rom" , basicROM );
 
 		// I/O area
@@ -378,17 +387,19 @@ public class MemorySubsystem extends IMemoryRegion
 
 	}
 
-	private void loadROM(String string, IMemoryRegion region)
+	private void loadROM(String string, WriteOnceMemory region)
 	{
 		final String path ="/roms/"+string;
-		System.out.println("Loading ROM: "+string);
-		InputStream in = getClass().getResourceAsStream( path );
+		if ( DEBUG_ROM_IMAGES ) {
+			System.out.println("Loading ROM: "+string);
+		}
+		final InputStream in = getClass().getResourceAsStream( path );
 		if ( in == null ) {
 			throw new RuntimeException("Failed to load ROM from classpath: "+string);
 		}
 		try
 		{
-			int offset = 0;
+			short offset = 0;
 			final byte[] buffer = new byte[1024];
 			int bytesRead = 0;
 			while ( (bytesRead= in.read(buffer) ) > 0 )
@@ -396,53 +407,78 @@ public class MemorySubsystem extends IMemoryRegion
 				region.bulkWrite( offset , buffer , 0 , bytesRead );
 				offset += bytesRead;
 			}
-		} catch (IOException e) {
+		} catch (final IOException e) {
 			throw new RuntimeException("Failed to load ROM from classpath: "+string,e);
 		}
 		finally
 		{
-			try { in.close(); } catch(Exception e) {}
+			try { in.close(); } catch(final Exception e) {}
+		}
+
+		if ( DEBUG_ROM_IMAGES ) {
+			System.out.println("Loaded "+string+" @ "+region.getAddressRange() );
+//			System.out.println( region.dump( 0 , 128 ) );
+			System.out.println( region.dump( region.getAddressRange().getSizeInBytes() - 128 , 128 ) );
 		}
 	}
 
 	@Override
-	public short readWord(int offset)
+	public String dump(int offset, int len)
 	{
-		final byte low = readByte(offset);
-		final byte hi = readByte(offset+1);
-		return (short) (hi<<8|low);
+		return HexDump.INSTANCE.dump( (short) (getAddressRange().getStartAddress()+offset),this,offset,len);
 	}
 
 	@Override
-	public byte readByte(int offset)
+	public short readWord(short offset)
 	{
-		switch(offset)
+		// FIXME: Maybe always use ( offset & 0xffff ) here ???
+		final int low = readByte(offset) & 0xff;
+		final int hi = readByte( (short) (offset+1)) & 0xff;
+
+		final short result = (short) (hi<<8|low);
+		if ( DEBUG_READS ) {
+			System.out.println("readWord(): Read word "+HexDump.toAdr(result)+" at "+HexDump.toAdr( offset ) );
+		}
+		return result;
+	}
+
+	@Override
+	public byte readByte(short offset)
+	{
+		// FIXME: Maybe always use ( offset & 0xffff ) here ???
+		final int wrappedOffset = offset & 0xffff;
+		switch(wrappedOffset)
 		{
 			case 0:
 				return plaDataDirection;
 			case 1:
 				return plaLatchBits;
 			default:
-				final IMemoryRegion region = readRegions[ readMap[ offset ] ];
-				final int realOffset = offset - region.getAddressRange().getStartAddress();
-				return region.readByte( realOffset );
+				final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
+				final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+				final byte result = region.readByte( (short) translatedOffset );
+				if ( DEBUG_READS ) {
+					System.out.println("readByte(): Got byte $"+HexDump.toHex(result)+" from "+HexDump.toAdr(offset )+" [translated: "+HexDump.toAdr(translatedOffset)+"] from "+region );
+				}
+				return result;
 		}
 	}
 
 	@Override
-	public void writeWord(int offset,short value)
+	public void writeWord(short offset,short value)
 	{
 		final byte low = (byte) value;
 		final byte hi = (byte) (value>>8);
 
 		writeByte( offset , low );
-		writeByte( offset+1 , hi );
+		writeByte( (short) (offset+1) , hi );
 	}
 
 	@Override
-	public void writeByte(int offset, byte value)
+	public void writeByte(short offset, byte value)
 	{
-		switch(offset)
+		final int wrappedOffset = offset & 0xffff;
+		switch(wrappedOffset)
 		{
 			case 0:
 				plaDataDirection = value;
@@ -452,17 +488,19 @@ public class MemorySubsystem extends IMemoryRegion
 				setupMemoryLayout();
 				break;
 			default:
-				final IMemoryRegion region = writeRegions[ writeMap[ offset ] ];
-				final int realOffset = offset - region.getAddressRange().getStartAddress();
-				region.writeByte( realOffset , value );
+				final IMemoryRegion region = writeRegions[ writeMap[ wrappedOffset ] ];
+				final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+				region.writeByte( (short) realOffset , value );
 		}
 	}
 
 	@Override
-	public void bulkWrite(int startingAddress, byte[] data, int datapos, int len)
+	public void bulkWrite(short startingAddress, byte[] data, int datapos, int len)
 	{
-		for ( int dstAdr = startingAddress , bytesLeft = len , src = datapos ; bytesLeft > 0 ; bytesLeft-- ) {
-			writeByte( dstAdr++ , data[ src++ ] );
+		for ( int dstAdr = (startingAddress & 0xffff), bytesLeft = len , src = datapos ; bytesLeft > 0 ; bytesLeft-- )
+		{
+			writeByte( (short) dstAdr , data[ src++ ] );
+			dstAdr = (dstAdr+1) & 0xffff;
 		}
 	}
 
@@ -472,8 +510,8 @@ public class MemorySubsystem extends IMemoryRegion
 		final StringBuilder buffer = new StringBuilder("=== Memory layout ===\n");
 		for ( int i = 0 ; i < readRegions.length ; i++ )
 		{
-			IMemoryRegion readBank = readRegions[i];
-			IMemoryRegion writeBank = writeRegions[i];
+			final IMemoryRegion readBank = readRegions[i];
+			final IMemoryRegion writeBank = writeRegions[i];
 
 			buffer.append( readBank.getAddressRange().toString() ).append(": ");
 			if ( readBank == writeBank ) {

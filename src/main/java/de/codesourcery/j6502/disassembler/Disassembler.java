@@ -9,18 +9,20 @@ import java.util.function.Consumer;
 
 import org.apache.commons.lang.StringUtils;
 
+import de.codesourcery.j6502.emulator.AddressRange;
+import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class Disassembler
 {
 	protected static final String EMPTY_STRING = "";
 
-	private byte[] data;
+	private IMemoryRegion data;
 
 	private final HexDump hexdump = new HexDump();
 
 	private int previousOffset;
-	private int currentOffset;
+	private short currentOffset;
 	private int bytesLeft ;
 	private Consumer<Line> lineConsumer;
 
@@ -101,10 +103,53 @@ public class Disassembler
 		this.writeAddresses = writeAddresses;
 	}
 
+	private IMemoryRegion wrap(int startingOffset, byte[] data) {
+		return new IMemoryRegion("dummy", new AddressRange(startingOffset & 0xffff, data.length))
+		{
+			@Override
+			public void writeWord(short offset, short value) {
+				throw new UnsupportedOperationException();
+			}
+
+			@Override
+			public void writeByte(short offset, byte value) {
+				throw new UnsupportedOperationException();
+			}
+
+			@Override
+			public void reset() {
+				throw new UnsupportedOperationException();
+			}
+
+			@Override
+			public short readWord(short offset)
+			{
+				final int low = readByte(offset) & 0xff;
+				final int hi = readByte( (short) (offset+1) ) & 0xff;
+				return (short) ((hi<<8) | low);
+			}
+
+			@Override
+			public byte readByte(short offset) {
+				return data[ offset & 0xffff ];
+			}
+
+			@Override
+			public String dump(int offset, int len) {
+				throw new UnsupportedOperationException();
+			}
+
+			@Override
+			public void bulkWrite(short startingAddress, byte[] data, int datapos,int len) {
+				throw new UnsupportedOperationException();
+			}
+		};
+	}
+
 	public List<Line> disassemble(int baseAdrToPrint,byte[] data,int offset,int len)
 	{
 		final List<Line> result = new ArrayList<>();
-		disassemble(baseAdrToPrint, data, offset, len, result::add );
+		disassemble(wrap(baseAdrToPrint,data), offset, len, result::add );
 		return result;
 	}
 
@@ -116,7 +161,12 @@ public class Disassembler
 
 	public void disassemble(int baseAdrToPrint,byte[] data,int offset,int len,Writer writer)
 	{
-		disassemble(baseAdrToPrint, data, offset, len, new Consumer<Line>()
+		disassemble( wrap(baseAdrToPrint,data) , offset , len , writer );
+	}
+
+	public void disassemble(IMemoryRegion region,int offset,int len,Writer writer)
+	{
+		disassemble(region, offset, len, new Consumer<Line>()
 		{
 			private boolean firstLine = true;
 			@Override
@@ -138,13 +188,13 @@ public class Disassembler
 		});
 	}
 
-	private void disassemble(int baseAdrToPrint,byte[] data,int offset,int len,Consumer<Line> lineConsumer)
+	private void disassemble(IMemoryRegion data,int offset,int len,Consumer<Line> lineConsumer)
 	{
 		this.hexdump.setBytesPerLine(3);
 
-		this.baseAddressToPrint = baseAdrToPrint;
+		this.baseAddressToPrint = data.getAddressRange().getStartAddress();
 		this.data = data;
-		this.currentOffset = offset;
+		this.currentOffset = (short) offset;
 		this.previousOffset = currentOffset;
 		this.bytesLeft = len;
 		this.lineConsumer = lineConsumer;
@@ -721,15 +771,13 @@ bbb	addressing mode
 	private byte readByte()
 	{
 		bytesLeft--;
-		return data[currentOffset++];
+		return data.readByte( currentOffset++ );
 	}
 
 	private short readWord()
 	{
-		int lo = readByte();
-		lo = lo & 0xff;
-		int hi = readByte();
-		hi = hi & 0xff;
+		final int lo = readByte() & 0xff;
+		final int hi = readByte() & 0xff;
 		final int result = (hi << 8 | lo);
 		return (short) (result & 0xffff);
 	}

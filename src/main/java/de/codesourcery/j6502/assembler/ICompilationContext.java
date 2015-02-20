@@ -4,7 +4,7 @@ import de.codesourcery.j6502.assembler.parser.ast.IASTNode;
 
 public interface ICompilationContext
 {
-	public void setCurrentAddress(short adr);
+	public void setOrigin(short adr);
 
 	public int getCurrentAddress();
 

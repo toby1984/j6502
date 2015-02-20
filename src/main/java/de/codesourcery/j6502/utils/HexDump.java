@@ -56,7 +56,7 @@ public class HexDump {
 			{
 				final int adr = index % region.getAddressRange().getSizeInBytes();
 				index++;
-				final byte value = region.readByte( adr );
+				final byte value = region.readByte( (short) adr );
 				final char intValue = CharsetConverter.petToASCII( value );
 				if ( intValue >= 32 && intValue < 127 ) {
 					asciiBuffer.append( intValue );
@@ -92,27 +92,32 @@ public class HexDump {
 			}
 
 			@Override
-			public void bulkWrite(int startingAddress, byte[] data,int datapos, int len) {
+			public void bulkWrite(short startingAddress, byte[] data,int datapos, int len) {
 				throw new UnsupportedOperationException();
 			}
 
 			@Override
-			public byte readByte(int offset) {
-				return data[offset];
+			public byte readByte(short offset) {
+				return data[offset & 0xffff];
 			}
 
 			@Override
-			public short readWord(int offset) {
+			public short readWord(short offset) {
 				throw new UnsupportedOperationException();
 			}
 
 			@Override
-			public void writeWord(int offset, short value) {
+			public void writeWord(short offset, short value) {
 				throw new UnsupportedOperationException();
 			}
 
 			@Override
-			public void writeByte(int offset, byte value) {
+			public void writeByte(short offset, byte value) {
+				throw new UnsupportedOperationException();
+			}
+
+			@Override
+			public String dump(int offset, int len) {
 				throw new UnsupportedOperationException();
 			}
 		} , offset , len );

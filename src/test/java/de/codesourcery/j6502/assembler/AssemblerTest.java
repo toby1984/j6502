@@ -6,15 +6,18 @@ import de.codesourcery.j6502.assembler.parser.Lexer;
 import de.codesourcery.j6502.assembler.parser.Parser;
 import de.codesourcery.j6502.assembler.parser.Scanner;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
+import de.codesourcery.j6502.emulator.EmulatorTest;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class AssemblerTest extends TestCase {
 
-	private static final int PRG_LOAD_ADDRESS = 0;
+	private static final int PRG_LOAD_ADDRESS = EmulatorTest.PRG_LOAD_ADDRESS;
+	private static final String SET_ORIGIN_CMD = "*="+HexDump.toAdr( PRG_LOAD_ADDRESS )+"\n";
 
-	private void assertCompilesTo(String s, int expected1, int... expected2)
+	private void assertCompilesTo(String asm, int expected1, int... expected2)
 	{
-		final Parser p = new Parser(new Lexer(new Scanner(s)));
+		final String source = ! asm.contains("*=") ? SET_ORIGIN_CMD+asm : asm;
+		final Parser p = new Parser(new Lexer(new Scanner(source)));
 
 		final Assembler a = new Assembler();
 		final byte[] actual = a.assemble( p.parse() );
@@ -90,7 +93,7 @@ public class AssemblerTest extends TestCase {
 
 	public void testBackwardsReferenceToGlobalLabelInZeroPage()
 	{
-		final String s = "NOP\n"+
+		final String s = SET_ORIGIN_CMD+"NOP\n"+
 				          "label:\n"+
 	                      "       JMP label";
 
@@ -108,9 +111,13 @@ public class AssemblerTest extends TestCase {
 		assertEquals( Label.class , symbol.getClass() );
 		final Label label = (Label) symbol;
 		assertTrue( label.hasValue() );
-		assertEquals( new Integer(1) , label.getValue() );
 
-		assertArrayEquals( actual , 0xea, 0x4c,0x01 , 0x00 );
+		final int branchTarget = PRG_LOAD_ADDRESS+1;
+		assertEquals( new Integer(branchTarget) , label.getValue() );
+
+		final byte lo = (byte) (branchTarget & 0xff);
+		final byte hi = (byte) ((branchTarget >>8) & 0xff);
+		assertArrayEquals( actual , 0xea, 0x4c, lo , hi );
 	}
 
 	public void testByteInitializedMemory() {
@@ -126,8 +133,8 @@ public class AssemblerTest extends TestCase {
 
 		final Assembler a = new Assembler();
 		final byte[] actual = a.assemble( p.parse() );
-		assertEquals(11, actual.length );
-		assertArrayEquals( actual , 00,00,00,00,00,00,00,00,00,00,0xea );
+		assertEquals(1, actual.length );
+		assertArrayEquals( actual , 0xea );
 	}
 
 	public void testSetOriginBackwardsFails()
@@ -149,7 +156,7 @@ public class AssemblerTest extends TestCase {
 
 	public void testForwardsReferenceToGlobalLabel()
 	{
-		final String s = "JMP label\n"+
+		final String s = SET_ORIGIN_CMD+"JMP label\n"+
 	                      "NOP\n"+
 				          "label:";
 
@@ -175,14 +182,18 @@ public class AssemblerTest extends TestCase {
 		assertEquals( Label.class , symbol.getClass() );
 		final Label label = (Label) symbol;
 		assertTrue( label.hasValue() );
-		assertEquals( new Integer(4) , label.getValue() );
 
-		assertArrayEquals( actual , 0x4c,0x04 , 0x00 , 0xea );
+		final int branchTarget = PRG_LOAD_ADDRESS+4;
+		assertEquals( new Integer(branchTarget) , label.getValue() );
+
+		final byte lo = (byte) (branchTarget & 0xff);
+		final byte hi = (byte) ((branchTarget >>8) & 0xff);
+		assertArrayEquals( actual , 0x4c, lo , hi , 0xea );
 	}
 
 	public void testForwardsReferenceToLocalLabel()
 	{
-		final String s = "global:"+
+		final String s = SET_ORIGIN_CMD+"global:"+
 	                     "NOP\n"+ // 1 byte
 				         "JMP local1\n"+ // 3 bytes
 	                     "NOP\n"+ // 1 byte
@@ -205,16 +216,24 @@ public class AssemblerTest extends TestCase {
 		assertEquals( Label.class , globalSymbol.getClass() );
 		final Label globalLabel = (Label) globalSymbol;
 		assertTrue( globalLabel.hasValue() );
-		assertEquals( new Integer(0) , globalLabel.getValue() );
+
+		assertEquals( new Integer(PRG_LOAD_ADDRESS) , globalLabel.getValue() );
 
 		final ISymbol<?> localSymbol = symbolTable.getSymbol( localName , globalName );
 		assertNotNull( localSymbol );
 		assertEquals( Label.class , globalSymbol.getClass() );
 		final Label localLabel = (Label) localSymbol;
 		assertTrue( localLabel.hasValue() );
-		assertEquals( new Integer(5) , localLabel.getValue() );
 
-		assertArrayEquals( actual , 0xea, 0x4c, 0x05 , 0x00 , 0xea );
+		final int branchTarget = PRG_LOAD_ADDRESS+5;
+		assertEquals( new Integer(branchTarget) , localLabel.getValue() );
+
+		final byte lo = (byte) (branchTarget & 0xff);
+		final byte hi = (byte) ((branchTarget >>8) & 0xff);
+
+		assertEquals( new Integer(branchTarget) , localLabel.getValue() );
+
+		assertArrayEquals( actual , 0xea, 0x4c, lo , hi , 0xea );
 	}
 
 	public void testLDA() {
@@ -654,7 +673,7 @@ public class AssemblerTest extends TestCase {
 	public void testBCSForward() {
 		// BCC   $0013     ; 000e:  90 05    ..
 		assertCompilesTo( "*= $0e\n"
-				+ "BCC $0015" , 0 ,0 ,0,0,0,0,0,0,0,0,0,0,0,0 , 0x90,0x05);
+				+ "BCC $0015" , 0x90,0x05);
 	}
 	public void testSTX()
 	{

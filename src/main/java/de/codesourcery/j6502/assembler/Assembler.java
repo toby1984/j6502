@@ -18,34 +18,90 @@ public class Assembler
 	protected final class DefaultContext implements ICompilationContext
 	{
 		protected byte[] buffer = new byte[1024];
-		protected int currentOffset;
+		protected int currentWriteOffset;
+		protected int origin;
+		protected int currentAddress;
 		protected int currentPassNo = 0;
 
 		private final ISymbolTable symbolTable = new SymbolTable();
 
+		private boolean originSet = false;
+
 		@Override
-		public void setCurrentAddress(short adr)
+		public void setOrigin(short adr)
 		{
-			int value = adr;
-			value = value & 0xffff;
-			if ( value < currentOffset ) {
-				throw new RuntimeException("Internal error, cannot decrease ORIGIN to "+HexDump.toAdr( adr )
-						+ " (already at "+HexDump.toAdr( (short) currentOffset )+")" );
+			if ( originSet ) {
+				throw new IllegalStateException("Origin address already set to "+HexDump.toAdr( origin )+" , cannot set it more than once");
 			}
 
-			for ( int delta = value - currentOffset; delta > 0 ; delta-- )
-			{
-				writeByte((byte) 0);
-			}
+			currentAddress = origin = adr;
+			origin &= 0xffff;
+			currentAddress &= 0xffff;
+			originSet = true;
 		}
 
 		@Override
 		public void writeByte(byte b)
 		{
-			if ( currentOffset  >= buffer.length ) {
+			if ( ! originSet ) {
+				throw new IllegalStateException("Origin not set");
+			}
+
+			if ( currentWriteOffset  >= buffer.length ) {
 				expandBuffer();
 			}
-			buffer[currentOffset++] = b;
+			buffer[currentWriteOffset++] = b;
+			currentAddress++;
+		}
+
+		@Override
+		public void writeByte(IASTNode node)
+		{
+			final IValueNode lit = (IValueNode) node;
+			byte value;
+			if ( ! lit.isValueAvailable() )
+			{
+				if ( getPassNo() != 0 ) {
+					throw new ValueUnavailableException(lit);
+				}
+				value = (byte) 0xff;
+			} else {
+				value = lit.getByteValue();
+			}
+			writeByte( value );
+		}
+
+		@Override
+		public void writeWord(short b)
+		{
+			if ( ! originSet ) {
+				throw new IllegalStateException("Origin not set");
+			}
+
+			if ( currentWriteOffset >= buffer.length ) {
+				expandBuffer();
+			}
+			// 6502 uses little-endian => low-byte first
+			buffer[currentWriteOffset++] = (byte) (b & 0xff );
+			buffer[currentWriteOffset++] = (byte) (( b & 0xff00) >> 8);
+			currentAddress += 2;
+		}
+
+		@Override
+		public void writeWord(IASTNode node)
+		{
+			final IValueNode lit = (IValueNode) node;
+			short value;
+			if ( ! lit.isValueAvailable() )
+			{
+				if ( getPassNo() != 0 ) {
+					throw new ValueUnavailableException(lit);
+				}
+				value = (short) 0xffff;
+			} else {
+				value = lit.getWordValue();
+			}
+			writeWord( value );
 		}
 
 		@Override
@@ -55,7 +111,9 @@ public class Assembler
 
 		public void onePass(AST ast)
 		{
-			currentOffset = 0;
+			originSet = false;
+			currentAddress = 0;
+			currentWriteOffset = 0;
 			buffer = new byte[1024];
 
 			final Consumer<IASTNode> visitor1 = n ->
@@ -82,59 +140,13 @@ public class Assembler
 		}
 
 		@Override
-		public void writeWord(short b)
-		{
-			if ( currentOffset >= buffer.length ) {
-				expandBuffer();
-			}
-			// 6502 uses little-endian => low-byte first
-
-			buffer[currentOffset++] = (byte) (b & 0xff );
-			buffer[currentOffset++] = (byte) (( b & 0xff00) >> 8);
-		}
-
-		@Override
 		public ISymbolTable getSymbolTable() {
 			return symbolTable;
 		}
 
 		@Override
-		public void writeByte(IASTNode node)
-		{
-			final IValueNode lit = (IValueNode) node;
-			byte value;
-			if ( ! lit.isValueAvailable() )
-			{
-				if ( getPassNo() != 0 ) {
-					throw new ValueUnavailableException(lit);
-				}
-				value = (byte) 0xff;
-			} else {
-				value = lit.getByteValue();
-			}
-			writeByte( value );
-		}
-
-		@Override
-		public void writeWord(IASTNode node)
-		{
-			final IValueNode lit = (IValueNode) node;
-			short value;
-			if ( ! lit.isValueAvailable() )
-			{
-				if ( getPassNo() != 0 ) {
-					throw new ValueUnavailableException(lit);
-				}
-				value = (short) 0xffff;
-			} else {
-				value = lit.getWordValue();
-			}
-			writeWord( value );
-		}
-
-		@Override
 		public int getCurrentAddress() {
-			return currentOffset;
+			return currentAddress;
 		}
 
 		@Override
@@ -149,13 +161,22 @@ public class Assembler
 		}
 
 		public byte[] getBytes() {
-			final byte[] result = new byte[currentOffset];
-			if ( currentOffset > 0 ) {
-				System.arraycopy( buffer , 0 , result , 0 , currentOffset );
+			final byte[] result = new byte[currentWriteOffset];
+			if ( currentWriteOffset > 0 ) {
+				System.arraycopy( buffer , 0 , result , 0 , currentWriteOffset );
 			}
 			return result;
 		}
 	};
+
+	/**
+	 * Returns the intended output / starting address of the generated binary.
+	 * @return
+	 */
+	public int getOrigin()
+	{
+		return context.origin;
+	}
 
 	public byte[] assemble(AST ast)
 	{

@@ -17,7 +17,7 @@ public class SetOriginNode extends ASTNode implements ICompilationContextAware {
 		final IValueNode child = (IValueNode) child(0);
 		if ( child.isValueAvailable() ) {
 			context.debug( this , "Setting origin to $"+HexDump.toHexBigEndian( child.getWordValue() ) );
-			context.setCurrentAddress( child.getWordValue() );
+			context.setOrigin( child.getWordValue() );
 		} else if ( context.getPassNo() > 0 ) {
 			throw new ValueUnavailableException( child );
 		}
