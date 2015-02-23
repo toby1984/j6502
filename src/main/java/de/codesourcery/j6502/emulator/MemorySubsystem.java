@@ -420,6 +420,7 @@ public final class MemorySubsystem extends IMemoryRegion
 //			System.out.println( region.dump( 0 , 128 ) );
 			System.out.println( region.dump( region.getAddressRange().getSizeInBytes() - 128 , 128 ) );
 		}
+		region.writeProtect();
 	}
 
 	@Override
