@@ -85,25 +85,15 @@ public class CPU
 	public String toString()
 	{
 		// PC: 0000    A: FF    X: FF    Y: 00    SP: 00
-		final StringBuilder flagBuffer = new StringBuilder("Flags: ");
-		final Flag[] values = Flag.values();
-		for (int i = values.length -1; i >= 0 ; i--)
-		{
-			final Flag f = values[i];
-			if ( f.isSet( flags ) ) {
-				flagBuffer.append( f.symbol );
-			} else {
-				flagBuffer.append(".");
-			}
-		}
+		final String flagBuffer = "Flags: "+getFlagsString();
 
 		final int end = 0x01ff;
 		int start = end - 16;
-		int currentSp = sp & 0xffff;
+		final int currentSp = sp & 0xffff;
 		if ( start > currentSp ) {
 			start = currentSp;
 		}
-		String dump = HexDump.INSTANCE.dump( (short) start , sp , memory , start , 16 );
+		final String dump = getStackDump();
 
 		final StringBuilder buffer = new StringBuilder();
 		buffer
@@ -120,6 +110,33 @@ public class CPU
 		.append("SP: ").append( HexDump.toAdr( sp )+" "+dump );
 
 		return buffer.toString();
+	}
+
+	public String getStackDump()
+	{
+		final int end = 0x01ff;
+		int start = end - 16;
+		final int currentSp = sp & 0xffff;
+		if ( start > currentSp ) {
+			start = currentSp;
+		}
+		return HexDump.INSTANCE.dump( (short) start , sp , memory , start , 16 );
+	}
+
+	public String getFlagsString()
+	{
+		final StringBuilder flagBuffer = new StringBuilder();
+		final Flag[] values = Flag.values();
+		for (int i = values.length -1; i >= 0 ; i--)
+		{
+			final Flag f = values[i];
+			if ( f.isSet( flags ) ) {
+				flagBuffer.append( f.symbol );
+			} else {
+				flagBuffer.append(".");
+			}
+		}
+		return flagBuffer.toString();
 	}
 
 	public Set<Flag> getFlags() {

@@ -14,6 +14,8 @@ public class Emulator
 
 	protected static final boolean PRINT_DISASSEMBLY = false;
 
+	protected static final boolean failOnBRK = true;
+
 	protected static final String EMPTY_STRING = "";
 
 	private final MemorySubsystem memory = new MemorySubsystem();
@@ -77,7 +79,9 @@ public class Emulator
 				}
 			});
 		}
+
 		doSingleStep();
+
 		if ( PRINT_DISASSEMBLY ) {
 			System.out.println( cpu );
 		}
@@ -97,7 +101,12 @@ public class Emulator
 		// mixed bag of opcodes...
 		switch( op )
 		{
-			case 0x00: Opcode.BRK.execute(op,cpu ,memory,this); return;
+			case 0x00:
+				if ( failOnBRK ) {
+					unknownOpcode( op );
+				}
+				Opcode.BRK.execute(op,cpu ,memory,this);
+				return;
 			case 0x20: Opcode.JSR.execute(op,cpu ,memory,this); return;
 			case 0x40: Opcode.RTI.execute(op,cpu ,memory,this); return;
 			case 0x60: Opcode.RTS.execute(op,cpu ,memory,this); return;
