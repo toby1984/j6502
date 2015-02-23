@@ -95,12 +95,14 @@ public class Disassembler
 		new Disassembler().disassemble( 0x1000, real , 0 , data.length ).forEach( System.out::println );
 	}
 
-	public void setAnnotate(boolean annotate) {
+	public Disassembler setAnnotate(boolean annotate) {
 		this.annotate = annotate;
+		return this;
 	}
 
-	public void setWriteAddresses(boolean writeAddresses) {
+	public Disassembler setWriteAddresses(boolean writeAddresses) {
 		this.writeAddresses = writeAddresses;
+		return this;
 	}
 
 	private IMemoryRegion wrap(int startingOffset, byte[] data) {
@@ -188,7 +190,7 @@ public class Disassembler
 		});
 	}
 
-	private void disassemble(IMemoryRegion data,int offset,int len,Consumer<Line> lineConsumer)
+	public void disassemble(IMemoryRegion data,int offset,int len,Consumer<Line> lineConsumer)
 	{
 		this.hexdump.setBytesPerLine(3);
 

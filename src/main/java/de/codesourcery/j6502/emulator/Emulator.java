@@ -1,12 +1,18 @@
 package de.codesourcery.j6502.emulator;
 
+import java.util.function.Consumer;
+
 import de.codesourcery.j6502.assembler.parser.Opcode;
+import de.codesourcery.j6502.disassembler.Disassembler;
+import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
 import de.codesourcery.j6502.utils.HexDump;
 
-public class Emulator implements IEmulator
+public class Emulator
 {
-	protected static final boolean PRINT_CURRENT_INS = true;
+	protected static final boolean PRINT_CURRENT_INS = false;
+
+	protected static final boolean PRINT_DISASSEMBLY = false;
 
 	protected static final String EMPTY_STRING = "";
 
@@ -15,7 +21,6 @@ public class Emulator implements IEmulator
 
 	private IMemoryProvider memoryProvider;
 
-	@Override
 	public void setMemoryProvider(IMemoryProvider provider)
 	{
 		if (provider==null ) {
@@ -35,7 +40,6 @@ public class Emulator implements IEmulator
 		return memory;
 	}
 
-	@Override
 	public void reset()
 	{
 		memory.reset();
@@ -52,23 +56,31 @@ public class Emulator implements IEmulator
 		cpu.reset();
 	}
 
-	@Override
-	public void start() {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("start not implemented yet");
-	}
-
-	@Override
-	public void stop() {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("stop not implemented yet");
-	}
-
-	@Override
 	public void singleStep()
 	{
+		if ( PRINT_DISASSEMBLY )
+		{
+			System.out.println("=====================");
+			final Disassembler dis = new Disassembler();
+			dis.setAnnotate( true );
+			dis.setWriteAddresses( true );
+			dis.disassemble( memory , cpu.pc , 3 , new Consumer<Line>()
+			{
+				private boolean linePrinted = false;
+
+				@Override
+				public void accept(Line line) {
+					if ( ! linePrinted ) {
+						System.out.println( line );
+						linePrinted = true;
+					}
+				}
+			});
+		}
 		doSingleStep();
-		System.out.println("Previous PC: "+HexDump.toAdr(cpu.previousPC));
+		if ( PRINT_DISASSEMBLY ) {
+			System.out.println( cpu );
+		}
 		cpu.previousPC = cpu.pc;
 	}
 

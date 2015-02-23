@@ -29,8 +29,17 @@ public class HexDump {
 	private final Map<Integer,Character> petToASCII = new HashMap<>();
 	private final Map<Integer,Character> asciiToPET = new HashMap<>();
 
-
 	public String dump(short startingAddress, IMemoryRegion region, int offset, int len)
+	{
+		return dump(startingAddress,(short) 0,region,offset,len,false);
+	}
+
+	public String dump(short startingAddress, short addressToMark,IMemoryRegion region, int offset, int len)
+	{
+		return dump(startingAddress,addressToMark,region,offset,len,true);
+	}
+
+	private String dump(short startingAddress, short addressToMark,IMemoryRegion region, int offset, int len,boolean mark)
 	{
 		short currentAddress = startingAddress;
 		final StringBuilder buffer = new StringBuilder();
@@ -58,16 +67,27 @@ public class HexDump {
 				index++;
 				final byte value = region.readByte( (short) adr );
 				final char intValue = CharsetConverter.petToASCII( value );
+				final boolean doMark = mark && adr == addressToMark;
+				char toAppend;
 				if ( intValue >= 32 && intValue < 127 ) {
-					asciiBuffer.append( intValue );
+					toAppend = intValue;
 				} else {
-					asciiBuffer.append( '.' );
+					toAppend = '.';
+				}
+				if ( doMark ) {
+					asciiBuffer.append("[").append( toAppend ).append("]");
+				} else {
+					asciiBuffer.append( toAppend );
 				}
 
 				if ( lineBuffer.length() > 0 ) {
 					lineBuffer.append(" ");
 				}
-				lineBuffer.append( toHex( value ) );
+				if ( doMark ) {
+					lineBuffer.append( "[").append( toHex( value ) ).append("]");
+				} else {
+					lineBuffer.append( toHex( value ) );
+				}
 				bytesOnLine++;
 				bytes--;
 			}

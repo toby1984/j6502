@@ -8,8 +8,8 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public final class MemorySubsystem extends IMemoryRegion
 {
-	private static final boolean DEBUG_READS = true;
-	private static final boolean DEBUG_ROM_IMAGES = true;
+	private static final boolean DEBUG_READS = false;
+	private static final boolean DEBUG_ROM_IMAGES = false;
 
 	public static enum Bank
 	{
@@ -88,13 +88,13 @@ public final class MemorySubsystem extends IMemoryRegion
 	 */
 	private byte plaLatchBits = 0; // address $01
 
-	private IMemoryRegion ram0;
-	private IMemoryRegion ram1;
-	private IMemoryRegion ram2;
-	private IMemoryRegion ram3;
-	private IMemoryRegion ram4;
-	private IMemoryRegion ram5;
-	private IMemoryRegion ram6;
+	private final IMemoryRegion ram0= new Memory("RAM #0",Bank.BANK0.range);
+	private final IMemoryRegion ram1= new Memory("RAM #1",Bank.BANK1.range);
+	private final IMemoryRegion ram2= new Memory("RAM #2",Bank.BANK2.range);
+	private final IMemoryRegion ram3= new Memory("RAM #3",Bank.BANK3.range);
+	private final IMemoryRegion ram4= new Memory("RAM #4",Bank.BANK4.range);
+	private final IMemoryRegion ram5= new Memory("RAM #5",Bank.BANK5.range);
+	private final IMemoryRegion ram6= new Memory("RAM #6",Bank.BANK6.range);
 
 	private WriteOnceMemory kernelROM;
 	private WriteOnceMemory charROM;
@@ -141,21 +141,6 @@ public final class MemorySubsystem extends IMemoryRegion
 		plaLatchBits = 0b00110111; // BASIC ROM , KERNEL ROM , I/O AREA
 
 		setupMemoryLayout();
-
-//		for ( final Bank bank : Bank.values() )
-//		{
-//			final IMemoryRegion r1 = readRegions[ bank.index ];
-//			final IMemoryRegion r2 = readRegions[ bank.index ];
-//			if ( r1 != null ) {
-//				r1.reset();
-//			}
-//			if ( r2 != null )
-//			{
-//				if ( r1 == null || r1 != r2 ) {
-//					r2.reset();
-//				}
-//			}
-//		}
 	}
 
 	public void setMemoryLayout( byte latchBits) {
@@ -331,14 +316,6 @@ public final class MemorySubsystem extends IMemoryRegion
 
 	private void createRegions(int index)
 	{
-		ram0 = new Memory("RAM #0",Bank.BANK0.range);
-		ram1 = new Memory("RAM #1",Bank.BANK1.range);
-		ram2 = new Memory("RAM #2",Bank.BANK2.range);
-		ram3 = new Memory("RAM #3",Bank.BANK3.range);
-		ram4 = new Memory("RAM #4",Bank.BANK4.range);
-		ram5 = new Memory("RAM #5",Bank.BANK5.range);
-		ram6 = new Memory("RAM #6",Bank.BANK6.range);
-
 		// kernel ROM
 		kernelROM = new WriteOnceMemory("Kernel ROM" , Bank.BANK6.range );
 		loadROM("kernel_v3.rom" , kernelROM );

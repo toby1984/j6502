@@ -27,6 +27,27 @@ public class EmulatorTest  extends TestCase
 
 	public static final int PRG_LOAD_ADDRESS = MemorySubsystem.Bank.BANK1.range.getStartAddress();
 
+	public void testPerformance() {
+
+		long time = -System.currentTimeMillis();
+
+		Helper helper = execute( "loop: LDA #$11\n BNE loop");
+		helper.run(20000000);
+		time += System.currentTimeMillis();
+
+		// 985.2484444 kHz [1] (PAL)
+		time = -System.currentTimeMillis();
+		helper = execute( "loop: LDA #$11\n BNE loop");
+		helper.run(20000000);
+		time += System.currentTimeMillis();
+
+		final double msTimePerCycle = time/ (double) helper.emulator.getCPU().cycles;
+		final double cyclesPerSecond = 1000.0d / msTimePerCycle;
+		final double mhz = cyclesPerSecond / 1000000;
+		System.out.println( "Executed "+helper.emulator.getCPU().cycles+" CPU cycles in "+time+" ms ( = "+mhz+" Mhz )");
+
+	}
+
 	public void testCMP() {
 /*
 MODE           SYNTAX       HEX LEN TIM
@@ -734,8 +755,8 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 
 	protected final class Helper
 	{
-		private Emulator emulator = new Emulator();
-		private final String source;
+		public final Emulator emulator = new Emulator();
+		public final String source;
 		private boolean executed = false;
 
 		private final List<Runnable> blocks = new ArrayList<>();
@@ -952,9 +973,13 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 
 		private void maybeExecute()
 		{
-			if ( executed ) {
-				return;
+			if ( ! executed ) {
+				run(30 );
 			}
+		}
+
+		public void run(int maxInstructions)
+		{
 			try
 			{
 				final int ADDITIONAL_BYTES = 1; // number of bytes we insert before executing the test payload
@@ -1004,7 +1029,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 
 				blocks.forEach( b -> b.run() );
 
-				int instructions = 30;
+				int instructions = maxInstructions;
 				while ( instructions-- > 0 )
 				{
 					try {

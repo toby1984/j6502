@@ -73,6 +73,7 @@ public class CPU
 	{
 		cycles = 0;
 		pc = memory.readWord( (short) RESET_VECTOR_LOCATION );
+		previousPC = pc;
 		System.out.println("CPU.reset(): Settings PC to "+HexDump.toAdr( pc ) );
 		accumulator = 0;
 		x = y = 0;
@@ -84,7 +85,6 @@ public class CPU
 	public String toString()
 	{
 		// PC: 0000    A: FF    X: FF    Y: 00    SP: 00
-
 		final StringBuilder flagBuffer = new StringBuilder("Flags: ");
 		final Flag[] values = Flag.values();
 		for (int i = values.length -1; i >= 0 ; i--)
@@ -96,6 +96,15 @@ public class CPU
 				flagBuffer.append(".");
 			}
 		}
+
+		final int end = 0x01ff;
+		int start = end - 16;
+		int currentSp = sp & 0xffff;
+		if ( start > currentSp ) {
+			start = currentSp;
+		}
+		String dump = HexDump.INSTANCE.dump( (short) start , sp , memory , start , 16 );
+
 		final StringBuilder buffer = new StringBuilder();
 		buffer
 		.append( "PC: ").append( HexDump.toHexBigEndian( pc ) )
@@ -108,7 +117,7 @@ public class CPU
 		.append("    ")
 		.append("Y: ").append( HexDump.toHex( y ) )
 		.append("    ")
-		.append("SP: ").append( HexDump.toHex( sp ) );
+		.append("SP: ").append( HexDump.toAdr( sp )+" "+dump );
 
 		return buffer.toString();
 	}
@@ -119,7 +128,7 @@ public class CPU
 
 	public void setSP(byte value)
 	{
-		short expanded = value;
+		int expanded = value;
 		expanded &= 0xff;
 		this.sp = (short) ((0x0100 | expanded));
 	}

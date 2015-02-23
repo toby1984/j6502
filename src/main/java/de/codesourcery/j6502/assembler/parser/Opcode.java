@@ -10,7 +10,7 @@ import de.codesourcery.j6502.assembler.parser.ast.IndirectOperand;
 import de.codesourcery.j6502.assembler.parser.ast.InstructionNode;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPU.Flag;
-import de.codesourcery.j6502.emulator.IEmulator;
+import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
 import de.codesourcery.j6502.utils.HexDump;
@@ -22,7 +22,7 @@ public enum Opcode
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b101 ); }
 		@Override
-		public void execute(int opcode,CPU cpu, IMemoryRegion memory, IEmulator emulator)
+		public void execute(int opcode,CPU cpu, IMemoryRegion memory, Emulator emulator)
 		{
 			switch( opcode ) {
 				//                  MODE        SYNTAX       LEN TIM
@@ -74,7 +74,7 @@ public enum Opcode
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator)
 		{
 			switch( opcode )
 			{
@@ -116,7 +116,7 @@ public enum Opcode
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b000 ); }
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator)
 		{
 			byte value;
 			switch(opcode) {
@@ -164,7 +164,7 @@ public enum Opcode
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b001 ); }
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) {
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
 
 			byte value;
 			switch(opcode) {
@@ -211,7 +211,7 @@ public enum Opcode
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b010 ); }
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator)
 		{
 			/*
  Affects Flags: S Z
@@ -274,7 +274,7 @@ Indirect,Y    EOR ($44),Y   $51  2   5+
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b011 ); }
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) {
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
 			/*
  Affects Flags: S V Z C
 
@@ -352,7 +352,7 @@ There is no way to add without carry. Return To Index
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b110 ); }
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) {
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
 			/*
  Affects Flags: S Z C
 
@@ -420,7 +420,7 @@ lack thereof and the sign (i.e. A>=$80) of the accumulator.
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b111 ); }
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) {
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
 			/*
 MODE           SYNTAX       HEX LEN TIM
 Immediate     SBC #$44      $E9  2   2
@@ -514,7 +514,7 @@ operation. If the carry is cleared by the operation, it indicates a borrow occur
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) {
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
 			/*
  Affects Flags: S Z C
 
@@ -588,7 +588,7 @@ ASL shifts all bits left one position. 0 is shifted into bit 0 and the original 
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) {
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
 			/*
  Affects Flags: S Z C
 
@@ -659,7 +659,7 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator)
 		{
 			/*
 			Affects Flags: S Z C
@@ -742,7 +742,7 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator)
 		{
 
 			/*
@@ -830,7 +830,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)
 		{
 			/*
 STX (STore X register)
@@ -880,7 +880,7 @@ Absolute      STX $4400     $8E  3   4
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)
 		{
 			/*
 MODE           SYNTAX       HEX LEN TIM
@@ -934,7 +934,7 @@ Absolute,Y    LDX $4400,Y   $BE  3   4+
 					throw new InvalidAddressingModeException( ins );
 			}
 		}
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) { handleMemIncDec(opcode, cpu, memory , (byte) -1 ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) { handleMemIncDec(opcode, cpu, memory , (byte) -1 ); }
 	},
 	INC("INC")
 	{
@@ -953,7 +953,7 @@ Absolute,Y    LDX $4400,Y   $BE  3   4+
 			}
 		}
 
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) { handleMemIncDec( opcode , cpu , memory , (byte) 1 ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) { handleMemIncDec( opcode , cpu , memory , (byte) 1 ); }
 	},
 	// generic #3
 	BIT("BIT")
@@ -972,7 +972,7 @@ Absolute,Y    LDX $4400,Y   $BE  3   4+
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) {
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
 			/*
  Affects Flags: N V Z
 
@@ -1040,7 +1040,7 @@ BIT sets the Z flag as though the value in the address tested were ANDed with th
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)
 		{
 			/*
 			 * Indirect      JMP ($5597)   $6C  3   5
@@ -1079,7 +1079,7 @@ BIT sets the Z flag as though the value in the address tested were ANDed with th
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)
 		{
 			/*
 MODE           SYNTAX       HEX LEN TIM
@@ -1125,7 +1125,7 @@ Absolute      STY $4400     $8C  3   4
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)
 		{
 			/*
  Affects Flags: S Z
@@ -1185,7 +1185,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) {
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
 			/*
  Affects Flags: S Z C
 
@@ -1237,7 +1237,7 @@ Absolute      CPY $4400     $CC  3   4
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) {
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
 			/*
 			 Affects Flags: S Z C
 
@@ -1292,42 +1292,42 @@ Absolute      CPY $4400     $CC  3   4
 	BPL("BPL")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x10 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
 	},
 	BMI("BMI")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x30 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
 	},
 	BVC("BVC")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x50 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
 	},
 	BVS("BVS")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x70 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
 	},
 	BCC("BCC")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x90 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
 	},
 	BCS("BCS")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0xb0 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
 	},
 	BNE("BNE")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0xd0 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
 	},
 	BEQ("BEQ")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0xf0 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
 	},
 	BRK("BRK") {
 
@@ -1340,7 +1340,7 @@ Absolute      CPY $4400     $CC  3   4
 			writer.writeByte( (byte) 0x00 );
 		}
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) {
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
 			/*
   PC = PC + 1
   bPoke(SP,PC.h)
@@ -1389,7 +1389,7 @@ Absolute      CPY $4400     $CC  3   4
 		}
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)
 		{
 			/*
 MODE           SYNTAX       HEX LEN TIM
@@ -1401,10 +1401,10 @@ Subroutines are normally terminated by a RTS op code.
 			if ( (opcode & 0xff ) != 0x20 ) {
 				throw new RuntimeException("Unreachable code reached");
 			}
-			cpu.pc++;
-			final short jumpTarget = memory.readWord( cpu.pc );
+			cpu.pc++; // skip 1 byte opcode
+			final short jumpTarget = memory.readWord( cpu.pc ); // read 2 byte word
 			short adr = cpu.pc;
-			adr++; // +1 because address-1 needs to be pushed
+			adr++; // this would usually be +=2 but since JSR needs to push address-1 we'll just increment by 1 here
 			push( adr , cpu , memory );
 			cpu.pc = jumpTarget;
 			cpu.cycles += 6;
@@ -1413,7 +1413,7 @@ Subroutines are normally terminated by a RTS op code.
 	RTI("RTI" , (byte) 0x40 ) {
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, IEmulator emulator) {
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
 			if ( (opcode & 0xff) != 0x40 ) {
 				throw new RuntimeException("Unreachable code reached");
 			}
@@ -1427,7 +1427,7 @@ Subroutines are normally terminated by a RTS op code.
 	RTS("RTS" , (byte) 0x60 ) {
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)
 		{
 			/*
 			 * MODE           SYNTAX       HEX LEN TIM
@@ -1439,8 +1439,8 @@ Subroutines are normally terminated by a RTS op code.
 			if ( (opcode & 0xff) != 0x60 ) {
 				throw new RuntimeException("Unreachable code reached");
 			}
-			final byte lo = pop(cpu, memory);
-			final byte hi = pop(cpu, memory);
+			final int lo = pop(cpu, memory) & 0xff;
+			final int hi = pop(cpu, memory) & 0xff;
 			short adr = (short) (hi<<8 | lo);
 			adr++;
 			cpu.pc = adr;
@@ -1448,80 +1448,80 @@ Subroutines are normally terminated by a RTS op code.
 		}
 	},
 	PHP("PHP",(byte) 0x08) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)  { handleStackInstruction(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)  { handleStackInstruction(cpu, memory); }
 	},
 	PLP("PLP",(byte) 0x28) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)  { handleStackInstruction(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)  { handleStackInstruction(cpu, memory); }
 	},
 	PHA("PHA",(byte) 0x48) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)  { handleStackInstruction(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)  { handleStackInstruction(cpu, memory); }
 	},
 	PLA("PLA",(byte) 0x68) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)  { handleStackInstruction(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)  { handleStackInstruction(cpu, memory); }
 	},
 	DEY("DEY",(byte) 0x88) {
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleRegisterInstructions(cpu,memory); }
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleRegisterInstructions(cpu,memory); }
 	},
 	TAY("TAY",(byte) 0xa8) {
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleRegisterInstructions(cpu,memory); }
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleRegisterInstructions(cpu,memory); }
 	},
 	INY("INY",(byte) 0xc8) {
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleRegisterInstructions(cpu,memory); }
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleRegisterInstructions(cpu,memory); }
 	},
 	INX("INX",(byte) 0xe8) {
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleRegisterInstructions(cpu,memory); }
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleRegisterInstructions(cpu,memory); }
 	},
 	CLC("CLC",(byte) 0x18) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleProcessorStatus(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleProcessorStatus(cpu, memory); }
 	},
 	SEC("SEC",(byte) 0x38) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleProcessorStatus(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleProcessorStatus(cpu, memory); }
 	},
 	CLI("CLI",(byte) 0x58) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleProcessorStatus(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleProcessorStatus(cpu, memory); }
 	},
 	SEI("SEI",(byte) 0x78) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleProcessorStatus(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleProcessorStatus(cpu, memory); }
 	},
 	TYA("TYA",(byte) 0x98) {
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleRegisterInstructions(cpu,memory); }
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleRegisterInstructions(cpu,memory); }
 	},
 	CLV("CLV",(byte) 0xb8) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleProcessorStatus(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleProcessorStatus(cpu, memory); }
 	},
 	CLD("CLD",(byte) 0xd8) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleProcessorStatus(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleProcessorStatus(cpu, memory); }
 	},
 	SED("SED",(byte) 0xf8) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleProcessorStatus(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleProcessorStatus(cpu, memory); }
 	},
 	TXA("TXA",(byte) 0x8a) {
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleRegisterInstructions(cpu,memory); }
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleRegisterInstructions(cpu,memory); }
 	},
 	TXS("TXS",(byte) 0x9a) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)  { handleStackInstruction(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)  { handleStackInstruction(cpu, memory); }
 	},
 	TAX("TAX",(byte) 0xaa) {
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleRegisterInstructions(cpu,memory); }
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleRegisterInstructions(cpu,memory); }
 	},
 	TSX("TSX",(byte) 0xba) {
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)  { handleStackInstruction(cpu, memory); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)  { handleStackInstruction(cpu, memory); }
 	},
 	DEX("DEX",(byte) 0xca) {
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator) { handleRegisterInstructions(cpu,memory); }
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleRegisterInstructions(cpu,memory); }
 	},
 	NOP("NOP",(byte) 0xea )
 	{
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,IEmulator emulator)
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)
 		{
 			cpu.pc++;
 			cpu.cycles+=2;
@@ -1861,7 +1861,7 @@ Subroutines are normally terminated by a RTS op code.
 		writer.writeByte( opcode );
 	}
 
-	public void execute(int opcode, CPU cpu , IMemoryRegion memory, IEmulator emulator)
+	public void execute(int opcode, CPU cpu , IMemoryRegion memory, Emulator emulator)
 	{
 		throw new InvalidOpcodeException( "Opcode $"+HexDump.toHex((byte) opcode)+" not implemented yet @ "+HexDump.toAdr( cpu.pc ) , cpu.pc , (byte) opcode);
 	}
