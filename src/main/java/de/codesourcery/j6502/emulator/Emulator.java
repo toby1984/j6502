@@ -81,7 +81,7 @@ public class Emulator
 		}
 
 		doSingleStep();
-
+		
 		if ( PRINT_DISASSEMBLY ) {
 			System.out.println( cpu );
 		}

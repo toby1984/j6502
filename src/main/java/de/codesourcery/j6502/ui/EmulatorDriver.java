@@ -1,5 +1,7 @@
 package de.codesourcery.j6502.ui;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -11,13 +13,16 @@ import de.codesourcery.j6502.ui.Debugger.Mode;
 public abstract class EmulatorDriver extends Thread
 {
 	private static final AtomicLong CMD_ID = new AtomicLong(0);
-	private static final long CALLBACK_INVOKE_CYCLES = 1000;
+	private static final long CALLBACK_INVOKE_CYCLES = 100000;
 
 	public volatile Throwable lastException;
 
 	private final AtomicReference<Mode> currentMode = new AtomicReference<Mode>(Mode.SINGLE_STEP);
 
 	private final Emulator emulator;
+	
+	private Breakpoint oneShotBreakpoint = null;
+	private final Breakpoint[] breakpoints = new Breakpoint[65536];
 
 	private final ArrayBlockingQueue<Cmd> requestQueue = new ArrayBlockingQueue<>(10);
 	private final ArrayBlockingQueue<Cmd> ackQueue = new ArrayBlockingQueue<>(10);
@@ -30,11 +35,7 @@ public abstract class EmulatorDriver extends Thread
 		return new Cmd(CmdType.STOP,ackRequired);
 	}
 
-	protected Cmd stepReturnCommand(boolean ackRequired) {
-		return new Cmd(CmdType.STEP_OVER,true);
-	}
-
-	protected static enum CmdType { START , STOP , STEP_OVER }
+	protected static enum CmdType { START , STOP }
 
 	protected final class Cmd
 	{
@@ -49,10 +50,6 @@ public abstract class EmulatorDriver extends Thread
 
 		public boolean isAckRequired() {
 			return ackRequired;
-		}
-
-		public boolean isStepReturn() {
-			return this.type.equals( CmdType.STEP_OVER );
 		}
 
 		public boolean isStartCmd() {
@@ -110,14 +107,6 @@ public abstract class EmulatorDriver extends Thread
 	public Mode getMode()
 	{
 		return currentMode.get();
-	}
-
-	public void stepReturn()
-	{
-		if ( canStepOver() )
-		{
-			sendCmd( stepReturnCommand(true) );
-		}
 	}
 
 	public void setMode(Mode newMode)
@@ -181,7 +170,6 @@ public abstract class EmulatorDriver extends Thread
 		boolean isRunnable = false;
 
 		long cyclesRemaining = CALLBACK_INVOKE_CYCLES;
-		Short stopAtPc = null;
 		while( true )
 		{
 			if ( isRunnable )
@@ -199,7 +187,6 @@ public abstract class EmulatorDriver extends Thread
 			}
 			else
 			{
-				stopAtPc = null;
 				if ( ! justStarted ) {
 					onStop( null );
 				}
@@ -212,17 +199,9 @@ public abstract class EmulatorDriver extends Thread
 						System.out.println("Thread received request: "+cmd);
 						cmd.ack();
 
-						if ( cmd.isStartCmd() || cmd.isStepReturn() )
+						if ( cmd.isStartCmd() )
 						{
 							isRunnable = true;
-							if ( cmd.isStepReturn() )
-							{
-								synchronized( emulator ) {
-									stopAtPc = (short) (emulator.getCPU().pc+3);
-								}
-							} else {
-								stopAtPc = null;
-							}
 						}
 					} catch (final InterruptedException e) {
 						continue;
@@ -242,9 +221,16 @@ public abstract class EmulatorDriver extends Thread
 					emulator.singleStep();
 					final long elapsedCycles = cpu.cycles - cycles;
 					cyclesRemaining -= elapsedCycles;
-					if ( stopAtPc != null && cpu.pc == stopAtPc.shortValue() )
+					Breakpoint bp = breakpoints[ cpu.pc & 0xffff ];
+					if ( bp == null && ( oneShotBreakpoint != null && oneShotBreakpoint.address == cpu.pc ) ) {
+						bp = oneShotBreakpoint;
+					}
+					if ( bp != null )
 					{
 						isRunnable = false;
+						if ( bp.isOneshot ) {
+							oneShotBreakpoint = null;
+						}
 						sendCmd( stopCommand( false ) );
 					}
 				}
@@ -252,7 +238,6 @@ public abstract class EmulatorDriver extends Thread
 				{
 					e.printStackTrace();
 					exception = e;
-					stopAtPc = null;
 				}
 			}
 
@@ -267,6 +252,15 @@ public abstract class EmulatorDriver extends Thread
 				cyclesRemaining = 0;
 				sendCmd( stopCommand( false ) );
 			}
+		}
+	}
+	
+	public void addBreakpoint(Breakpoint bp) 
+	{
+		if (bp.isOneshot) {
+			this.oneShotBreakpoint = bp;
+		} else {
+			this.breakpoints[ bp.address & 0xffff ] = bp;
 		}
 	}
 
@@ -296,5 +290,49 @@ public abstract class EmulatorDriver extends Thread
 			}
 		}
 		return false;
+	}
+	
+	public Breakpoint getBreakpoint(short address) 
+	{
+		return breakpoints[ address & 0xffff ];
+	}
+	
+	public List<Breakpoint> getBreakpoints() 
+	{
+		List<Breakpoint> result = new ArrayList<>();
+		for ( int i = 0 , len = breakpoints.length ; i < len ; i++ ) {
+			Breakpoint breakpoint = breakpoints[i];
+			if ( breakpoint != null && ! breakpoint.isOneshot ) {
+				result.add( breakpoint );
+			}
+		}
+		return result;
+	}
+
+	public void stepReturn() 
+	{
+		boolean breakpointAdded = false;
+		synchronized( emulator )
+		{
+			if ( canStepOver() ) 
+			{
+				addBreakpoint( new Breakpoint( (short) (emulator.getCPU().pc+3) , true  ) );
+				breakpointAdded = true;
+			}
+		}
+		if ( breakpointAdded ) {
+			setMode(Mode.CONTINOUS);
+		}
+	}
+
+	public void removeBreakpoint(Breakpoint breakpoint) 
+	{
+		if ( breakpoint.isOneshot ) {
+			if ( oneShotBreakpoint != null && oneShotBreakpoint.address == breakpoint.address ) {
+				oneShotBreakpoint = null;
+			}
+		} else {
+			this.breakpoints[ breakpoint.address & 0xffff ] = null;
+		}
 	}
 }

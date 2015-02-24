@@ -129,7 +129,7 @@ public enum Opcode
 					cpu.cycles += 2;
 					break;
 				case 0x15: // Zero Page,X   ORA $44,X     $35  2   3
-					value = readAbsoluteZeroPageXValue(cpu, memory); // memory.readByte( (short) (cpu.pc+1) );
+					value = readAbsoluteZeroPageXValue(cpu, memory); 
 					cpu.cycles += 3;
 					break;
 				case 0x0D: // Absolute      ORA $4400     $2D  3   4
@@ -177,7 +177,7 @@ public enum Opcode
 					cpu.cycles += 2;
 					break;
 				case 0x35: // Zero Page,X   AND $44,X     $35  2   3
-					value = readAbsoluteZeroPageXValue(cpu, memory); // memory.readByte( (short) (cpu.pc+1) );
+					value = readAbsoluteZeroPageXValue(cpu, memory); 
 					cpu.cycles += 3;
 					break;
 				case 0x2D: // Absolute      AND $4400     $2D  3   4
@@ -239,7 +239,7 @@ Indirect,Y    EOR ($44),Y   $51  2   5+
 					cpu.cycles += 3;
 					break;
 				case 0x55: // Zero Page,X   AND $44,X     $35  2   3
-					value = readAbsoluteZeroPageXValue(cpu, memory); // memory.readByte( (short) (cpu.pc+1) );
+					value = readAbsoluteZeroPageXValue(cpu, memory); 
 					cpu.cycles += 4;
 					break;
 				case 0x4D: // Absolute      AND $4400     $2D  3   4
@@ -547,7 +547,7 @@ ASL shifts all bits left one position. 0 is shifted into bit 0 and the original 
 					cpu.cycles += 5;
 					break;
 				case 0x16: // Zero Page,X   ROL $44,X     $36  2   6
-					adr = memory.readByte( (short) (cpu.pc+1) );
+					adr = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
 					cpu.pc+=2;
 					adr += cpu.x;
 					adr &= 0xff;
@@ -618,7 +618,7 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 					cpu.cycles += 5;
 					break;
 				case 0x36: // Zero Page,X   ROL $44,X     $36  2   6
-					adr = memory.readByte( (short) (cpu.pc+1) );
+					adr = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
 					cpu.pc+=2;
 					adr += cpu.x;
 					adr &= 0xff;
@@ -698,7 +698,7 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 					cpu.cycles += 5;
 					break;
 				case 0x56: // Zero Page,X   ROR $44,X     $36  2   6
-					adr = memory.readByte( (short) (cpu.pc+1) );
+					adr = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
 					cpu.pc+=2;
 					adr += cpu.x;
 					adr &= 0xff;
@@ -781,7 +781,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 					cpu.cycles += 5;
 					break;
 				case 0x76: // Zero Page,X   ROR $44,X     $36  2   6
-					adr = memory.readByte( (short) (cpu.pc+1) );
+					adr = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
 					cpu.pc+=2;
 					adr += cpu.x;
 					adr &= 0xff;
@@ -989,7 +989,7 @@ BIT sets the Z flag as though the value in the address tested were ANDed with th
 			switch( opcode )
 			{
 				case 0x24: // Zero Page     BIT $44       $24  2   3
-					address = memory.readByte( (short) (cpu.pc+1) );
+					address = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
 					cpu.pc+=2;
 					address &= 0xff;
 					cpu.cycles += 3;
@@ -1878,9 +1878,9 @@ Subroutines are normally terminated by a RTS op code.
 	private static byte readIndirectIndexedY(CPU cpu, IMemoryRegion memory,int cycles)
 	{
 		cpu.pc ++;
-		final short adr1111 = memory.readByte( cpu.pc ); // zp offset
+		final int adr1111 = memory.readByte( cpu.pc ) & 0xff; // zp offset
 		cpu.pc++;
-		final short adr2222 = memory.readWord( adr1111 );
+		final int adr2222 = memory.readWord( (short) adr1111 );
 		final short adr3333 = (short) (adr2222 + cpu.y);
 		cpu.cycles += isAcrossPageBoundary( adr2222, adr3333 ) ? cycles+1 : cycles;
 		return memory.readByte( adr3333 );
@@ -1889,7 +1889,7 @@ Subroutines are normally terminated by a RTS op code.
 	// LDA ( $12 , X )
 	private static byte readIndexedIndirectX(CPU cpu, IMemoryRegion memory) {
 		cpu.pc ++;
-		final short adr111 = memory.readByte( cpu.pc ); // zp offset
+		final short adr111 = (short) (memory.readByte( cpu.pc ) & 0xffff); // zp offset
 		cpu.pc++;
 		final short adr222 = (short) (adr111 + cpu.x); // zp + offset
 		final short adr333 = memory.readWord( adr222 );
@@ -1960,7 +1960,7 @@ Subroutines are normally terminated by a RTS op code.
 	// == store ==
 
 	private static void writeIndirectIndexedY(short accumulator, CPU cpu, IMemoryRegion memory) {
-		final short adr1111 = memory.readByte( (short) (cpu.pc+1) ); // zp offset
+		final short adr1111 = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff); // zp offset
 		cpu.pc+=2;
 		final short adr2222 = memory.readWord( adr1111 );
 		final short adr3333 = (short) (adr2222 + cpu.y);
@@ -1969,7 +1969,7 @@ Subroutines are normally terminated by a RTS op code.
 
 	private static void writeIndexedIndirectX(short value, CPU cpu, IMemoryRegion memory)
 	{
-		final short adr111 = memory.readByte( (short) (cpu.pc+1) ); // zp offset
+		final short adr111 = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff); // zp offset
 		cpu.pc+=2;
 		final short adr222 = (short) (adr111 + cpu.x); // zp + offset
 		final short adr333 = memory.readWord( adr222 );
@@ -1977,17 +1977,17 @@ Subroutines are normally terminated by a RTS op code.
 	}
 
 	private static void writeAbsoluteYValue(short value , CPU cpu, IMemoryRegion memory) {
-		final short adr11 = memory.readWord( (short) (cpu.pc+1) );
+		final int adr11 = memory.readWord( (short) (cpu.pc+1) ) & 0xffff;
 		cpu.pc += 3;
-		final short adr22 = (short) (adr11 + cpu.y);
-		memory.writeByte( adr22  , (byte) value ); // accu:= mem[ zp_adr + x ]
+		final int adr22 = adr11 + (int) (cpu.y & 0xff);
+		memory.writeByte( (short) adr22  , (byte) value ); // accu:= mem[ zp_adr + x ]
 	}
 
 	private static void writeAbsoluteXValue(short value, CPU cpu, IMemoryRegion memory) {
-		final short adr1 = memory.readWord( (short) (cpu.pc+1) );
+		final int adr1 = memory.readWord( (short) (cpu.pc+1) ) & 0xffff;
 		cpu.pc += 3;
-		final short adr2 = (short) (adr1 + cpu.x);
-		memory.writeByte( adr2  , (byte) value ); // accu:= mem[ zp_adr + x ]
+		final int adr2 = adr1 + (int) (cpu.x & 0xff);
+		memory.writeByte( (short) adr2  , (byte) value ); // accu:= mem[ zp_adr + x ]
 	}
 
 	private static void writeAbsoluteValue(short value, CPU cpu, IMemoryRegion memory)
@@ -2010,9 +2010,9 @@ Subroutines are normally terminated by a RTS op code.
 
 	private static void writeZeroPage(short value,CPU cpu,IMemoryRegion memory)
 	{
-		final short adr = memory.readByte( (short) (cpu.pc+1) );
+		final short adr = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
 		cpu.pc += 2;
-		memory.writeByte( (short) (adr & 0xff) , (byte) value );
+		memory.writeByte( adr , (byte) value );
 	}
 
 	private static void handleStackInstruction(CPU cpu,IMemoryRegion memory)
@@ -2229,13 +2229,13 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		{
 			case 0xE6: // Zero Page     INC $44       $E6  2   5
 			case 0xC6: // Zero Page     DEC $44       $C6  2   5
-				address = memory.readByte( (short) (cpu.pc+1) );
+				address = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
 				cpu.pc+=2;
 				cycles = 5;
 				break;
 			case 0xF6: // Zero Page,X   INC $44,X     $F6  2   6
 			case 0xD6: // Zero Page,X   DEC $44,X     $D6  2   6
-				address = memory.readByte( (short) (cpu.pc+1) );
+				address = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
 				cpu.pc+=2;
 				address += cpu.x;
 				address &= 0xff;

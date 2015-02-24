@@ -5,14 +5,20 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics;
+import java.awt.Rectangle;
 import java.awt.event.KeyAdapter;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.font.LineMetrics;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -28,6 +34,7 @@ import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.Emulator;
+import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.ui.WindowLocationHelper.ILocationAware;
 import de.codesourcery.j6502.utils.HexDump;
 
@@ -46,6 +53,8 @@ public class Debugger
 
 	protected final EmulatorDriver driver = new EmulatorDriver( emulator ) {
 
+		private long lastTick;
+		
 		@Override
 		protected void onStopHook(Throwable t) {
 			SwingUtilities.invokeLater( () -> updateWindows() );
@@ -56,8 +65,19 @@ public class Debugger
 		}
 
 		@Override
-		protected void tick() {
-			SwingUtilities.invokeLater( () -> updateWindows() );
+		protected void tick() 
+		{
+			final long now = System.currentTimeMillis();
+			long age = now - lastTick;
+			if ( age > 1000 ) 
+			{
+				lastTick = now;
+				SwingUtilities.invokeLater( () -> updateWindows() );
+				
+				final IMemoryRegion memory = emulator.getMemory();
+				
+				System.out.println( HexDump.INSTANCE.dump( (short) 1024 ,  memory ,  1024 ,  25*40 ) );
+			}
 		}
 	};
 
@@ -197,7 +217,7 @@ public class Debugger
 			runButton.addActionListener( ev -> driver.setMode(Mode.CONTINOUS) );
 			stopButton.addActionListener( event -> driver.setMode(Mode.SINGLE_STEP) );
 
-			stepOverButton.addActionListener( ev -> driver.stepReturn() );
+			stepOverButton.addActionListener( ev -> driver.stepReturn() ); 
 
 			setLayout( new FlowLayout() );
 			add( stopButton );
@@ -228,7 +248,7 @@ public class Debugger
 		synchronized( emulator ) {
 			pc = emulator.getCPU().pc;
 		}
-		disassembly.setAddress( pc );
+		disassembly.setAddress( pc , pc );
 		cpuPanel.repaint();
 	}
 
@@ -262,6 +282,7 @@ public class Debugger
 			{
 				final CPU cpu = emulator.getCPU();
 				lines.add( "PC: "+HexDump.toAdr( cpu.pc ) + "   Flags: "+ cpu.getFlagsString() );
+				lines.add("Cycles: "+cpu.cycles);
 				lines.add("Previous PC: "+HexDump.toAdr( cpu.previousPC ) );
 				lines.add(" A: "+HexDump.toHex( cpu.accumulator ) );
 				lines.add(" X: $"+HexDump.toHex( cpu.x) );
@@ -291,15 +312,39 @@ public class Debugger
 		c.setBackground( BG_COLOR );
 		c.setForeground( FG_COLOR );
 	}
+	
+	protected static final class LineWithBounds 
+	{
+		public final Disassembler.Line line;
+		public final Rectangle bounds;
+		
+		public LineWithBounds(Disassembler.Line line, Rectangle bounds) {
+			this.line = line;
+			this.bounds = bounds;
+		}
+		
+		public boolean isClicked(int x,int y) 
+		{
+			return y >= bounds.y && y <= bounds.y+bounds.height;
+		}
+	}
 
 	protected final class DisassemblyPanel extends JPanel implements WindowLocationHelper.ILocationAware
 	{
 		private final Disassembler dis = new Disassembler().setAnnotate(true);
 		
-		private final int bytesToDisassemble = 32;
-		private short currentAddress;
+		protected static final int LINE_HEIGHT = 15;
+		
+		protected static final int X_OFFSET = 30;
+		protected static final int Y_OFFSET = LINE_HEIGHT;
 
-		private boolean mark = false;
+		
+		private final int bytesToDisassemble = 48;
+		private short currentAddress;
+		private Short addressToMark = null;
+		
+		private final List<LineWithBounds> lines = new ArrayList<>();
+
 		private JInternalFrame peer;
 		
 		@Override
@@ -330,33 +375,50 @@ public class Debugger
 						pageUp();
 					}
 				}
-			} );
+			});
+			
+			addMouseListener( new MouseAdapter() 
+			{
+				@Override
+				public void mouseClicked(MouseEvent e) 
+				{
+					final Short adr = getAddressForPoint( e.getX(), e.getY() );
+					if ( adr != null ) 
+					{
+						final Breakpoint breakpoint = driver.getBreakpoint( adr );
+						if ( breakpoint != null ) {
+							driver.removeBreakpoint( breakpoint ); 
+						} else {
+							driver.addBreakpoint( new Breakpoint( adr , false ) );
+						}
+						repaint();						
+					}
+				}
+			});
 		}
 		
 		public void pageUp() {
-			mark = false;
 			this.currentAddress = (short) ( this.currentAddress - bytesToDisassemble/2 );
+			lines.clear();
 			repaint();
 		}
 		
 		public void pageDown() {
-			mark = false;
 			this.currentAddress = (short) ( this.currentAddress + bytesToDisassemble/2 );
+			lines.clear();
 			repaint();
 		}
 		
-		public void setAddress(short adr) {
-			mark = true; 
+		public void setAddress(short adr,Short addressToMark) {
+			this.addressToMark = addressToMark;
 			this.currentAddress = adr;
+			lines.clear();
 			repaint();
 		}
-
-		@Override
-		protected void paintComponent(Graphics g)
+		
+		private void disassemble(Graphics g) 
 		{
-			super.paintComponent(g);
-
-			final List<Line> lines = new ArrayList<>();
+			lines.clear();
 
 			/* Because depending on the opcode, each disassembly line may consume up to three bytes, we might not arrive
 			 * at the exact location where the PC currently is .. we'll use this flag to re-try disassembling with a
@@ -373,25 +435,75 @@ public class Debugger
 				{
 					alignmentCorrect = false;
 					lines.clear();
-					dis.disassemble( emulator.getMemory() , offset, bytesToDisassemble , lines::add );
-					alignmentCorrect = lines.stream().anyMatch( line -> line.address == pc );
+					final Consumer<Line> lineConsumer = new Consumer<Line>() 
+					{
+						private int y = Y_OFFSET;
+						
+						@Override
+						public void accept(Line line) {
+							final LineMetrics lineMetrics = g.getFontMetrics().getLineMetrics( line.toString(),  g );
+							final Rectangle2D stringBounds = g.getFontMetrics().getStringBounds( line.toString(),  g );
+
+							final Rectangle bounds = new Rectangle( X_OFFSET , (int) (y - lineMetrics.getAscent() ) , (int) stringBounds.getWidth() , (int) (lineMetrics.getHeight() ) );
+							lines.add( new LineWithBounds( line , bounds ) );
+							y += LINE_HEIGHT;
+						}
+					};
+					dis.disassemble( emulator.getMemory() , offset, bytesToDisassemble , lineConsumer);
+					alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
 					offset++;
 				}
-			}
-
-			final int X_OFFSET = 5;
-			for ( int i = 0, y = 0 ; i < lines.size() ; i++ , y+= 15 )
+			}			
+		}
+		
+		private void maybeDisassemble(Graphics g) 
+		{
+			if ( lines.isEmpty() ) 
 			{
-				final Line line = lines.get(i);
-				final LineMetrics lineMetrics = g.getFontMetrics().getLineMetrics( line.toString(),  g );
-				final Rectangle2D stringBounds = g.getFontMetrics().getStringBounds( line.toString(),  g );
+				disassemble( g );
+			} 
+			else if ( addressToMark != null && lines.stream().noneMatch( line -> line.line.address == addressToMark.shortValue() ) ) {
+				disassemble( g );
+			}
+		}
+		
+		public Short getAddressForPoint(int x,int y) 
+		{
+			for ( LineWithBounds l : lines ) {
+				if ( l.isClicked(x, y ) ) {
+					return l.line.address;
+				}
+			}
+			return null;
+		}
+		
+		@Override
+		protected void paintComponent(Graphics g)
+		{
+			super.paintComponent(g);
+
+			maybeDisassemble( g );
+			
+			for ( int i = 0, y = LINE_HEIGHT ; i < lines.size() ; i++ , y+= LINE_HEIGHT )
+			{
+				final LineWithBounds line = lines.get(i);
 
 				g.setColor(FG_COLOR);
-				g.drawString( line.toString() , X_OFFSET , y );
-				if ( mark && line.address == pc )
+				g.drawString( line.line.toString() , X_OFFSET , y );
+				if ( addressToMark != null && line.line.address == addressToMark )
 				{
 					g.setColor(Color.RED);
-					g.drawRect( X_OFFSET , (int) (y - lineMetrics.getAscent() ) , (int) stringBounds.getWidth() , (int) (lineMetrics.getHeight() ) );
+					g.drawRect( line.bounds.x , line.bounds.y , line.bounds.width , line.bounds.height );
+				}
+				
+				final int lineHeight = line.bounds.height;
+				final int circleX = 5;
+				final int circleY = line.bounds.y;
+				
+				if ( driver.getBreakpoint( line.line.address ) != null ) {
+					g.fillArc( circleX , circleY , lineHeight , lineHeight , 0 , 360 );
+				} else {
+					g.drawArc( circleX , circleY , lineHeight , lineHeight , 0 , 360 );
 				}
 			}
 		}

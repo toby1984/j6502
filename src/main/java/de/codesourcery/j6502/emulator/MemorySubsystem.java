@@ -9,6 +9,7 @@ import de.codesourcery.j6502.utils.HexDump;
 public final class MemorySubsystem extends IMemoryRegion
 {
 	private static final boolean DEBUG_READS = false;
+	private static final boolean DEBUG_WRITES = false;
 	private static final boolean DEBUG_ROM_IMAGES = false;
 
 	public static enum Bank
@@ -468,6 +469,9 @@ public final class MemorySubsystem extends IMemoryRegion
 			default:
 				final IMemoryRegion region = writeRegions[ writeMap[ wrappedOffset ] ];
 				final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+				if ( DEBUG_WRITES) {
+					System.out.println("writeByte(): Writing byte $"+HexDump.toHex(value)+" to "+HexDump.toAdr( offset )+" [translated: "+HexDump.toAdr(realOffset)+"] from "+region );
+				}				
 				region.writeByte( (short) realOffset , value );
 		}
 	}
