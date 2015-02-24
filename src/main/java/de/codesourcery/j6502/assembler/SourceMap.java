@@ -35,7 +35,7 @@ public class SourceMap
 		ranges.add( new RangeWithLine( new AddressRange(start,len) , lineNo ) );
 	}
 
-	public Optional<Integer> getLineNumberForAddress(short adr)
+	public Optional<Integer> getLineNumberForAddress(int adr)
 	{
 		for ( RangeWithLine r : ranges ) {
 			if ( r.range.contains( adr ) ) {

@@ -29,33 +29,33 @@ public enum Opcode
 			switch( opcode ) {
 				//                  MODE        SYNTAX       LEN TIM
 				case 0xA9:    // Immediate     LDA #$44       2   2
-					cpu.accumulator = readImmediateValue(cpu, memory);
+					cpu.setAccumulator(readImmediateValue(cpu, memory));
 					cpu.cycles += 2;
 					break;
 				case 0xA5:    // Zero Page     LDA $44        2   3
-					cpu.accumulator = readZeroPageValue(cpu,memory);
+					cpu.setAccumulator(readZeroPageValue(cpu,memory));
 					cpu.cycles += 3;
 					break;
 				case 0xB5:    // Zero Page,X   LDA $44,X      2   4
-					cpu.accumulator = readAbsoluteZeroPageXValue(cpu,memory);
+					cpu.setAccumulator(readAbsoluteZeroPageXValue(cpu,memory));
 					cpu.cycles += 4;
 					break;
 				case 0xAD: // Absolute      LDA $4400      3   4
-					cpu.accumulator = readAbsoluteValue(cpu,memory);
+					cpu.setAccumulator(readAbsoluteValue(cpu,memory));
 					cpu.cycles += 4;
 					break;
 				case 0xBD: // Absolute,X    LDA $4400,X    3   4+
-					cpu.accumulator = readAbsoluteXValue(cpu, memory,4);
+					cpu.setAccumulator(readAbsoluteXValue(cpu, memory,4));
 					break;
 				case 0xB9: // Absolute,Y    LDA $4400,Y    3   4+
-					cpu.accumulator = readAbsoluteYValue(cpu,memory,4);
+					cpu.setAccumulator(readAbsoluteYValue(cpu,memory,4));
 					break;
 				case 0xA1: // Indexed Indirect,X    LDA ($44,X)    2   6
-					cpu.accumulator = readIndexedIndirectX(cpu, memory);
+					cpu.setAccumulator(readIndexedIndirectX(cpu, memory));
 					cpu.cycles += 6;
 					break;
 				case 0xB1: // Indirect Indexed,Y    LDA ($44),Y    2   5+
-					cpu.accumulator = readIndirectIndexedY(cpu, memory , 5 );
+					cpu.setAccumulator(readIndirectIndexedY(cpu, memory , 5 ));
 					break;
 				default:
 					throw new RuntimeException("Unreachable code reached");
@@ -81,31 +81,31 @@ public enum Opcode
 			switch( opcode )
 			{
 				case 0x85: // Zero Page     STA $44       $85  2   3
-					writeZeroPage( cpu.accumulator , cpu , memory );
+					writeZeroPage( cpu.getAccumulator() , cpu , memory );
 					cpu.cycles += 3;
 					break;
 				case 0x95: // Zero Page,X   STA $44,X     $95  2   4
-					writeAbsoluteZeroPageXValue( cpu.accumulator , cpu, memory );
+					writeAbsoluteZeroPageXValue( cpu.getAccumulator() , cpu, memory );
 					cpu.cycles += 4;
 					break;
 				case 0x8D: // Absolute      STA $4400     $8D  3   4
-					writeAbsoluteValue( cpu.accumulator , cpu , memory );
+					writeAbsoluteValue( cpu.getAccumulator() , cpu , memory );
 					cpu.cycles += 4;
 					break;
 				case 0x9D: // Absolute,X    STA $4400,X   $9D  3   5
-					writeAbsoluteXValue( cpu.accumulator , cpu , memory );
+					writeAbsoluteXValue( cpu.getAccumulator() , cpu , memory );
 					cpu.cycles += 5;
 					break;
 				case 0x99: // Absolute,Y    STA $4400,Y   $99  3   5
-					writeAbsoluteYValue( cpu.accumulator , cpu , memory );
+					writeAbsoluteYValue( cpu.getAccumulator() , cpu , memory );
 					cpu.cycles += 5;
 					break;
 				case 0x81: // Indexed Indirect,X    STA ($44,X)   $81  2   6
-					writeIndexedIndirectX( cpu.accumulator , cpu , memory );
+					writeIndexedIndirectX( cpu.getAccumulator() , cpu , memory );
 					cpu.cycles += 6;
 					break;
 				case 0x91: // Indirect,Y    STA ($44),Y   $91  2   6
-					writeIndirectIndexedY( cpu.accumulator , cpu , memory );
+					writeIndirectIndexedY( cpu.getAccumulator() , cpu , memory );
 					cpu.cycles += 6;
 					break;
 				default:
@@ -120,7 +120,7 @@ public enum Opcode
 		@Override
 		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator)
 		{
-			byte value;
+			int value;
 			switch(opcode) {
 				case 0x09: // Immediate     ORA #$44      $29  2   2
 					value = readImmediateValue( cpu , memory );
@@ -155,8 +155,8 @@ public enum Opcode
 					throw new RuntimeException("Unreachable code reached");
 			}
 
-			final byte result = (byte) (cpu.accumulator | value);
-			cpu.accumulator = result;
+			final byte result = (byte) (cpu.getAccumulator() | value);
+			cpu.setAccumulator(result);
 
 			updateZeroSigned( result , cpu );
 		}
@@ -168,7 +168,7 @@ public enum Opcode
 		@Override
 		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
 
-			byte value;
+			int value;
 			switch(opcode) {
 				case 0x29: // Immediate     AND #$44      $29  2   2
 					value = readImmediateValue( cpu , memory );
@@ -203,8 +203,8 @@ public enum Opcode
 					throw new RuntimeException("Unreachable code reached");
 			}
 
-			final byte result = (byte) (cpu.accumulator & value);
-			cpu.accumulator = result;
+			final byte result = (byte) (cpu.getAccumulator() & value);
+			cpu.setAccumulator(result);
 
 			updateZeroSigned( result , cpu );
 		}
@@ -230,7 +230,7 @@ Indirect,Y    EOR ($44),Y   $51  2   5+
 
 + add 1 cycle if page boundary crossed
 			 */
-			byte value;
+			int value;
 			switch(opcode) {
 				case 0x49: // Immediate     AND #$44      $29  2   2
 					value = readImmediateValue( cpu , memory );
@@ -265,8 +265,8 @@ Indirect,Y    EOR ($44),Y   $51  2   5+
 					throw new RuntimeException("Unreachable code reached");
 			}
 
-			final byte result = (byte) (cpu.accumulator ^ value);
-			cpu.accumulator = result;
+			final byte result = (byte) (cpu.getAccumulator() ^ value);
+			cpu.setAccumulator(result);
 
 			updateZeroSigned( result , cpu );
 		}
@@ -335,7 +335,7 @@ There is no way to add without carry. Return To Index
     P.C = (t>255) ? 1:0
   A = t & 0xFF
 			 */
-			final int a = (cpu.accumulator & 0xff );
+			final int a = (cpu.getAccumulator() & 0xff );
 			final int result = a + b + ( cpu.isSet(Flag.CARRY) ? 1 : 0 );
 
 			cpu.setFlag(CPU.Flag.OVERFLOW , ( a & 0b1000_0000) != ( result & 0b1000_0000) );
@@ -346,7 +346,7 @@ There is no way to add without carry. Return To Index
 				throw new RuntimeException("ADC with BCD currently not implemented");
 			}
 			cpu.setFlag( Flag.CARRY , result >255 );
-			cpu.accumulator = (byte) result;
+			cpu.setAccumulator((byte) result);
 		}
 	},
 	CMP("CMP")
@@ -409,7 +409,7 @@ lack thereof and the sign (i.e. A>=$80) of the accumulator.
 				default:
 					throw new RuntimeException("Unreachable code reached");
 			}
-			final int a = (cpu.accumulator & 0xff);
+			final int a = (cpu.getAccumulator() & 0xff);
 			b &= 0xff;
 
 			cpu.setFlag( Flag.CARRY , a >= b );
@@ -488,7 +488,7 @@ operation. If the carry is cleared by the operation, it indicates a borrow occur
   P.Z = (t==0) ? 1:0
   A = t & 0xFF
 			 */
-			final int a = (cpu.accumulator & 0xff );
+			final int a = (cpu.getAccumulator() & 0xff );
 			final int result = a - b - ( cpu.isCleared(Flag.CARRY) ? 1 : 0 );
 
 			// FIXME: Handle BCD mode
@@ -500,7 +500,7 @@ operation. If the carry is cleared by the operation, it indicates a borrow occur
 			cpu.setFlag( Flag.CARRY , ( result & ~0b0111_1111) == 0 );
 			cpu.setFlag( CPU.Flag.NEGATIVE , ( result & 0b1000_0000) != 0 );
 			cpu.setFlag( CPU.Flag.ZERO , ( result & 0xff) == 0 );
-			cpu.accumulator = (byte) result;
+			cpu.setAccumulator((byte) result);
 		}
 	},
 	// generic #2
@@ -529,43 +529,43 @@ Absolute,X    ASL $4400,X   $1E  3   7
 
 ASL shifts all bits left one position. 0 is shifted into bit 0 and the original bit 7 is shifted into the Carry.
 			 */
-			short adr;
+			int adr;
 			int result;
 			switch(opcode)
 			{
 				case 0x0A: // Accumulator   ROL A         $2A  1   2
-					result = ((cpu.accumulator & 0xff) << 1);
-					cpu.accumulator = (byte) result;
-					cpu.pc++;
+					result = ((cpu.getAccumulator() & 0xff) << 1);
+					cpu.setAccumulator(result);
+					cpu.incPC();
 					cpu.cycles += 2;
 					cpu.setFlag(Flag.ZERO , ( result & 0xff) == 0 );
 					cpu.setFlag(Flag.NEGATIVE , (result & 0b10000000) != 0 );
 					cpu.setFlag(Flag.CARRY , (result & 0b100000000) != 0 );
 					return; /* RETURN ! */
 				case 0x06: // Zero Page     ROL $44       $26  2   5
-					adr = (short) ( memory.readByte( (short) (cpu.pc+1) ) & 0xff );
-					cpu.pc+=2;
+					adr = memory.readByte( cpu.pc()+1);
+					cpu.incPC(2);
 					result = ((memory.readByte( adr ) & 0xff) << 1);
 					cpu.cycles += 5;
 					break;
 				case 0x16: // Zero Page,X   ROL $44,X     $36  2   6
-					adr = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
-					cpu.pc+=2;
-					adr += cpu.x;
+					adr = memory.readByte( cpu.pc()+1);
+					cpu.incPC(2);
+					adr += cpu.getX();
 					adr &= 0xff;
 					result = ((memory.readByte( adr ) & 0xff) << 1);
 					cpu.cycles += 6;
 					break;
 				case 0x0E: // Absolute      ROL $4400     $2E  3   6
-					adr = memory.readWord( (short) (cpu.pc+1) );
-					cpu.pc+=3;
+					adr = memory.readWord( cpu.pc()+1 );
+					cpu.incPC(3);
 					result = ((memory.readByte( adr ) & 0xff) << 1);
 					cpu.cycles += 6;
 					break;
 				case 0x1E: // Absolute,X    ROL $4400,X   $3E  3   7
-					adr = memory.readWord( (short) (cpu.pc+1) );
-					cpu.pc += 3;
-					adr += cpu.x;
+					adr = memory.readWord( cpu.pc()+1 );
+					cpu.incPC(3);
+					adr += cpu.getX();
 					result = ((memory.readByte( adr ) & 0xff) << 1);
 					cpu.cycles += 7;
 					break;
@@ -599,44 +599,44 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
   B = (B << 1) & $FE
   B = B | P.C
 			 */
-			short adr;
+			int adr;
 			final int carryMask = cpu.isSet( CPU.Flag.CARRY ) ? 1 : 0;
 			int result;
 			switch(opcode)
 			{
 				case 0x2A: // Accumulator   ROL A         $2A  1   2
-					result = ((cpu.accumulator & 0xff) << 1) | carryMask ;
-					cpu.accumulator = (byte) result;
-					cpu.pc++;
+					result = ((cpu.getAccumulator() & 0xff) << 1) | carryMask ;
+					cpu.setAccumulator((byte) result);
+					cpu.incPC();
 					cpu.cycles += 2;
 					cpu.setFlag(Flag.ZERO , ( result & 0xff) == 0 );
 					cpu.setFlag(Flag.NEGATIVE , (result & 0b10000000) != 0 );
 					cpu.setFlag(Flag.CARRY , (result & 0b100000000) != 0 );
 					return; /* RETURN ! */
 				case 0x26: // Zero Page     ROL $44       $26  2   5
-					adr = (short) ( memory.readByte( (short) (cpu.pc+1) ) & 0xff );
-					cpu.pc+=2;
+					adr = memory.readByte( cpu.pc()+1 );
+					cpu.incPC(2);
 					result = ((memory.readByte( adr ) & 0xff) << 1) | carryMask;
 					cpu.cycles += 5;
 					break;
 				case 0x36: // Zero Page,X   ROL $44,X     $36  2   6
-					adr = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
-					cpu.pc+=2;
-					adr += cpu.x;
+					adr = memory.readByte( cpu.pc()+1 );
+					cpu.incPC(2);
+					adr += cpu.getX();
 					adr &= 0xff;
 					result = ((memory.readByte( adr ) & 0xff) << 1) | carryMask;
 					cpu.cycles += 6;
 					break;
 				case 0x2E: // Absolute      ROL $4400     $2E  3   6
-					adr = memory.readWord( (short) (cpu.pc+1) );
-					cpu.pc+=3;
+					adr = memory.readWord( cpu.pc()+1);
+					cpu.incPC(3);
 					result = ((memory.readByte( adr ) & 0xff) << 1) | carryMask;
 					cpu.cycles += 6;
 					break;
 				case 0x3E: // Absolute,X    ROL $4400,X   $3E  3   7
-					adr = memory.readWord( (short) (cpu.pc+1) );
-					cpu.pc += 3;
-					adr += cpu.x;
+					adr = memory.readWord( cpu.pc()+1 );
+					cpu.incPC(3);
+					adr += cpu.getX();
 					result = ((memory.readByte( adr ) & 0xff) << 1) | carryMask;
 					cpu.cycles += 7;
 					break;
@@ -678,47 +678,47 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 
 
 			final int origValue;
-			short adr;
+			int adr;
 			final int result;
 			switch(opcode)
 			{
 				case 0x4A: // Accumulator   ROR A         $2A  1   2
-					origValue = cpu.accumulator & 0xff;
+					origValue = cpu.getAccumulator() & 0xff;
 					result = ( origValue >>> 1);
-					cpu.accumulator = (byte) result;
-					cpu.pc++;
+					cpu.setAccumulator((byte) result);
+					cpu.incPC();
 					cpu.cycles += 2;
 					cpu.setFlag(Flag.ZERO , ( result & 0xff) == 0 );
 					cpu.clearFlag(Flag.NEGATIVE);
 					cpu.setFlag(Flag.CARRY , (origValue & 0x01) != 0);
 					return; /* RETURN ! */
 				case 0x46: // Zero Page     ROR $44       $26  2   5
-					adr = (short) ( memory.readByte( (short) (cpu.pc+1) ) & 0xff );
-					cpu.pc+=2;
+					adr = memory.readByte( cpu.pc()+1);
+					cpu.incPC(2);
 					origValue = (memory.readByte( adr ) & 0xff);
 					result = (origValue >>> 1);
 					cpu.cycles += 5;
 					break;
 				case 0x56: // Zero Page,X   ROR $44,X     $36  2   6
-					adr = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
-					cpu.pc+=2;
-					adr += cpu.x;
+					adr = memory.readByte( cpu.pc()+1);
+					cpu.incPC(2);
+					adr += cpu.getX();
 					adr &= 0xff;
 					origValue = (memory.readByte( adr ) & 0xff);
 					result = (origValue >>> 1);
 					cpu.cycles += 6;
 					break;
 				case 0x4E: // Absolute      ROR $4400     $2E  3   6
-					adr = memory.readWord( (short) (cpu.pc+1) );
-					cpu.pc+=3;
+					adr = memory.readWord( cpu.pc()+1 );
+					cpu.incPC(3);
 					origValue = memory.readByte( adr ) & 0xff;
 					result = (origValue >>> 1);
 					cpu.cycles += 6;
 					break;
 				case 0x5E: // Absolute,X    ROR $4400,X   $3E  3   7
-					adr = memory.readWord( (short) (cpu.pc+1) );
-					cpu.pc += 3;
-					adr += cpu.x;
+					adr = memory.readWord( cpu.pc()+1 );
+					cpu.incPC(3);
+					adr += cpu.getX();
 					origValue = (memory.readByte( adr ) & 0xff);
 					result = (origValue >>> 1);
 					cpu.cycles += 7;
@@ -760,48 +760,48 @@ Absolute,X    ROR $4400,X   $7E  3   7
 ROR shifts all bits right one position. The Carry is shifted into bit 7 and the original bit 0 is shifted into the Carry.
 			 */
 			final int origValue;
-			short adr;
+			int adr;
 			final int carryMask = cpu.isSet( CPU.Flag.CARRY ) ? 0b1000_0000 : 0;
 			final int result;
 			switch(opcode)
 			{
 				case 0x6A: // Accumulator   ROR A         $2A  1   2
-					origValue = cpu.accumulator & 0xff;
+					origValue = cpu.getAccumulator() & 0xff;
 					result = ( origValue >> 1) | carryMask ;
-					cpu.accumulator = (byte) result;
-					cpu.pc++;
+					cpu.setAccumulator((byte) result);
+					cpu.incPC();
 					cpu.cycles += 2;
 					cpu.setFlag(Flag.ZERO , ( result & 0xff) == 0 );
 					cpu.setFlag(Flag.NEGATIVE , (result & 0b10000000) != 0 );
 					cpu.setFlag(Flag.CARRY , (origValue & 0x01) != 0);
 					return; /* RETURN ! */
 				case 0x66: // Zero Page     ROR $44       $26  2   5
-					adr = (short) ( memory.readByte( (short) (cpu.pc+1) ) & 0xff );
-					cpu.pc+=2;
+					adr = memory.readByte( cpu.pc() + 1);
+					cpu.incPC(2);
 					origValue = (memory.readByte( adr ) & 0xff);
 					result = (origValue << 1) | carryMask;
 					cpu.cycles += 5;
 					break;
 				case 0x76: // Zero Page,X   ROR $44,X     $36  2   6
-					adr = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
-					cpu.pc+=2;
-					adr += cpu.x;
+					adr = memory.readByte( cpu.pc() +1);
+					cpu.incPC(2);
+					adr += cpu.getX();
 					adr &= 0xff;
 					origValue = (memory.readByte( adr ) & 0xff);
 					result = (origValue << 1) | carryMask;
 					cpu.cycles += 6;
 					break;
 				case 0x6E: // Absolute      ROR $4400     $2E  3   6
-					adr = memory.readWord( (short) (cpu.pc+1) );
-					cpu.pc+=3;
+					adr = memory.readWord( cpu.pc()+1 );
+					cpu.incPC(3);
 					origValue = memory.readByte( adr ) & 0xff;
 					result = (origValue << 1) | carryMask;
 					cpu.cycles += 6;
 					break;
 				case 0x7E: // Absolute,X    ROR $4400,X   $3E  3   7
-					adr = memory.readWord( (short) (cpu.pc+1) );
-					cpu.pc += 3;
-					adr += cpu.x;
+					adr = memory.readWord( cpu.pc()+1 );
+					cpu.incPC(3);
+					adr += cpu.getX();
 					origValue = (memory.readByte( adr ) & 0xff);
 					result = (origValue << 1) | carryMask;
 					cpu.cycles += 7;
@@ -847,15 +847,15 @@ Absolute      STX $4400     $8E  3   4
 			switch(opcode)
 			{
 				case 0x86: // Zero Page     STX $44       $86  2   3
-					writeZeroPage( cpu.x, cpu , memory );
+					writeZeroPage( cpu.getX(), cpu , memory );
 					cpu.cycles += 3;
 					break;
 				case 0x96: // Zero Page,Y   STX $44,Y     $95  2   4
-					writeAbsoluteZeroPageYValue( cpu.x , cpu, memory );
+					writeAbsoluteZeroPageYValue( cpu.getX() , cpu, memory );
 					cpu.cycles += 4;
 					break;
 				case 0x8e: // Absolute      STA $4400     $8D  3   4
-					writeAbsoluteValue( cpu.x , cpu , memory );
+					writeAbsoluteValue( cpu.getX() , cpu , memory );
 					cpu.cycles += 4;
 					break;
 				default:
@@ -896,23 +896,23 @@ Absolute,Y    LDX $4400,Y   $BE  3   4+
 			switch( opcode ) {
 				//                  MODE        SYNTAX       LEN TIM
 				case 0xA2:    // Immediate     LDX #$44       2   2
-					cpu.x = readImmediateValue(cpu, memory);
+					cpu.setX(readImmediateValue(cpu, memory));
 					cpu.cycles += 2;
 					break;
 				case 0xA6:    // Zero Page     LDX $44        2   3
-					cpu.x = readZeroPageValue(cpu,memory);
+					cpu.setX(readZeroPageValue(cpu,memory));
 					cpu.cycles += 3;
 					break;
 				case 0xB6:    // Zero Page,Y   LDX $44,Y      2   4
-					cpu.x = readAbsoluteZeroPageYValue(cpu,memory);
+					cpu.setX(readAbsoluteZeroPageYValue(cpu,memory));
 					cpu.cycles += 4;
 					break;
 				case 0xAE: // Absolute      LDX $4400      3   4
-					cpu.x = readAbsoluteValue(cpu,memory);
+					cpu.setX(readAbsoluteValue(cpu,memory));
 					cpu.cycles += 4;
 					break;
 				case 0xBE: // Absolute,Y    LDX $4400,Y    3   4+
-					cpu.x = readAbsoluteYValue(cpu,memory,4);
+					cpu.setX(readAbsoluteYValue(cpu,memory,4));
 					break;
 				default:
 					throw new RuntimeException("Unreachable code reached");
@@ -936,7 +936,7 @@ Absolute,Y    LDX $4400,Y   $BE  3   4+
 					throw new InvalidAddressingModeException( ins );
 			}
 		}
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) { handleMemIncDec(opcode, cpu, memory , (byte) -1 ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) { handleMemIncDec(opcode, cpu, memory , -1 ); }
 	},
 	INC("INC")
 	{
@@ -955,7 +955,7 @@ Absolute,Y    LDX $4400,Y   $BE  3   4+
 			}
 		}
 
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) { handleMemIncDec( opcode , cpu , memory , (byte) 1 ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) { handleMemIncDec( opcode , cpu , memory , 1 ); }
 	},
 	// generic #3
 	BIT("BIT")
@@ -987,24 +987,24 @@ MODE           SYNTAX       HEX LEN TIM
 
 BIT sets the Z flag as though the value in the address tested were ANDed with the accumulator. The S and V flags are set to match bits 7 and 6 respectively in the value stored at the tested address.
 			 */
-			short address;
+			int address;
 			switch( opcode )
 			{
 				case 0x24: // Zero Page     BIT $44       $24  2   3
-					address = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
-					cpu.pc+=2;
+					address = memory.readByte( cpu.pc()+1 );
+					cpu.incPC(2);
 					address &= 0xff;
 					cpu.cycles += 3;
 					break;
 				case 0x2c: // Absolute      BIT $4400     $2C  3   4
-					address = memory.readWord( (short) (cpu.pc+1) );
-					cpu.pc += 3;
+					address = memory.readWord( cpu.pc()+1 );
+					cpu.incPC(3);
 					cpu.cycles += 4;
 					break;
 				default:
 					throw new RuntimeException("Unreachable code reached");
 			}
-			final byte result = (byte) (cpu.accumulator & memory.readByte( address ));
+			final byte result = (byte) (cpu.getAccumulator() & memory.readByte( address ));
 			cpu.setFlag( CPU.Flag.ZERO , result == 0);
 			cpu.setFlag( CPU.Flag.NEGATIVE , (result & 0b10000000) != 0);
 			cpu.setFlag( CPU.Flag.OVERFLOW , (result & 0b01000000) != 0);
@@ -1050,13 +1050,13 @@ BIT sets the Z flag as though the value in the address tested were ANDed with th
 			 */
 			switch( opcode & 0xff ) {
 				case 0x6c:
-					cpu.pc++;
-					cpu.pc = memory.readWord( memory.readWord( cpu.pc ) );
+					cpu.incPC();
+					cpu.pc( memory.readWord( memory.readWord( cpu.pc() ) ) );
 					cpu.cycles += 5;
 					break;
 				case 0x4c:
-					cpu.pc++;
-					cpu.pc = memory.readWord( cpu.pc );
+					cpu.incPC();
+					cpu.pc( memory.readWord( cpu.pc() ) );
 					cpu.cycles += 3;
 					break;
 				default:
@@ -1092,15 +1092,15 @@ Absolute      STY $4400     $8C  3   4
 			switch(opcode)
 			{
 				case 0x84:
-					writeZeroPage( cpu.y, cpu , memory );
+					writeZeroPage( cpu.getY(), cpu , memory );
 					cpu.cycles += 3;
 					break;
 				case 0x94:
-					writeAbsoluteZeroPageXValue( cpu.y , cpu, memory );
+					writeAbsoluteZeroPageXValue( cpu.getY() , cpu, memory );
 					cpu.cycles += 4;
 					break;
 				case 0x8c:
-					writeAbsoluteValue( cpu.y , cpu , memory );
+					writeAbsoluteValue( cpu.getY() , cpu , memory );
 					cpu.cycles += 4;
 					break;
 				default:
@@ -1146,23 +1146,23 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 			switch( opcode ) {
 				//                  MODE        SYNTAX       LEN TIM
 				case 0xA0:    // Immediate     LDX #$44       2   2
-					cpu.y = readImmediateValue(cpu, memory);
+					cpu.setY(readImmediateValue(cpu, memory));
 					cpu.cycles += 2;
 					break;
 				case 0xA4:    // Zero Page     LDX $44        2   3
-					cpu.y = readZeroPageValue(cpu,memory);
+					cpu.setY(readZeroPageValue(cpu,memory));
 					cpu.cycles += 3;
 					break;
 				case 0xB4:    // Zero Page,Y   LDX $44,X      2   4
-					cpu.y = readAbsoluteZeroPageXValue(cpu,memory);
+					cpu.setY(readAbsoluteZeroPageXValue(cpu,memory));
 					cpu.cycles += 4;
 					break;
 				case 0xAC: // Absolute      LDX $4400      3   4
-					cpu.y = readAbsoluteValue(cpu,memory);
+					cpu.setY(readAbsoluteValue(cpu,memory));
 					cpu.cycles += 4;
 					break;
 				case 0xBC: // Absolute,Y    LDY $4400,X    3   4+
-					cpu.y = readAbsoluteXValue(cpu,memory,4);
+					cpu.setY(readAbsoluteXValue(cpu,memory,4));
 					break;
 				default:
 					throw new RuntimeException("Unreachable code reached");
@@ -1214,7 +1214,7 @@ Absolute      CPY $4400     $CC  3   4
 				default:
 					throw new RuntimeException("Unreachable code reached");
 			}
-			final int a = (cpu.y & 0xff);
+			final int a = (cpu.getY() & 0xff);
 			b &= 0xff;
 
 			cpu.setFlag( Flag.CARRY , a >= b );
@@ -1269,7 +1269,7 @@ Absolute      CPY $4400     $CC  3   4
 				default:
 					throw new RuntimeException("Unreachable code reached");
 			}
-			final int a = (cpu.x & 0xff);
+			final int a = (cpu.getX() & 0xff);
 			b &= 0xff;
 
 			cpu.setFlag( Flag.CARRY , a >= b );
@@ -1366,11 +1366,11 @@ Absolute      CPY $4400     $CC  3   4
 			if ( opcode != 0 ) {
 				throw new RuntimeException("Unreachable code reached");
 			}
-			cpu.pc++;
-			cpu.push((byte) ( ( cpu.pc & 0xff00) >>8 ), memory ); // push pc hi
-			cpu.push((byte) ( cpu.pc & 0xff ), memory ); // push pc lo
-			cpu.push(CPU.Flag.BREAK.set( cpu.flags ), memory ); // BRK bit is SET on flags pushed to stack
-			cpu.pc = memory.readWord( (short) CPU.BRK_VECTOR_LOCATION );
+			cpu.incPC();
+			cpu.pushByte((byte) ( cpu.pc() >>8 ), memory ); // push pc hi
+			cpu.pushByte((byte) ( cpu.pc() & 0xff ), memory ); // push pc lo
+			cpu.pushByte(CPU.Flag.BREAK.set( cpu.flags ), memory ); // BRK bit is SET on flags pushed to stack
+			cpu.pc( memory.readWord( CPU.BRK_VECTOR_LOCATION ) );
 			cpu.cycles += 7;
 		}
 	},
@@ -1403,12 +1403,12 @@ Subroutines are normally terminated by a RTS op code.
 			if ( (opcode & 0xff ) != 0x20 ) {
 				throw new RuntimeException("Unreachable code reached");
 			}
-			cpu.pc++; // skip 1 byte opcode
-			final short jumpTarget = memory.readWord( cpu.pc ); // read 2 byte word
-			short adr = cpu.pc;
+			cpu.incPC(); // skip 1 byte opcode
+			final int jumpTarget = memory.readWord( cpu.pc() ); // read 2 byte word
+			int adr = cpu.pc();
 			adr++; // this would usually be +=2 but since JSR needs to push address-1 we'll just increment by 1 here
-			cpu.push( adr , memory );
-			cpu.pc = jumpTarget;
+			cpu.pushWord( (short) adr , memory );
+			cpu.pc( jumpTarget );
 			cpu.cycles += 6;
 		}
 	},
@@ -1419,10 +1419,10 @@ Subroutines are normally terminated by a RTS op code.
 			if ( (opcode & 0xff) != 0x40 ) {
 				throw new RuntimeException("Unreachable code reached");
 			}
-			cpu.flags = cpu.pop(memory );
-			final byte lo = cpu.pop(memory );
-			final byte hi = cpu.pop(memory );
-			cpu.pc = (short) ( hi<<8 | lo );
+			cpu.flags = (byte) cpu.pop(memory );
+			final int lo = cpu.pop(memory );
+			final int hi = cpu.pop(memory );
+			cpu.pc( hi<<8 | lo );
 			cpu.cycles += 6;
 		}
 	},
@@ -1445,7 +1445,7 @@ Subroutines are normally terminated by a RTS op code.
 			final int hi = cpu.pop(memory ) & 0xff;
 			short adr = (short) (hi<<8 | lo);
 			adr++;
-			cpu.pc = adr;
+			cpu.pc( adr );
 			cpu.cycles += 6;
 		}
 	},
@@ -1525,7 +1525,7 @@ Subroutines are normally terminated by a RTS op code.
 		@Override
 		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)
 		{
-			cpu.pc++;
+			cpu.incPC();
 			cpu.cycles+=2;
 		}
 	};
@@ -1838,21 +1838,22 @@ Subroutines are normally terminated by a RTS op code.
 	}
 
 	private static void updateZeroSignedFromAccumulator(CPU cpu) {
-		updateZeroSigned(cpu.accumulator , cpu );
+		updateZeroSigned(cpu.getAccumulator() , cpu );
 	}
 
 	private static void updateZeroSignedFromX(CPU cpu) {
-		updateZeroSigned(cpu.x , cpu );
+		updateZeroSigned(cpu.getX() , cpu );
 	}
 
 	private static void updateZeroSignedFromY(CPU cpu) {
-		updateZeroSigned(cpu.y , cpu );
+		updateZeroSigned(cpu.getY() , cpu );
 	}
 
-	private static void updateZeroSigned(byte value,CPU cpu)
+	private static void updateZeroSigned(int value,CPU cpu)
 	{
-		cpu.setFlag(CPU.Flag.ZERO , value == 0 );
-		cpu.setFlag(CPU.Flag.NEGATIVE , (value & 0b10000000) != 0 );
+		final int truncated = ( value & 0xff);
+		cpu.setFlag(CPU.Flag.ZERO , truncated == 0 );
+		cpu.setFlag(CPU.Flag.NEGATIVE , (truncated & 0b10000000) != 0 );
 	}
 
 	public void assemble(InstructionNode ins, ICompilationContext writer)
@@ -1865,7 +1866,7 @@ Subroutines are normally terminated by a RTS op code.
 
 	public void execute(int opcode, CPU cpu , IMemoryRegion memory, Emulator emulator)
 	{
-		throw new InvalidOpcodeException( "Opcode $"+HexDump.toHex((byte) opcode)+" not implemented yet @ "+HexDump.toAdr( cpu.pc ) , cpu.pc , (byte) opcode);
+		throw new InvalidOpcodeException( "Opcode $"+HexDump.byteToString((byte) opcode)+" not implemented yet @ "+HexDump.toAdr( cpu.pc() ) , cpu.pc() , (byte) opcode);
 	}
 
 	private static boolean isAcrossPageBoundary(int adr1,int adr2) {
@@ -1877,153 +1878,153 @@ Subroutines are normally terminated by a RTS op code.
 	 * ================ */
 
 	// LDA ( $12 ) , Y
-	private static byte readIndirectIndexedY(CPU cpu, IMemoryRegion memory,int cycles)
+	private static int readIndirectIndexedY(CPU cpu, IMemoryRegion memory,int cycles)
 	{
-		cpu.pc ++;
-		final int adr1111 = memory.readByte( cpu.pc ) & 0xff; // zp offset
-		cpu.pc++;
-		final int adr2222 = memory.readWord( (short) adr1111 );
-		final short adr3333 = (short) (adr2222 + (cpu.y & 0xff));
+		cpu.incPC();
+		final int adr1111 = memory.readByte( cpu.pc() ); // zp offset
+		cpu.incPC();
+		final int adr2222 = memory.readWord( adr1111 );
+		final int adr3333 = adr2222 + cpu.getY();
 		cpu.cycles += isAcrossPageBoundary( adr2222, adr3333 ) ? cycles+1 : cycles;
 		return memory.readByte( adr3333 );
 	}
 
 	// LDA ( $12 , X )
-	private static byte readIndexedIndirectX(CPU cpu, IMemoryRegion memory) {
-		cpu.pc ++;
-		final int adr111 = (memory.readByte( cpu.pc ) & 0xff); // zp offset
-		cpu.pc++;
-		final int adr222 = (adr111 + (cpu.x & 0xff) ); // zp + offset
-		final short adr333 = memory.readWord( (short) adr222 );
+	private static int readIndexedIndirectX(CPU cpu, IMemoryRegion memory) {
+		cpu.incPC();
+		final int adr111 = memory.readByte( cpu.pc() ); // zp offset
+		cpu.incPC();
+		final int adr222 = adr111 + cpu.getX(); // zp + offset
+		final int adr333 = memory.readWord( adr222 );
 		return memory.readByte( adr333 );
 	}
 
 	// LDA $1234 , Y
-	private static byte readAbsoluteYValue(CPU cpu, IMemoryRegion memory,int cycles)
+	private static int readAbsoluteYValue(CPU cpu, IMemoryRegion memory,int cycles)
 	{
-		cpu.pc++;
-		final int adr11 = memory.readWord( cpu.pc ) & 0xffff;
-		cpu.pc += 2;
-		final int adr22 = adr11 + (cpu.y & 0xff);
+		cpu.incPC();
+		final int adr11 = memory.readWord( cpu.pc() );
+		cpu.incPC(2);
+		final int adr22 = adr11 + cpu.getY();
 		cpu.cycles += isAcrossPageBoundary( adr11 , adr22 ) ? cycles+1 : cycles;
-		return memory.readByte( (short) adr22  ); // accu:= mem[ zp_adr + x ]
+		return memory.readByte( adr22  ); // accu:= mem[ zp_adr + x ]
 	}
 
 	// LDA $1234 , X
-	private static byte readAbsoluteXValue(CPU cpu, IMemoryRegion memory,int cycles) {
-		final int adr1 = memory.readWord( (short) (cpu.pc+1) ) & 0xffff;
-		cpu.pc += 3;
-		final int adr2 = (adr1 + ( cpu.x & 0xff ) );
+	private static int readAbsoluteXValue(CPU cpu, IMemoryRegion memory,int cycles) {
+		final int adr1 = memory.readWord( cpu.pc() +1);
+		cpu.incPC(3);
+		final int adr2 = adr1 + cpu.getX();
 		cpu.cycles += isAcrossPageBoundary( adr1 , adr2 ) ? cycles+1 : cycles;
-		return memory.readByte( (short) adr2  ); // accu:= mem[ zp_adr + x ]
+		return memory.readByte( adr2  ); // accu:= mem[ zp_adr + x ]
 	}
 
 	// LDA #$12
-	private static byte readImmediateValue(CPU cpu, IMemoryRegion memory)
+	private static int readImmediateValue(CPU cpu, IMemoryRegion memory)
 	{
-		final byte result = memory.readByte( (short) (cpu.pc+1) ); // accu := mem[ cpu.pc + 1 ]
-		cpu.pc += 2;
+		final int result = memory.readByte( cpu.pc()+1 ); // accu := mem[ cpu.pc + 1 ]
+		cpu.incPC(2);
 		return result;
 	}
 
 	// LDA $12
-	private static byte readZeroPageValue(CPU cpu,IMemoryRegion memory)
+	private static int readZeroPageValue(CPU cpu,IMemoryRegion memory)
 	{
-		final byte adr = memory.readByte( (short) (cpu.pc+1) );
-		final byte result = memory.readByte( (short) (adr & 0xff) ); // accu := mem[ zp_adr ]
-		cpu.pc += 2;
+		final int adr = memory.readByte( cpu.pc()+1 );
+		final int result = memory.readByte( adr & 0xff ); // accu := mem[ zp_adr ]
+		cpu.incPC(2);
 		return result;
 	}
 
 	// LDA $12 , X
-	private static byte readAbsoluteZeroPageXValue(CPU cpu,IMemoryRegion memory)
+	private static int readAbsoluteZeroPageXValue(CPU cpu,IMemoryRegion memory)
 	{
-		final int src = ((cpu.pc+1) & 0xffff) + ( cpu.x & 0xff );
-		final byte adr = memory.readByte( (short) src );
-		final byte result = memory.readByte( (short) (adr & 0xff)  ); // accu:= mem[ zp_adr + x ]
-		cpu.pc += 2;
+		int adr = memory.readByte( cpu.pc() + 1 );
+		adr += cpu.getX();
+		final int result = memory.readByte( adr & 0xff ); // accu:= mem[ zp_adr + x ]
+		cpu.incPC(2);
 		return result;
 	}
 
-	private static byte readAbsoluteZeroPageYValue(CPU cpu,IMemoryRegion memory)
+	private static int readAbsoluteZeroPageYValue(CPU cpu,IMemoryRegion memory)
 	{
-		final int src = ( (cpu.pc+1) & 0xffff ) + (cpu.y & 0xff );
-		final byte adr = memory.readByte( (short) src );
-		final byte result = memory.readByte( (short) (adr & 0xff)  ); // accu:= mem[ zp_adr + x ]
-		cpu.pc += 2;
+		int adr = memory.readByte( cpu.pc()+1 );
+		adr += cpu.getY();
+		final int result = memory.readByte( adr & 0xff ); // accu:= mem[ zp_adr + x ]
+		cpu.incPC(2);
 		return result;
 	}
 
 	// LDA $1234
-	private static byte readAbsoluteValue(CPU cpu,IMemoryRegion memory) {
-		final byte result = memory.readByte( memory.readWord( (short) (cpu.pc+1) )  ); // accu:= mem[ adr  ]
-		cpu.pc += 3;
+	private static int readAbsoluteValue(CPU cpu,IMemoryRegion memory) {
+		final int result = memory.readByte( memory.readWord( cpu.pc() +1 )  ); // accu:= mem[ adr  ]
+		cpu.incPC(3);
 		return result;
 	}
 
 	// == store ==
 
-	private static void writeIndirectIndexedY(short accumulator, CPU cpu, IMemoryRegion memory) {
-		final int adr1111 = (memory.readByte( (short) (cpu.pc+1) ) & 0xff) & 0xffff; // zp offset
-		cpu.pc+=2;
-		final int adr2222 = memory.readWord( (short) adr1111 );
-		final int adr3333 = (adr2222 + cpu.y & 0xff);
-		memory.writeByte( (short) adr3333 ,(byte) accumulator );
+	private static void writeIndirectIndexedY(int accumulator, CPU cpu, IMemoryRegion memory) {
+		final int adr1111 = memory.readByte(cpu.pc() +1 ); // zp offset
+		cpu.incPC(2);
+		final int adr2222 = memory.readWord( adr1111 );
+		final int adr3333 = adr2222 + cpu.getY();
+		memory.writeByte( adr3333 ,(byte) accumulator );
 	}
 
-	private static void writeIndexedIndirectX(short value, CPU cpu, IMemoryRegion memory)
+	private static void writeIndexedIndirectX(int value, CPU cpu, IMemoryRegion memory)
 	{
-		final int adr111 = memory.readByte( (short) (cpu.pc+1) ) & 0xff; // zp offset
-		cpu.pc+=2;
-		final int adr222 = adr111 + ( cpu.x & 0xff); // zp + offset
+		final int adr111 = memory.readByte( cpu.pc()+1); // zp offset
+		cpu.incPC(2);
+		final int adr222 = adr111 + cpu.getX() ; // zp + offset
 		final int adr333 = memory.readWord( (short) adr222 );
 		memory.writeByte( (short) adr333 , (byte) value );
 	}
 
-	private static void writeAbsoluteYValue(short value , CPU cpu, IMemoryRegion memory) {
-		final int adr11 = memory.readWord( (short) (cpu.pc+1) ) & 0xffff;
-		cpu.pc += 3;
-		final int adr22 = adr11 + (cpu.y & 0xff);
+	private static void writeAbsoluteYValue(int value , CPU cpu, IMemoryRegion memory) {
+		final int adr11 = memory.readWord( cpu.pc() +1);
+		cpu.incPC(3);
+		final int adr22 = adr11 + (cpu.getY() & 0xff);
 		memory.writeByte( (short) adr22  , (byte) value ); // accu:= mem[ zp_adr + x ]
 	}
 
-	private static void writeAbsoluteXValue(short value, CPU cpu, IMemoryRegion memory) {
-		final int adr1 = memory.readWord( (short) (cpu.pc+1) ) & 0xffff;
-		cpu.pc += 3;
-		final int adr2 = adr1 + (cpu.x & 0xff);
+	private static void writeAbsoluteXValue(int value, CPU cpu, IMemoryRegion memory) {
+		final int adr1 = memory.readWord( cpu.pc()+1);
+		cpu.incPC(3);
+		final int adr2 = adr1 + (cpu.getX() & 0xff);
 		memory.writeByte( (short) adr2  , (byte) value ); // accu:= mem[ zp_adr + x ]
 	}
 
-	private static void writeAbsoluteValue(short value, CPU cpu, IMemoryRegion memory)
+	private static void writeAbsoluteValue(int value, CPU cpu, IMemoryRegion memory)
 	{
-		memory.writeByte( memory.readWord( (short) (cpu.pc+1) ) , (byte) value ); // accu:= mem[ adr  ]
-		cpu.pc += 3;
+		memory.writeByte( memory.readWord( cpu.pc()+1) , (byte) value ); // accu:= mem[ adr  ]
+		cpu.incPC(3);
 	}
 
-	private static void writeAbsoluteZeroPageXValue(short value, CPU cpu, IMemoryRegion memory) {
-		final int src = ((cpu.pc+1) & 0xffff) + ( cpu.x & 0xff );
-		final byte adr = memory.readByte( (short) src );
-		cpu.pc += 2;
+	private static void writeAbsoluteZeroPageXValue(int value, CPU cpu, IMemoryRegion memory) {
+		int adr = memory.readByte( cpu.pc() + 1 );
+		adr += cpu.getX();
+		cpu.incPC(2);
 		memory.writeByte( (short) (adr & 0xff) , (byte) value ); // accu:= mem[ zp_adr + x ]
 	}
 
-	private static void writeAbsoluteZeroPageYValue(short value, CPU cpu, IMemoryRegion memory) {
-		final int src = ((cpu.pc+1) & 0xffff) + ( cpu.y & 0xff );
-		final byte adr = memory.readByte( (short) src );
-		cpu.pc += 2;
+	private static void writeAbsoluteZeroPageYValue(int value, CPU cpu, IMemoryRegion memory) {
+		int adr = memory.readByte( cpu.pc() +1 );
+		adr = adr + cpu.getY();
+		cpu.incPC(2);
 		memory.writeByte( (short) (adr & 0xff) , (byte) value ); // accu:= mem[ zp_adr + x ]
 	}
 
-	private static void writeZeroPage(short value,CPU cpu,IMemoryRegion memory)
+	private static void writeZeroPage(int value,CPU cpu,IMemoryRegion memory)
 	{
-		final short adr = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
-		cpu.pc += 2;
-		memory.writeByte( adr , (byte) value );
+		final int adr = memory.readByte( cpu.pc()+1 );
+		cpu.incPC(2);
+		memory.writeByte( adr & 0xff , (byte) value );
 	}
 
 	private static void handleStackInstruction(CPU cpu,IMemoryRegion memory)
 	{
-		final int opcode = memory.readByte(cpu.pc);
+		final int opcode = memory.readByte(cpu.pc());
 		/*
 TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 6502 instruction-set.
     TSX operation transfers the content of the Stack Pointer to Index Register X and sets the zero and negative flags as appropriate.
@@ -2031,36 +2032,35 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		switch( opcode & 0xff )
 		{
 			case 0x9A: // TXS (Transfer X to Stack ptr)   $9A  2
-				cpu.pc++;
-				cpu.setSP( cpu.x );
+				cpu.incPC();
+				cpu.setSP( cpu.getX() );
 				cpu.cycles += 2;
 				break;
 			case 0xBA: // TSX (Transfer Stack ptr to X)   $BA  2
-				cpu.pc++;
-				cpu.x = (byte) cpu.sp;
-				cpu.x &= 0xff;
+				cpu.incPC();
+				cpu.setX((byte) cpu.sp);
 				cpu.cycles += 2;
 				updateZeroSignedFromX(cpu);
 				break;
 			case 0x48: // PHA (PusH Accumulator)          $48  3
-				cpu.push(cpu.accumulator, memory );
-				cpu.pc++;
+				cpu.pushByte( (byte) cpu.getAccumulator(), memory );
+				cpu.incPC();
 				cpu.cycles += 3;
 				break;
 			case 0x68: // PLA (POP Accumulator)          $68  4
-				cpu.accumulator = cpu.pop(memory );
+				cpu.setAccumulator(cpu.pop(memory ));
 				updateZeroSignedFromAccumulator(cpu);
-				cpu.pc++;
+				cpu.incPC();
 				cpu.cycles += 4;
 				break;
 			case 0x08: // PHP (PusH Processor status)     $08  3
-				cpu.push(cpu.flags, memory );
-				cpu.pc++;
+				cpu.pushByte(cpu.flags, memory );
+				cpu.incPC();
 				cpu.cycles += 3;
 				break;
 			case 0x28: // PLP (POP Processor status)     $28  4
-				cpu.flags = cpu.pop(memory );
-				cpu.pc++;
+				cpu.flags = (byte) cpu.pop(memory );
+				cpu.incPC();
 				cpu.cycles += 4;
 				break;
 			default:
@@ -2072,8 +2072,8 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		/*
 		 *  These instructions are implied mode, have a length of one byte and require two machine cycles.
 		 */
-		final int op = memory.readByte( cpu.pc );
-		switch( op & 0xff )
+		final int op = memory.readByte( cpu.pc() );
+		switch( op )
 		{
 			case 0x18: // CLC (CLear Carry)              $18
 				cpu.clearFlag( CPU.Flag.CARRY );
@@ -2099,7 +2099,7 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 			default:
 				throw new RuntimeException("Unreachable code reached");
 		}
-		cpu.pc++;
+		cpu.incPC();
 		cpu.cycles += 2;
 	}
 
@@ -2121,10 +2121,12 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		 * effectively the program counter points to the address that is 8 bytes beyond the address of
 		 *  the branch opcode; and a backward branch of $FA (256-6) goes to an address 7 bytes before the branch instruction.
 		 */
-		final int adr1 = cpu.pc;
-		int op = memory.readByte( cpu.pc++ );
-		op = op & 0xff;
-		final int offset = memory.readByte( cpu.pc++ );
+		final int adr1 = cpu.pc();
+		final int op = memory.readByte( adr1); // read opcode
+		
+		final byte byteOffset = (byte) memory.readByte( adr1 +1 ); // read offset
+		cpu.incPC(2);
+		final int offset = byteOffset; // sign-extent byte -> int
 		final boolean takeBranch;
 		switch( op )
 		{
@@ -2141,9 +2143,9 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		}
 		if ( takeBranch )
 		{
-			final int adr2 = adr1 + offset;
-			cpu.pc += (short) offset;
-			cpu.cycles += (3 + (isAcrossPageBoundary( adr1 , adr2 ) ? 1 : 0) );
+			final int newPC = cpu.pc() + offset;
+			cpu.pc( newPC );
+			cpu.cycles += (3 + (isAcrossPageBoundary( adr1 , newPC ) ? 1 : 0) );
 		} else {
 			cpu.cycles += 2;
 		}
@@ -2151,102 +2153,102 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 
 	private static void handleRegisterInstructions(CPU cpu,IMemoryRegion memory)
 	{
-		final int op = memory.readByte( cpu.pc );
+		final int op = memory.readByte( cpu.pc() );
 
 		// These instructions are implied mode, have a length of one byte and require two machine cycles.
 
 		switch( (op & 0xff ) )
 		{
 			case 0xAA: // TAX (Transfer A to X)    $AA
-				cpu.x = cpu.accumulator;
-				cpu.setFlag( CPU.Flag.ZERO , cpu.x == 0 );
-				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.x & 0b10000000) != 0 );
+				cpu.setX(cpu.getAccumulator());
+				cpu.setFlag( CPU.Flag.ZERO , cpu.getX() == 0 );
+				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.getX() & 0b10000000) != 0 );
 				break;
 			case 0x8A: // TXA (Transfer X to A)    $8A
-				cpu.accumulator = cpu.x;
-				cpu.setFlag( CPU.Flag.ZERO , cpu.accumulator == 0 );
-				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.accumulator & 0b10000000) != 0 );
+				cpu.setAccumulator((byte) cpu.getX());
+				cpu.setFlag( CPU.Flag.ZERO , cpu.getAccumulator() == 0 );
+				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.getAccumulator() & 0b10000000) != 0 );
 				break;
 			case 0xCA: // DEX (DEcrement X)        $CA
 				// Subtracts one from Register X and setting the zero and negative flag accordingly
-				cpu.x--;
-				cpu.setFlag( CPU.Flag.ZERO , cpu.x == 0 );
-				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.x & 0b10000000) != 0 );
+				cpu.setX( (byte) (cpu.getX() - 1) );
+				cpu.setFlag( CPU.Flag.ZERO , cpu.getX() == 0 );
+				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.getX() & 0b10000000) != 0 );
 				break;
 			case 0xE8: // INX (INcrement X)        $E8
-				cpu.x++;
-				cpu.setFlag( CPU.Flag.ZERO , cpu.x == 0 );
-				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.x & 0b10000000) != 0 );
+				cpu.setX( (byte) (cpu.getX() + 1 ));
+				cpu.setFlag( CPU.Flag.ZERO , cpu.getX() == 0 );
+				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.getX() & 0b10000000) != 0 );
 				break;
 			case 0xA8: // TAY (Transfer A to Y)    $A8
-				cpu.y = cpu.accumulator;
-				cpu.setFlag( CPU.Flag.ZERO , cpu.y == 0 );
-				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.y & 0b10000000) != 0 );
+				cpu.setY(cpu.getAccumulator());
+				cpu.setFlag( CPU.Flag.ZERO , cpu.getY() == 0 );
+				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.getY() & 0b10000000) != 0 );
 				break;
 			case 0x98: // TYA (Transfer Y to A)    $98
-				cpu.accumulator = cpu.y;
-				cpu.setFlag( CPU.Flag.ZERO , cpu.accumulator == 0 );
-				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.accumulator & 0b10000000) != 0 );
+				cpu.setAccumulator((byte) cpu.getY());
+				cpu.setFlag( CPU.Flag.ZERO , cpu.getAccumulator() == 0 );
+				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.getAccumulator() & 0b10000000) != 0 );
 				break;
 			case 0x88: // DEY (DEcrement Y)        $88
-				cpu.y--;
-				cpu.setFlag( CPU.Flag.ZERO , cpu.y == 0 );
-				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.y & 0b10000000) != 0 );
+				cpu.setY( (byte) (cpu.getY() - 1) );
+				cpu.setFlag( CPU.Flag.ZERO , cpu.getY() == 0 );
+				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.getY() & 0b10000000) != 0 );
 				break;
 			case 0xC8: // INY (INcrement Y)        $C8
-				cpu.y++;
-				cpu.setFlag( CPU.Flag.ZERO , cpu.y == 0 );
-				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.y & 0b10000000) != 0 );
+				cpu.setY( (byte) (cpu.getY() + 1) );
+				cpu.setFlag( CPU.Flag.ZERO , cpu.getY() == 0 );
+				cpu.setFlag( CPU.Flag.NEGATIVE, (cpu.getY() & 0b10000000) != 0 );
 				break;
 			default:
 				throw new RuntimeException("Unreachable code reached");
 		}
-		cpu.pc++;
+		cpu.incPC();
 		cpu.cycles += 2;
 	}
 
-	private static void handleMemIncDec(int opcode, CPU cpu, IMemoryRegion memory,byte incDec)
+	private static void handleMemIncDec(int opcode, CPU cpu, IMemoryRegion memory,int incDec)
 	{
 		// Affects Flags: S Z
-		short address;
+		int address;
 		int cycles;
 
 		switch( opcode )
 		{
 			case 0xE6: // Zero Page     INC $44       $E6  2   5
 			case 0xC6: // Zero Page     DEC $44       $C6  2   5
-				address = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
-				cpu.pc+=2;
+				address = memory.readByte( cpu.pc()+1);
+				cpu.incPC(2);
 				cycles = 5;
 				break;
 			case 0xF6: // Zero Page,X   INC $44,X     $F6  2   6
 			case 0xD6: // Zero Page,X   DEC $44,X     $D6  2   6
-				address = (short) (memory.readByte( (short) (cpu.pc+1) ) & 0xff);
-				cpu.pc+=2;
-				address += cpu.x;
+				address = memory.readByte( cpu.pc() +1);
+				cpu.incPC(2);
+				address += cpu.getX();
 				address &= 0xff;
 				cycles = 6;
 				break;
 			case 0xEE: // Absolute      INC $4400     $EE  3   6
 			case 0xCE: // Absolute      DEC $4400     $CE  3   6
-				address = memory.readWord( (short) (cpu.pc+1) );
-				cpu.pc+=3;
+				address = memory.readWord( cpu.pc()+1 );
+				cpu.incPC(3);
 				cycles = 6;
 				break;
 			case 0xFE: // Absolute,X    INC $4400,X   $FE  3   7
 			case 0xDE: // Absolute,X    DEC $4400,X   $DE  3   7
-				address = memory.readWord( (short) (cpu.pc+1) );
-				cpu.pc+=3;
-				address += cpu.x;
+				address = memory.readWord( cpu.pc()+1 );
+				cpu.incPC(3);
+				address += cpu.getX();
 				cycles = 7;
 				break;
 			default:
 				throw new RuntimeException("Unreachable code reached");
 		}
 		cpu.cycles += cycles;
-		byte value = memory.readByte( address );
+		int value = memory.readByte( address );
 		value += incDec;
-		memory.writeByte( address , value );
+		memory.writeByte( address , (byte) value );
 		updateZeroSigned( value , cpu );
 	}
 }

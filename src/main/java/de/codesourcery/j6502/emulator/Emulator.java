@@ -14,7 +14,7 @@ public class Emulator
 
 	protected static final boolean PRINT_DISASSEMBLY = false;
 
-	protected static final boolean failOnBRK = true;
+	protected boolean failOnBRK = true;
 
 	protected static final String EMPTY_STRING = "";
 
@@ -60,7 +60,7 @@ public class Emulator
 
 	public void singleStep()
 	{
-		short oldPc = cpu.pc;
+		int oldPc = cpu.pc();
 
 		if ( PRINT_DISASSEMBLY )
 		{
@@ -68,7 +68,7 @@ public class Emulator
 			final Disassembler dis = new Disassembler();
 			dis.setAnnotate( true );
 			dis.setWriteAddresses( true );
-			dis.disassemble( memory , cpu.pc , 3 , new Consumer<Line>()
+			dis.disassemble( memory , cpu.pc() , 3 , new Consumer<Line>()
 			{
 				private boolean linePrinted = false;
 
@@ -94,18 +94,16 @@ public class Emulator
 			System.out.println( cpu );
 		}
 
-		cpu.previousPC = oldPc;
+		cpu.previousPC = (short) oldPc;
 	}
 
 	private void doSingleStep()
 	{
-		int op = memory.readByte( cpu.pc );
+		int op = memory.readByte( cpu.pc() );
 
 		if ( PRINT_CURRENT_INS ) {
-			System.out.println( "**************** Executing $"+HexDump.toHex((byte) op)+" @ "+HexDump.toAdr( cpu.pc ));
+			System.out.println( "**************** Executing $"+HexDump.byteToString((byte) op)+" @ "+HexDump.toAdr( cpu.pc() ));
 		}
-
-		op = op & 0xff;
 
 		// mixed bag of opcodes...
 		switch( op )
@@ -186,7 +184,7 @@ public class Emulator
 
 	private int unknownOpcode( int opcode)
 	{
-		throw new InvalidOpcodeException("Unknown opcode: $"+HexDump.toHex((byte) (opcode & 0xff)) , cpu.pc & 0xffff , (byte) opcode );
+		throw new InvalidOpcodeException("Unknown opcode: $"+HexDump.byteToString((byte) (opcode & 0xff)) , cpu.pc() , (byte) opcode );
 	}
 
 	private void executeGeneric1(int op)

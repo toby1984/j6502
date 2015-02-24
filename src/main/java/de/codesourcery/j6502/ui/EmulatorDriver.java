@@ -236,7 +236,7 @@ public abstract class EmulatorDriver extends Thread
 					/*
 					 * Here the magic happens....
 					 */
-					final short oldAdr = cpu.pc;
+					final int oldAdr = cpu.pc();
 
 					if ( logEachStep )
 					{
@@ -269,8 +269,8 @@ public abstract class EmulatorDriver extends Thread
 
 					final long elapsedCycles = cpu.cycles - cycles;
 					cyclesRemaining -= elapsedCycles;
-					Breakpoint bp = breakpoints[ cpu.pc & 0xffff ];
-					if ( bp == null && ( oneShotBreakpoint != null && oneShotBreakpoint.address == cpu.pc ) ) {
+					Breakpoint bp = breakpoints[ cpu.pc() ];
+					if ( bp == null && ( oneShotBreakpoint != null && oneShotBreakpoint.address == cpu.pc() ) ) {
 						bp = oneShotBreakpoint;
 					}
 					if ( bp != null )
@@ -329,7 +329,7 @@ public abstract class EmulatorDriver extends Thread
 		{
 			synchronized( emulator )
 			{
-				final int op = emulator.getMemory().readByte( emulator.getCPU().pc ) & 0xff;
+				final int op = emulator.getMemory().readByte( emulator.getCPU().pc() );
 				return op == 0x20; // JSR $xxxx
 			}
 		}
@@ -360,7 +360,7 @@ public abstract class EmulatorDriver extends Thread
 		{
 			if ( canStepOver() )
 			{
-				addBreakpoint( new Breakpoint( (short) (emulator.getCPU().pc+3) , true  ) );
+				addBreakpoint( new Breakpoint( emulator.getCPU().pc()+3 , true  ) );
 				breakpointAdded = true;
 			}
 		}

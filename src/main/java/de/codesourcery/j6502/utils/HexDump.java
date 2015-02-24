@@ -65,7 +65,7 @@ public class HexDump {
 			{
 				final int adr = index % region.getAddressRange().getSizeInBytes();
 				index++;
-				final byte value = region.readByte( (short) adr );
+				final byte value = (byte) region.readByte( adr );
 				final char intValue = CharsetConverter.petToASCII( value );
 				final boolean doMark = mark && adr == addressToMark;
 				char toAppend;
@@ -84,9 +84,9 @@ public class HexDump {
 					lineBuffer.append(" ");
 				}
 				if ( doMark ) {
-					lineBuffer.append( "[").append( toHex( value ) ).append("]");
+					lineBuffer.append( "[").append( byteToString( value ) ).append("]");
 				} else {
-					lineBuffer.append( toHex( value ) );
+					lineBuffer.append( byteToString( value ) );
 				}
 				bytesOnLine++;
 				bytes--;
@@ -112,27 +112,27 @@ public class HexDump {
 			}
 
 			@Override
-			public void bulkWrite(short startingAddress, byte[] data,int datapos, int len) {
+			public void bulkWrite(int startingAddress, byte[] data,int datapos, int len) {
 				throw new UnsupportedOperationException();
 			}
 
 			@Override
-			public byte readByte(short offset) {
-				return data[offset & 0xffff];
+			public int readByte(int offset) {
+				return data[offset & 0xffff] & 0xff;
 			}
 
 			@Override
-			public short readWord(short offset) {
+			public int readWord(int offset) {
 				throw new UnsupportedOperationException();
 			}
 
 			@Override
-			public void writeWord(short offset, short value) {
+			public void writeWord(int offset, short value) {
 				throw new UnsupportedOperationException();
 			}
 
 			@Override
-			public void writeByte(short offset, byte value) {
+			public void writeByte(int offset, byte value) {
 				throw new UnsupportedOperationException();
 			}
 
@@ -143,7 +143,7 @@ public class HexDump {
 		} , offset , len );
 	}
 
-	public static String toHex(byte b)
+	public static String byteToString(byte b)
 	{
 		int value = b;
 		value &= 0xff;
@@ -155,7 +155,7 @@ public class HexDump {
 		return "$"+toHexBigEndian((short) b);
 	}
 
-	public static String toHexBigEndian(short b)
+	public static String toHexBigEndian(int b)
 	{
 		final int value = b;
 		final int low = value & 0xff;

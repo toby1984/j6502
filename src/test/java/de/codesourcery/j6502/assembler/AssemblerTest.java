@@ -50,7 +50,7 @@ public class AssemblerTest extends TestCase {
 		for ( int i =  0 ; i < min ; i++ ) {
 			final byte ex = (byte) (expected[i] & 0xff);
 			assertEquals( "Mismatch on byte @ "+HexDump.toAdr(offset+i)+" , got $"+
-			HexDump.toHex( actual[i] )+" but expected $"+HexDump.toHex( ex )+"\n\n"+HexDump.INSTANCE.dump((short) 0, actual, 0, actual.length), ex , actual[i] );
+			HexDump.byteToString( actual[i] )+" but expected $"+HexDump.byteToString( ex )+"\n\n"+HexDump.INSTANCE.dump((short) 0, actual, 0, actual.length), ex , actual[i] );
 		}
 		if ( actual.length != expected.length ) {
 			fail("Length mismatch: actual = "+actual.length+" , expected = "+expected.length+"\n\n"+HexDump.INSTANCE.dump((short) 0, actual, 0, actual.length) );

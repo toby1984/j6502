@@ -21,15 +21,15 @@ public abstract class IMemoryRegion
 		return addressRange;
 	}
 
-	public abstract void bulkWrite(short startingAddress,byte[] data, int datapos, int len);
+	public abstract void bulkWrite(int startingAddress,byte[] data, int datapos, int len);
 
-	public abstract byte readByte(short offset);
+	public abstract int readByte(int offset);
 
-	public abstract short readWord(short offset);
+	public abstract int readWord(int offset);
 
-	public abstract void writeWord(short offset,short value);
+	public abstract void writeWord(int offset,short value);
 
-	public abstract void writeByte(short offset,byte value);
+	public abstract void writeByte(int offset,byte value);
 
 	public abstract String dump(int offset, int len);
 

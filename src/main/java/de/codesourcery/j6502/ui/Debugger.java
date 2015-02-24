@@ -243,11 +243,11 @@ public class Debugger
 
 				@Override
 				public void loadInto(IMemoryRegion region) {
-					region.bulkWrite( (short) origin , binary , 0 , binary.length );
+					region.bulkWrite( origin , binary , 0 , binary.length );
 				}
 			};
 			emulator.setMemoryProvider( provider );
-			emulator.getCPU().pc = (short) origin;
+			emulator.getCPU().pc( origin );
 			driver.removeAllBreakpoints();
 			driver.addBreakpoint( new Breakpoint( (short) 0x45bf , false ) );
 			driver.addBreakpoint( new Breakpoint( (short) 0x40cb , false ) );
@@ -336,11 +336,11 @@ public class Debugger
 	{
 		toolbar.repaint();
 		toolbar.updateButtons();
-		short pc;
+		int pc;
 		synchronized( emulator ) {
-			pc = emulator.getCPU().pc;
+			pc = emulator.getCPU().pc();
 		}
-		disassembly.setAddress( pc , pc );
+		disassembly.setAddress( (short) pc , (short) pc );
 		cpuPanel.repaint();
 		hexPanel.repaint();
 	}
@@ -374,12 +374,12 @@ public class Debugger
 			synchronized( emulator )
 			{
 				final CPU cpu = emulator.getCPU();
-				lines.add( "PC: "+HexDump.toAdr( cpu.pc ) + "   Flags: "+ cpu.getFlagsString() );
+				lines.add( "PC: "+HexDump.toAdr( cpu.pc() ) + "   Flags: "+ cpu.getFlagsString() );
 				lines.add("Cycles: "+cpu.cycles);
 				lines.add("Previous PC: "+HexDump.toAdr( cpu.previousPC ) );
-				lines.add(" A: "+HexDump.toHex( cpu.accumulator ) );
-				lines.add(" X: $"+HexDump.toHex( cpu.x) );
-				lines.add(" Y: $"+HexDump.toHex( cpu.y) );
+				lines.add(" A: "+HexDump.byteToString( (byte) cpu.getAccumulator() ) );
+				lines.add(" X: $"+HexDump.byteToString( (byte) cpu.getX()) );
+				lines.add(" Y: $"+HexDump.byteToString( (byte) cpu.getY()) );
 				lines.add("SP: "+HexDump.toAdr( cpu.sp ) );
 			}
 			g.setColor( FG_COLOR );
@@ -563,16 +563,18 @@ public class Debugger
 				@Override
 				public void mouseClicked(MouseEvent e)
 				{
-					final Short adr = getAddressForPoint( e.getX(), e.getY() );
-					if ( adr != null )
-					{
-						final Breakpoint breakpoint = driver.getBreakpoint( adr );
-						if ( breakpoint != null ) {
-							driver.removeBreakpoint( breakpoint );
-						} else {
-							driver.addBreakpoint( new Breakpoint( adr , false ) );
+					if ( e.getButton() == MouseEvent.BUTTON3) {
+						final Short adr = getAddressForPoint( e.getX(), e.getY() );
+						if ( adr != null )
+						{
+							final Breakpoint breakpoint = driver.getBreakpoint( adr );
+							if ( breakpoint != null ) {
+								driver.removeBreakpoint( breakpoint );
+							} else {
+								driver.addBreakpoint( new Breakpoint( adr , false ) );
+							}
+							repaint();
 						}
-						repaint();
 					}
 				}
 			});
@@ -617,7 +619,7 @@ public class Debugger
 					alignmentCorrect = false;
 					lines.clear();
 					final Consumer<Line> lineConsumer = new Consumer<Line>()
-					{
+							{
 						private int y = Y_OFFSET;
 
 						@Override
@@ -629,10 +631,10 @@ public class Debugger
 							lines.add( new LineWithBounds( line , bounds ) );
 							y += LINE_HEIGHT;
 						}
-					};
-					dis.disassemble( emulator.getMemory() , offset, bytesToDisassemble , lineConsumer);
-					alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
-					offset++;
+							};
+							dis.disassemble( emulator.getMemory() , offset, bytesToDisassemble , lineConsumer);
+							alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
+							offset++;
 				}
 			}
 		}

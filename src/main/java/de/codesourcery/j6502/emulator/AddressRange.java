@@ -23,7 +23,7 @@ public final class AddressRange {
 		}
 	}
 
-	public boolean contains(short adr)
+	public boolean contains(int adr)
 	{
 		int extended = adr & 0xffff;
 		return startAddress <= extended && extended < endAddress;

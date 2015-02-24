@@ -9,7 +9,7 @@ public final class WriteOnceMemory extends Memory {
 	}
 
 	@Override
-	public void writeByte(short offset, byte value)
+	public void writeByte(int offset, byte value)
 	{
 		if ( writeProtected ) {
 			throw new UnsupportedOperationException("Can't write to write-protected memory  "+this);
@@ -22,7 +22,7 @@ public final class WriteOnceMemory extends Memory {
 	}
 
 	@Override
-	public void bulkWrite(short startingAddress, byte[] data, int datapos,int len)
+	public void bulkWrite(int startingAddress, byte[] data, int datapos,int len)
 	{
 		if ( writeProtected ) {
 			throw new UnsupportedOperationException("Can't write to write-protected memory  "+this);

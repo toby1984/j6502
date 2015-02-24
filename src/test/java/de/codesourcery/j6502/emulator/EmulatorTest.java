@@ -408,7 +408,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 
 	public void testBRK() {
 
-		execute("LDX #$00\n BRK\n .byte $64\n LDX #$12")
+		execute("LDX #$00\n BRK\n .byte $64\n LDX #$12",false)
 		.writeWord( CPU.BRK_VECTOR_LOCATION , PRG_LOAD_ADDRESS+4 )
 		.assertFlagsNotSet(CPU.Flag.BREAK)
 		.assertX( 0x12 );
@@ -463,7 +463,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		};
 
 		e.reset();
-		e.getCPU().pc = (short) origin;
+		e.getCPU().pc( origin );
 
 		driver.logEachStep = true;
 		driver.sourceHelper = helper;
@@ -478,7 +478,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 			driver.setMode(Mode.SINGLE_STEP);
 			fail("Test failed to complete after 5 seconds");
 		}
-		byte outcome = e.getMemory().readByte(  (short) 0x210 ); // EXPECTED FINAL RESULTS: $0210 = FF
+		byte outcome = (byte) e.getMemory().readByte( 0x210 ); // EXPECTED FINAL RESULTS: $0210 = FF
 		assertEquals( "Test failed , failed test no. "+(outcome & 0xff), (byte) 0xff , outcome );
 	}
 
@@ -850,10 +850,18 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 
 		private final List<Runnable> blocks = new ArrayList<>();
 
+		private final boolean failOnBreak;
+		
 		public Helper(String source) {
 			this.source = source;
+			this.failOnBreak = true;
 		}
-
+		
+		public Helper(String source, boolean failOnBreak ) {
+			this.source = source;
+			this.failOnBreak = failOnBreak;
+		}
+		
 		public Helper assertFlags(CPU.Flag... flags)
 		{
 			maybeExecute();
@@ -893,21 +901,21 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 		public Helper setA(int value) {
 			return block( () ->
 			{
-				emulator.getCPU().accumulator = (byte) value;
+				emulator.getCPU().setAccumulator((byte) value);
 			});
 		}
 
 		public Helper setX(int value) {
 			return block( () ->
 			{
-				emulator.getCPU().x = (byte) value;
+				emulator.getCPU().setX( (byte) value );
 			});
 		}
 
 		public Helper setY(int value) {
 			return block( () ->
 			{
-				emulator.getCPU().y = (byte) value;
+				emulator.getCPU().setY( (byte) value );
 			});
 		}
 
@@ -958,7 +966,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 			maybeExecute();
 
 			final int expected = value;
-			final int actual = emulator.getCPU().accumulator;
+			final int actual = emulator.getCPU().getAccumulator();
 			assertEquals( "Expected accumulator to contain "+hex((byte)expected)+" ("+bin((byte) expected)+")"
 					+ " but was "+hex((byte)actual)+" ("+bin((byte)actual)+")",expected & 0xff , actual & 0xff );
 			return this;
@@ -980,7 +988,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 			maybeExecute();
 
 			final int expected = value;
-			final int actual = emulator.getCPU().x;
+			final int actual = emulator.getCPU().getX();
 			assertEquals( expected & 0xff , actual & 0xff );
 			return this;
 		}
@@ -990,7 +998,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 			maybeExecute();
 
 			final int expected = value;
-			final int actual = emulator.getCPU().y;
+			final int actual = emulator.getCPU().getY();
 			assertEquals( expected & 0xff , actual & 0xff );
 			return this;
 		}
@@ -999,8 +1007,8 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 
 			maybeExecute();
 
-			final short expected = (short) value;
-			final short actual = emulator.getCPU().pc;
+			final int expected = value & 0xffff;
+			final int actual = emulator.getCPU().pc();
 			assertEquals( "Expected PC = "+hex(expected)+" but was "+hex(actual) , expected , actual );
 			return this;
 		}
@@ -1021,10 +1029,10 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 			short adr = emulator.getCPU().sp;
 			for ( int i = 0 ; i < expected.length ; i++ )
 			{
-				final byte actual =  emulator.getMemory().readByte( adr );
+				final byte actual = (byte) emulator.getMemory().readByte( adr );
 				final byte exp = expected[i];
-				assertEquals( "Expected byte $"+HexDump.toHex(exp)+" on stack @ "+HexDump.toAdr(adr)+" but got $"+
-						HexDump.toHex(actual) , exp , actual );
+				assertEquals( "Expected byte $"+HexDump.byteToString(exp)+" on stack @ "+HexDump.toAdr(adr)+" but got $"+
+						HexDump.byteToString(actual) , exp , actual );
 				adr += 1;
 			}
 			return this;
@@ -1053,7 +1061,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 			final byte[] actual = new byte[ expected.length ];
 			for ( int i = 0 ; i < actual.length ; i++ )
 			{
-				actual[i] = emulator.getMemory().readByte( (short) (offset+i) );
+				actual[i] = (byte) emulator.getMemory().readByte( (short) (offset+i) );
 			}
 
 			AssemblerTest.assertArrayEquals( offset , expected , actual );
@@ -1112,9 +1120,10 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 				};
 
 				emulator.reset();
+				emulator.failOnBRK = failOnBreak;
 
 				emulator.setMemoryProvider( provider );
-				emulator.getCPU().pc = (short) (PRG_LOAD_ADDRESS-ADDITIONAL_BYTES);
+				emulator.getCPU().pc( PRG_LOAD_ADDRESS-ADDITIONAL_BYTES );
 
 				blocks.forEach( b -> b.run() );
 
@@ -1161,15 +1170,24 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 		return new Helper(source);
 	}
 
+	private Helper execute(String source,boolean failOnBreak)
+	{
+		return new Helper(source,failOnBreak);
+	}
+	
 	private static String bin(byte b) {
 		return "0b"+StringUtils.leftPad( Integer.toBinaryString( b & 0xff ) , 8 , '0' );
 	}
 
 	private static String hex(byte b) {
-		return "$"+HexDump.toHex( b );
+		return "$"+HexDump.byteToString( b );
 	}
 
 	private static String hex(short b) {
 		return "$"+HexDump.toHex( b );
 	}
+	
+	private static String hex(int b) {
+		return "$"+HexDump.toHex( (short) b );
+	}	
 }

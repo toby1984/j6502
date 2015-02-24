@@ -22,10 +22,10 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 
 	public long cycles = 0;
 	public short previousPC;
-	public short pc;
-	public byte accumulator;
-	public byte x;
-	public byte y;
+	private int pc;
+	private int accumulator;
+	private int x;
+	private int y;
 	public short sp;
 
 	public byte flags;
@@ -50,7 +50,23 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		public byte clear(byte flags) { return (byte) (flags&~value); }
 		public byte set(byte flags) { return (byte) (flags | value); }
 	}
+	
+	public void pc(int value) {
+		this.pc = value & 0xffff;
+	}
 
+	public int pc() {
+		return pc;
+	}
+	
+	public void incPC() {
+		this.pc = (this.pc + 1) & 0xffff;
+	}
+	
+	public void incPC(int increment) {
+		this.pc = (this.pc + increment) & 0xffff;
+	}
+	
 	public CPU(IMemoryRegion memory)
 	{
 		this.memory = memory;
@@ -60,29 +76,29 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 	{
 		if ( ! isSet(Flag.IRQ_DISABLE ) )
 		{
-			push( (byte) ( ( pc & 0xff00) >>8 ) ,  memory ); // push pc hi
-			push( (byte) ( pc & 0xff ) , memory ); // push pc lo
-			push( flags , memory ); // push processor flags
-			pc = memory.readWord( (short) CPU.IRQ_VECTOR_LOCATION );
+			pushByte( (byte) ( ( pc & 0xff00) >>8 ) ,  memory ); // push pc hi
+			pushByte( (byte) ( pc & 0xff ) , memory ); // push pc lo
+			pushByte( flags , memory ); // push processor flags
+			pc = (short) memory.readWord( (short) CPU.IRQ_VECTOR_LOCATION );
 		}
 	}
 
-	public void push(short value,IMemoryRegion region)
+	public void pushWord(short value,IMemoryRegion region)
 	{
 		final byte hi = (byte) ((value >> 8) & 0xff);
 		final byte lo = (byte) (value & 0xff);
-		push( hi , region );
-		push( lo , region );
+		pushByte( hi , region );
+		pushByte( lo , region );
 	}
 
-	public void push(byte value,IMemoryRegion region)
+	public void pushByte(byte value,IMemoryRegion region)
 	{
 		decSP();
 		region.writeByte( sp , value );
 	}
 
-	public byte pop(IMemoryRegion region) {
-		final byte result = region.readByte( sp );
+	public int pop(IMemoryRegion region) {
+		final int result = region.readByte( sp );
 		incSP();
 		return result;
 	}
@@ -110,11 +126,12 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 	public void reset()
 	{
 		cycles = 0;
-		pc = memory.readWord( (short) RESET_VECTOR_LOCATION );
-		previousPC = pc;
+		pc = (short) memory.readWord( (short) RESET_VECTOR_LOCATION );
+		previousPC = (short) pc;
 		System.out.println("CPU.reset(): Settings PC to "+HexDump.toAdr( pc ) );
-		accumulator = 0;
-		x = y = 0;
+		setAccumulator(0);
+		setX((byte) 0);
+		setY((byte) 0);		
 		sp = 0x1ff;
 		flags = CPU.Flag.IRQ_DISABLE.set((byte) 0);
 	}
@@ -139,11 +156,11 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		.append("    ")
 		.append( flagBuffer )
 		.append("    ")
-		.append("A: ").append( HexDump.toHex( accumulator ) )
+		.append("A: ").append( HexDump.byteToString( (byte) getAccumulator() ) )
 		.append("    ")
-		.append("X: ").append( HexDump.toHex( x ) )
+		.append("X: ").append( HexDump.byteToString( (byte) getX() ) )
 		.append("    ")
-		.append("Y: ").append( HexDump.toHex( y ) )
+		.append("Y: ").append( HexDump.byteToString( (byte) getY() ) )
 		.append("    ")
 		.append("SP: ").append( HexDump.toAdr( sp )+" "+dump );
 
@@ -181,10 +198,9 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		return Arrays.stream( Flag.values() ).filter( f -> f.isSet( this.flags ) ).collect(Collectors.toSet());
 	}
 
-	public void setSP(byte value)
+	public void setSP(int value)
 	{
-		int expanded = value;
-		expanded &= 0xff;
+		final int expanded = value & 0xff;
 		this.sp = (short) ((0x0100 | expanded));
 	}
 
@@ -201,5 +217,29 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		expanded--;
 		expanded &= 0xff;
 		this.sp = (short) ((0x0100 | expanded));
+	}
+
+	public int getX() {
+		return x;
+	}
+
+	public void setX(int x) {
+		this.x = x & 0xff;
+	}
+
+	public int getY() {
+		return y;
+	}
+
+	public void setY(int y) {
+		this.y = y & 0xff;
+	}
+
+	public int getAccumulator() {
+		return accumulator;
+	}
+
+	public void setAccumulator(int accumulator) {
+		this.accumulator = accumulator & 0xff;
 	}
 }

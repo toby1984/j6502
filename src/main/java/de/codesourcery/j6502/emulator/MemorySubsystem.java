@@ -413,13 +413,13 @@ public final class MemorySubsystem extends IMemoryRegion
 	}
 
 	@Override
-	public short readWord(short offset)
+	public int readWord(int offset)
 	{
 		// FIXME: Maybe always use ( offset & 0xffff ) here ???
-		final int low = readByte(offset) & 0xff;
-		final int hi = readByte( (short) (offset+1)) & 0xff;
+		final int low = readByte(offset);
+		final int hi = readByte( offset+1 );
 
-		final short result = (short) (hi<<8|low);
+		final int result = (hi<<8|low);
 		if ( DEBUG_READS ) {
 			System.out.println("readWord(): Read word "+HexDump.toAdr(result)+" at "+HexDump.toAdr( offset ) );
 		}
@@ -427,7 +427,7 @@ public final class MemorySubsystem extends IMemoryRegion
 	}
 
 	@Override
-	public byte readByte(short offset)
+	public int readByte(int offset)
 	{
 		// FIXME: Maybe always use ( offset & 0xffff ) here ???
 		final int wrappedOffset = offset & 0xffff;
@@ -440,26 +440,26 @@ public final class MemorySubsystem extends IMemoryRegion
 			default:
 				final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
 				final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
-				final byte result = region.readByte( (short) translatedOffset );
+				final int result = region.readByte( translatedOffset );
 				if ( DEBUG_READS ) {
-					System.out.println("readByte(): Got byte $"+HexDump.toHex(result)+" from "+HexDump.toAdr(offset )+" [translated: "+HexDump.toAdr(translatedOffset)+"] from "+region );
+					System.out.println("readByte(): Got byte $"+HexDump.byteToString((byte) result)+" from "+HexDump.toAdr(offset )+" [translated: "+HexDump.toAdr(translatedOffset)+"] from "+region );
 				}
 				return result;
 		}
 	}
 
 	@Override
-	public void writeWord(short offset,short value)
+	public void writeWord(int offset,short value)
 	{
 		final byte low = (byte) value;
 		final byte hi = (byte) (value>>8);
 
 		writeByte( offset , low );
-		writeByte( (short) (offset+1) , hi );
+		writeByte( offset+1 , hi );
 	}
 
 	@Override
-	public void writeByte(short offset, byte value)
+	public void writeByte(int offset, byte value)
 	{
 		final int wrappedOffset = offset & 0xffff;
 		switch(wrappedOffset)
@@ -475,18 +475,18 @@ public final class MemorySubsystem extends IMemoryRegion
 				final IMemoryRegion region = writeRegions[ writeMap[ wrappedOffset ] ];
 				final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
 				if ( DEBUG_WRITES) {
-					System.out.println("writeByte(): Writing byte $"+HexDump.toHex(value)+" to "+HexDump.toAdr( offset )+" [translated: "+HexDump.toAdr(realOffset)+"] from "+region );
+					System.out.println("writeByte(): Writing byte $"+HexDump.byteToString(value)+" to "+HexDump.toAdr( offset )+" [translated: "+HexDump.toAdr(realOffset)+"] from "+region );
 				}
-				region.writeByte( (short) realOffset , value );
+				region.writeByte( realOffset , value );
 		}
 	}
 
 	@Override
-	public void bulkWrite(short startingAddress, byte[] data, int datapos, int len)
+	public void bulkWrite(int startingAddress, byte[] data, int datapos, int len)
 	{
 		for ( int dstAdr = (startingAddress & 0xffff), bytesLeft = len , src = datapos ; bytesLeft > 0 ; bytesLeft-- )
 		{
-			writeByte( (short) dstAdr , data[ src++ ] );
+			writeByte( dstAdr , data[ src++ ] );
 			dstAdr = (dstAdr+1) & 0xffff;
 		}
 	}

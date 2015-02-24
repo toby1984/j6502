@@ -194,14 +194,8 @@ public class IOArea extends Memory
 	}
 
 	@Override
-	public byte readByte(short offset) {
+	public int readByte(int offset) {
 		return super.readByte(offset);
-	}
-
-	@Override
-	public short readWord(short offset)
-	{
-		return super.readWord( offset );
 	}
 
 	/*    $D011 	53265 	17 	Steuerregister, Einzelbedeutung der Bits (1 = an):
@@ -219,8 +213,9 @@ public class IOArea extends Memory
 	private short irqOnRaster = -1;
 
 	@Override
-	public void writeByte(short offset, byte value)
+	public void writeByte(int set, byte value)
 	{
+		final int offset = set & 0xffff;
 		if ( offset == VIC_SCANLINE )
 		{
 			// current scan line, lo-byte
@@ -255,13 +250,13 @@ public class IOArea extends Memory
 		final byte lo = (byte) rasterLine;
 		final byte hi = (byte) (rasterLine>>8);
 
-		byte hiBit = readByte( VIC_CNTRL1 );
+		int hiBit = readByte( VIC_CNTRL1 );
 		if ( hi != 0 ) {
 			hiBit |= 0b1000_0000;
 		} else {
 			hiBit &= 0b0111_1111;
 		}
-		writeByte( VIC_CNTRL1 , hiBit );
+		writeByte( VIC_CNTRL1 , (byte) hiBit );
 		writeWord( VIC_SCANLINE , lo );
 	}
 }

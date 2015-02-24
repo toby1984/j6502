@@ -18,12 +18,12 @@ public class Memory extends IMemoryRegion
 	}
 
 	@Override
-	public byte readByte(short offset) {
-		return data[offset & 0xffff];
+	public int readByte(int offset) {
+		return data[offset & 0xffff] & 0xff;
 	}
 
 	@Override
-	public void writeByte(short offset, byte value) {
+	public void writeByte(int offset, byte value) {
 		data[offset & 0xffff]=value;
 	}
 
@@ -38,7 +38,7 @@ public class Memory extends IMemoryRegion
 	}
 
 	@Override
-	public void writeWord(short offset, short value) {
+	public void writeWord(int offset, short value) {
 		final byte low = (byte) value;
 		final byte hi = (byte) (value>>8);
 
@@ -49,17 +49,17 @@ public class Memory extends IMemoryRegion
 	}
 
 	@Override
-	public short readWord(short offset)
+	public int readWord(int offset)
 	{
 		int realOffset = offset & 0xffff;
 		final byte low = data[realOffset];
 		realOffset = (realOffset+1) & 0xffff;
 		final byte hi = data[realOffset];
-		return (short) (hi<<8|low);
+		return (hi<<8|low) & 0xffff;
 	}
 
 	@Override
-	public void bulkWrite(short startingAddress, byte[] data, int datapos, int len)
+	public void bulkWrite(int startingAddress, byte[] data, int datapos, int len)
 	{
 		final int realOffset = startingAddress & 0xffff;
 		final int size = getAddressRange().getSizeInBytes();

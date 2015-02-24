@@ -109,12 +109,12 @@ public class Disassembler
 		return new IMemoryRegion("dummy", new AddressRange(startingOffset & 0xffff, data.length))
 		{
 			@Override
-			public void writeWord(short offset, short value) {
+			public void writeWord(int offset, short value) {
 				throw new UnsupportedOperationException();
 			}
 
 			@Override
-			public void writeByte(short offset, byte value) {
+			public void writeByte(int offset, byte value) {
 				throw new UnsupportedOperationException();
 			}
 
@@ -124,16 +124,16 @@ public class Disassembler
 			}
 
 			@Override
-			public short readWord(short offset)
+			public int readWord(int offset)
 			{
 				final int low = readByte(offset) & 0xff;
 				final int hi = readByte( (short) (offset+1) ) & 0xff;
-				return (short) ((hi<<8) | low);
+				return ((hi<<8) | low);
 			}
 
 			@Override
-			public byte readByte(short offset) {
-				return data[ offset & 0xffff ];
+			public int readByte(int offset) {
+				return data[ offset & 0xffff ] & 0xff;
 			}
 
 			@Override
@@ -142,7 +142,7 @@ public class Disassembler
 			}
 
 			@Override
-			public void bulkWrite(short startingAddress, byte[] data, int datapos,int len) {
+			public void bulkWrite(int startingAddress, byte[] data, int datapos,int len) {
 				throw new UnsupportedOperationException();
 			}
 		};
@@ -430,7 +430,7 @@ BEQ (Branch on EQual)          $F0
 
 	private void appendByte(int address, byte value)
 	{
-		addLine( (short) address , ".byte", "$"+HexDump.toHex( value ) );
+		addLine( (short) address , ".byte", "$"+HexDump.byteToString( value ) );
 
 	}
 
@@ -477,20 +477,20 @@ BEQ (Branch on EQual)          $F0
 				if ( ! assertOneByteAvailable( opcodeAddress , opcode ) ) {
 					return;
 				}
-				args = "($"+HexDump.toHex( readByte() )+" , X)";
+				args = "($"+HexDump.byteToString( readByte() )+" , X)";
 				break;
 			case 0b001: //	zero page
 				if ( ! assertOneByteAvailable( opcodeAddress , opcode ) ) {
 					return;
 				}
-				args = "$"+HexDump.toHex( readByte() );
+				args = "$"+HexDump.byteToString( readByte() );
 				break;
 			case 0b010: //	#immediate
 				if ( "STA".equals( ins ) || bytesLeft < 1 ) {
 					appendByte( currentOffset-1 , opcode );
 					return;
 				}
-				args = "#$"+HexDump.toHex( readByte() );
+				args = "#$"+HexDump.byteToString( readByte() );
 				break;
 			case 0b011: //	absolute
 				if ( ! assertTwoBytesAvailable( opcodeAddress , opcode ) ) {
@@ -502,13 +502,13 @@ BEQ (Branch on EQual)          $F0
 				if ( ! assertOneByteAvailable( opcodeAddress , opcode ) ) {
 					return;
 				}
-				args = "($"+HexDump.toHex( readByte() )+") , Y";
+				args = "($"+HexDump.byteToString( readByte() )+") , Y";
 				break;
 			case 0b101: //	zero page,X
 				if ( ! assertOneByteAvailable( opcodeAddress , opcode ) ) {
 					return;
 				}
-				args = "$"+HexDump.toHex( readByte() )+" , X";
+				args = "$"+HexDump.byteToString( readByte() )+" , X";
 				break;
 			case 0b110: //	absolute,Y
 				if ( ! assertTwoBytesAvailable( opcodeAddress , opcode ) ) {
@@ -574,13 +574,13 @@ BEQ (Branch on EQual)          $F0
 					appendByte( currentOffset-1 , opcode );
 					return;
 				}
-				args = "#$"+HexDump.toHex( readByte() );
+				args = "#$"+HexDump.byteToString( readByte() );
 				break;
 			case 0b001: //	zero page
 				if ( ! assertOneByteAvailable( opcodeAddress , opcode ) ) {
 					return;
 				}
-				args = "$"+HexDump.toHex( readByte() );
+				args = "$"+HexDump.byteToString( readByte() );
 				break;
 			case 0b010: //	ACCU / implied
 				if ( "STX".equals( ins ) || "LDX".equals( ins ) || "DEC".equals( ins ) || "INC".equals( ins ) ) {
@@ -601,9 +601,9 @@ BEQ (Branch on EQual)          $F0
 				}
 				// with STX and LDX, "zero page,X" addressing becomes "zero page,Y"
 				if ( "LDX".equals( ins ) || "STX".equals( ins ) ) {
-					args = "$"+HexDump.toHex( readByte() )+" , Y";
+					args = "$"+HexDump.byteToString( readByte() )+" , Y";
 				} else {
-					args = "$"+HexDump.toHex( readByte() )+" , X";
+					args = "$"+HexDump.byteToString( readByte() )+" , X";
 				}
 				break;
 			case 0b111: //	absolute,X
@@ -686,13 +686,13 @@ bbb	addressing mode
 				if ( isUnsupportedInstruction( ins , opcode , "BIT" , "JMP" , "STY") || ! assertOneByteAvailable( opcodeAddress , opcode ) ) {
 					return;
 				}
-				args = "#$"+HexDump.toHex( readByte() );
+				args = "#$"+HexDump.byteToString( readByte() );
 				break;
 			case 0b001: //	zero page
 				if ( isUnsupportedInstruction( ins , opcode , "JMP") || ! assertOneByteAvailable( opcodeAddress , opcode ) ) {
 					return;
 				}
-				args = "$"+HexDump.toHex( readByte() );
+				args = "$"+HexDump.byteToString( readByte() );
 				break;
 			case 0b011: //	absolute
 				if ( ! assertTwoBytesAvailable( opcodeAddress , opcode ) ) {
@@ -708,7 +708,7 @@ bbb	addressing mode
 				if ( ! assertOneByteAvailable( opcodeAddress , opcode ) ) {
 					return;
 				}
-				args = "$"+HexDump.toHex( readByte() )+" , X";
+				args = "$"+HexDump.byteToString( readByte() )+" , X";
 				break;
 			case 0b111: //	absolute,X
 				if ( ! "LDY".equals( ins ) ) {
@@ -773,7 +773,7 @@ bbb	addressing mode
 	private byte readByte()
 	{
 		bytesLeft--;
-		return data.readByte( currentOffset++ );
+		return (byte) data.readByte( currentOffset++ );
 	}
 
 	private short readWord()

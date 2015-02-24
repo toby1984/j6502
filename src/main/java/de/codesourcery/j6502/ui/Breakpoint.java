@@ -4,12 +4,12 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public final class Breakpoint {
 
-	public final short address;
+	public final int address;
 	public final boolean isOneshot;
 
-	public Breakpoint(short address, boolean isOneshot)
+	public Breakpoint(int address, boolean isOneshot)
 	{
-		this.address = address;
+		this.address = address & 0xffff;
 		this.isOneshot = isOneshot;
 	}
 
