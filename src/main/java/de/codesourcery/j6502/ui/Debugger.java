@@ -1,6 +1,7 @@
 package de.codesourcery.j6502.ui;
 
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -14,10 +15,9 @@ import java.awt.event.WindowEvent;
 import java.awt.font.LineMetrics;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Consumer;
 
 import javax.swing.JButton;
@@ -25,66 +25,80 @@ import javax.swing.JComponent;
 import javax.swing.JDesktopPane;
 import javax.swing.JFrame;
 import javax.swing.JInternalFrame;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
+import org.apache.commons.io.IOUtils;
+
 import com.sun.glass.events.KeyEvent;
 
+import de.codesourcery.j6502.assembler.Assembler;
+import de.codesourcery.j6502.assembler.parser.Lexer;
+import de.codesourcery.j6502.assembler.parser.Parser;
+import de.codesourcery.j6502.assembler.parser.Scanner;
+import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.Disassembler.Line;
+import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.Emulator;
+import de.codesourcery.j6502.emulator.EmulatorTest;
+import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
+import de.codesourcery.j6502.ui.EmulatorDriver.Mode;
 import de.codesourcery.j6502.ui.WindowLocationHelper.ILocationAware;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class Debugger
 {
-	private final Emulator emulator = new Emulator();
+	protected final Emulator emulator = new Emulator();
+
+	protected static final int LINE_HEIGHT = 15;
 
 	protected static final Color FG_COLOR = Color.GREEN;
 	protected static final Color BG_COLOR = Color.BLACK;
 	protected static final int VERTICAL_LINE_SPACING = 2;
 	protected static final Font MONO_FONT = new Font( "Monospaced", Font.PLAIN, 12 );
 
-	protected static enum Mode { SINGLE_STEP , CONTINOUS; }
-	
 	protected final WindowLocationHelper locationHelper = new WindowLocationHelper();
 
 	protected final EmulatorDriver driver = new EmulatorDriver( emulator ) {
 
 		private long lastTick;
-		
+
 		@Override
 		protected void onStopHook(Throwable t) {
 			SwingUtilities.invokeLater( () -> updateWindows() );
 		}
 
+		@Override
 		protected void onStartHook() {
 			SwingUtilities.invokeLater( () -> updateWindows() );
 		}
 
 		@Override
-		protected void tick() 
+		protected void tick()
 		{
 			final long now = System.currentTimeMillis();
 			long age = now - lastTick;
-			if ( age > 1000 ) 
+			if ( age > 1000 )
 			{
 				lastTick = now;
 				SwingUtilities.invokeLater( () -> updateWindows() );
-				
+
 				final IMemoryRegion memory = emulator.getMemory();
-				
+
 				System.out.println( HexDump.INSTANCE.dump( (short) 1024 ,  memory ,  1024 ,  25*40 ) );
 			}
 		}
 	};
 
 	private final List<ILocationAware> locationAware = new ArrayList<>();
-	
+
 	private final ButtonToolbar toolbar = new ButtonToolbar();
 	private final DisassemblyPanel disassembly = new DisassemblyPanel();
+	private final HexDumpPanel hexPanel = new HexDumpPanel();
 	private final CPUStatusPanel cpuPanel = new CPUStatusPanel();
 
 	public static void main(String[] args)
@@ -109,6 +123,9 @@ public class Debugger
 		final JInternalFrame cpuStatusFrame = wrap( "CPU" , cpuPanel );
 		desktop.add( cpuStatusFrame  );
 
+		final JInternalFrame hexPanelFrame = wrap( "Memory" , hexPanel );
+		desktop.add( hexPanelFrame  );
+
 		final JFrame frame = new JFrame("");
 		frame.addWindowListener( new WindowAdapter() {
 			@Override
@@ -123,18 +140,32 @@ public class Debugger
 				}
 			}
 		});
+
+		final ILocationAware loc = new ILocationAware() {
+
+			@Override
+			public void setLocationPeer(Component frame) {
+				throw new UnsupportedOperationException("setLocationPeer not implemented yet");
+			}
+
+			@Override
+			public Component getLocationPeer() {
+				return frame;
+			}
+		};
+		locationAware.add( loc );
+		locationHelper.applyLocation( loc );
+
+		frame.pack();
 		frame.setContentPane( desktop );
 		frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 
-		frame.setPreferredSize( new Dimension(800,480 ) );
-		frame.pack();
-		
 		frame.setVisible(true);
-		
+
 		updateWindows();
 	}
-	
-	private void onApplicationShutdown() 
+
+	private void onApplicationShutdown()
 	{
 		try {
 			locationAware.forEach( locationHelper::saveLocation);
@@ -147,27 +178,25 @@ public class Debugger
 	private JInternalFrame wrap(String title,JPanel panel)
 	{
 		setup( panel );
-		
+
 		final JInternalFrame frame = new JInternalFrame( title );
-		
-		if ( panel instanceof ILocationAware) 
+
+		if ( panel instanceof ILocationAware)
 		{
 			final ILocationAware loc = (ILocationAware) panel;
-			loc.setInternalFrame( frame );
+			loc.setLocationPeer( frame );
 			locationAware.add( (ILocationAware) panel );
 			locationHelper.applyLocation( loc );
 		}
-		
+
 		frame.setResizable( true );
 		frame.getContentPane().add( panel );
-		frame.pack();		
+		frame.pack();
 		frame.setVisible( true );
-		
 
-		
 		return frame;
 	}
-	
+
 	protected final class ButtonToolbar extends JPanel implements WindowLocationHelper.ILocationAware
 	{
 		public final JButton singleStepButton = new JButton("Step");
@@ -175,22 +204,84 @@ public class Debugger
 		public final JButton stopButton = new JButton("Stop");
 		public final JButton resetButton = new JButton("Reset");
 		public final JButton stepOverButton = new JButton("Step over");
-		
-		private JInternalFrame peer;
-		
+		public final JButton loadButton = new JButton("Load");
+
+		private Component peer;
+
 		@Override
-		public void setInternalFrame(JInternalFrame frame) {
+		public void setLocationPeer(Component frame) {
 			this.peer = frame;
 		}
-		
+
 		@Override
-		public JInternalFrame getInternalFrame() {
+		public Component getLocationPeer() {
 			return peer;
 		}
-		
+
+		private void prepareTest()
+		{
+			driver.setMode( Mode.SINGLE_STEP );
+			emulator.reset();
+
+			final String source = loadTestProgram();
+
+			final AST ast;
+			try {
+				ast = new Parser( new Lexer( new Scanner( source ) ) ).parse();
+			}
+			catch(Exception e)
+			{
+				DisassemblerTest.maybePrintError( source , e );
+				throw e;
+			}
+
+			final Assembler a = new Assembler();
+			final byte[] binary = a.assemble( ast );
+			final int origin = a.getOrigin();
+
+			final IMemoryProvider provider = new IMemoryProvider() {
+
+				@Override
+				public void loadInto(IMemoryRegion region) {
+					region.bulkWrite( (short) origin , binary , 0 , binary.length );
+				}
+			};
+			emulator.setMemoryProvider( provider );
+			emulator.getCPU().pc = (short) origin;
+			driver.removeAllBreakpoints();
+			driver.addBreakpoint( new Breakpoint( (short) 0x45bf , false ) );
+			driver.addBreakpoint( new Breakpoint( (short) 0x40cb , false ) );
+			hexPanel.setAddress( (short) 0x210 );
+			updateWindows();
+		}
+
+		private String loadTestProgram()
+		{
+			InputStream in = EmulatorTest.class.getResourceAsStream( "/test.asm" );
+			if ( in == null ) {
+				throw new RuntimeException("Failed to load /test.asm from classpath");
+			}
+			final StringBuilder buffer = new StringBuilder();
+			try {
+				IOUtils.readLines( in ).forEach( line -> buffer.append( line ).append("\n") );
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
+			final String source = buffer.toString();
+			return source;
+		}
+
 		public ButtonToolbar()
 		{
 			setPreferredSize( new Dimension( 400,50 ) );
+
+			loadButton.addActionListener( event ->
+			{
+				synchronized(emulator) {
+					prepareTest();
+				}
+			});
+
 			singleStepButton.addActionListener( event ->
 			{
 				try
@@ -217,7 +308,7 @@ public class Debugger
 			runButton.addActionListener( ev -> driver.setMode(Mode.CONTINOUS) );
 			stopButton.addActionListener( event -> driver.setMode(Mode.SINGLE_STEP) );
 
-			stepOverButton.addActionListener( ev -> driver.stepReturn() ); 
+			stepOverButton.addActionListener( ev -> driver.stepReturn() );
 
 			setLayout( new FlowLayout() );
 			add( stopButton );
@@ -225,6 +316,7 @@ public class Debugger
 			add( singleStepButton );
 			add( stepOverButton );
 			add( resetButton );
+			add( loadButton );
 
 			updateButtons();
 		}
@@ -250,28 +342,29 @@ public class Debugger
 		}
 		disassembly.setAddress( pc , pc );
 		cpuPanel.repaint();
+		hexPanel.repaint();
 	}
 
 	// CPU status
 	protected final class CPUStatusPanel extends JPanel implements WindowLocationHelper.ILocationAware
 	{
-		private JInternalFrame peer;
-		
+		private Component peer;
+
 		@Override
-		public void setInternalFrame(JInternalFrame frame) {
+		public void setLocationPeer(Component frame) {
 			this.peer = frame;
 		}
-		
+
 		@Override
-		public JInternalFrame getInternalFrame() {
+		public Component getLocationPeer() {
 			return peer;
 		}
-		
+
 		public CPUStatusPanel()
 		{
 			setPreferredSize( new Dimension(200,150 ) );
 		}
-		
+
 		@Override
 		protected void paintComponent(Graphics g)
 		{
@@ -312,111 +405,199 @@ public class Debugger
 		c.setBackground( BG_COLOR );
 		c.setForeground( FG_COLOR );
 	}
-	
-	protected static final class LineWithBounds 
+
+	protected static final class LineWithBounds
 	{
 		public final Disassembler.Line line;
 		public final Rectangle bounds;
-		
+
 		public LineWithBounds(Disassembler.Line line, Rectangle bounds) {
 			this.line = line;
 			this.bounds = bounds;
 		}
-		
-		public boolean isClicked(int x,int y) 
+
+		public boolean isClicked(int x,int y)
 		{
 			return y >= bounds.y && y <= bounds.y+bounds.height;
+		}
+	}
+
+	protected final class HexDumpPanel extends JPanel implements WindowLocationHelper.ILocationAware
+	{
+		private final int bytesToDisplay = 128;
+
+		private Component peer;
+
+		private short startAddress = 0;
+
+		private final HexDump hexdump;
+
+		public HexDumpPanel() {
+			this.hexdump = new HexDump();
+			this.hexdump.setBytesPerLine( 16 );
+			this.hexdump.setPrintAddress(true);
+
+			setFocusable(true);
+			setRequestFocusEnabled( true );
+
+			addKeyListener( new KeyAdapter()
+			{
+				@Override
+				public void keyReleased(java.awt.event.KeyEvent e)
+				{
+					if ( e.getKeyCode() == KeyEvent.VK_PAGE_DOWN ) {
+						nextPage();
+					} else if ( e.getKeyCode() == KeyEvent.VK_PAGE_UP ) {
+						previousPage();
+					} else if ( e.getKeyCode() == KeyEvent.VK_G ) {
+						Short adr = queryAddress();
+						if ( adr != null )
+						{
+							setAddress( adr );
+						}
+					}
+				}
+			});
+		}
+
+		public void setAddress(short adr) {
+			this.startAddress = adr;
+			repaint();
+		}
+
+		public void nextPage() {
+			startAddress = (short) ( (startAddress + bytesToDisplay) & 0xffff);
+			repaint();
+		}
+
+		public void previousPage() {
+			startAddress = (short) ( (startAddress- bytesToDisplay) & 0xffff);
+			repaint();
+		}
+
+		@Override
+		protected void paintComponent(Graphics g)
+		{
+			super.paintComponent(g);
+
+			final String[] lines;
+			synchronized( emulator )
+			{
+				lines = hexdump.dump( startAddress , emulator.getMemory() , startAddress , bytesToDisplay).split("\n");
+			}
+
+			int y = 15;
+			g.setColor( Color.GREEN );
+			for ( String line : lines ) {
+				g.drawString( line , 5 , y );
+				y += LINE_HEIGHT;
+			}
+		}
+
+		@Override
+		public void setLocationPeer(Component frame) {
+			this.peer = frame;
+		}
+
+		@Override
+		public Component getLocationPeer() {
+			return this.peer;
 		}
 	}
 
 	protected final class DisassemblyPanel extends JPanel implements WindowLocationHelper.ILocationAware
 	{
 		private final Disassembler dis = new Disassembler().setAnnotate(true);
-		
-		protected static final int LINE_HEIGHT = 15;
-		
+
 		protected static final int X_OFFSET = 30;
 		protected static final int Y_OFFSET = LINE_HEIGHT;
 
-		
+
 		private final int bytesToDisassemble = 48;
 		private short currentAddress;
 		private Short addressToMark = null;
-		
+
 		private final List<LineWithBounds> lines = new ArrayList<>();
 
-		private JInternalFrame peer;
-		
+		private Component peer;
+
 		@Override
-		public void setInternalFrame(JInternalFrame frame) {
+		public void setLocationPeer(Component frame) {
 			this.peer = frame;
 		}
-		
+
 		@Override
-		public JInternalFrame getInternalFrame() {
+		public Component getLocationPeer() {
 			return peer;
 		}
-		
+
 		public DisassemblyPanel()
 		{
 			setFocusable( true );
 			setRequestFocusEnabled(true);
 			requestFocus();
-			
+
 			setPreferredSize( new Dimension(640,480 ) );
-			
-			addKeyListener( new KeyAdapter() 
+
+			addKeyListener( new KeyAdapter()
 			{
-				public void keyReleased(java.awt.event.KeyEvent e) 
+				@Override
+				public void keyReleased(java.awt.event.KeyEvent e)
 				{
 					if ( e.getKeyCode() == KeyEvent.VK_PAGE_DOWN ) {
 						pageDown();
 					} else if ( e.getKeyCode() == KeyEvent.VK_PAGE_UP ) {
 						pageUp();
+					} else if ( e.getKeyCode() == KeyEvent.VK_G ) {
+						Short adr = queryAddress();
+						if ( adr != null )
+						{
+							setAddress( adr , null );
+						}
 					}
 				}
 			});
-			
-			addMouseListener( new MouseAdapter() 
+
+			addMouseListener( new MouseAdapter()
 			{
 				@Override
-				public void mouseClicked(MouseEvent e) 
+				public void mouseClicked(MouseEvent e)
 				{
 					final Short adr = getAddressForPoint( e.getX(), e.getY() );
-					if ( adr != null ) 
+					if ( adr != null )
 					{
 						final Breakpoint breakpoint = driver.getBreakpoint( adr );
 						if ( breakpoint != null ) {
-							driver.removeBreakpoint( breakpoint ); 
+							driver.removeBreakpoint( breakpoint );
 						} else {
 							driver.addBreakpoint( new Breakpoint( adr , false ) );
 						}
-						repaint();						
+						repaint();
 					}
 				}
 			});
 		}
-		
+
 		public void pageUp() {
 			this.currentAddress = (short) ( this.currentAddress - bytesToDisassemble/2 );
 			lines.clear();
 			repaint();
 		}
-		
+
 		public void pageDown() {
 			this.currentAddress = (short) ( this.currentAddress + bytesToDisassemble/2 );
 			lines.clear();
 			repaint();
 		}
-		
+
 		public void setAddress(short adr,Short addressToMark) {
 			this.addressToMark = addressToMark;
 			this.currentAddress = adr;
 			lines.clear();
 			repaint();
 		}
-		
-		private void disassemble(Graphics g) 
+
+		private void disassemble(Graphics g)
 		{
 			lines.clear();
 
@@ -435,10 +616,10 @@ public class Debugger
 				{
 					alignmentCorrect = false;
 					lines.clear();
-					final Consumer<Line> lineConsumer = new Consumer<Line>() 
+					final Consumer<Line> lineConsumer = new Consumer<Line>()
 					{
 						private int y = Y_OFFSET;
-						
+
 						@Override
 						public void accept(Line line) {
 							final LineMetrics lineMetrics = g.getFontMetrics().getLineMetrics( line.toString(),  g );
@@ -453,21 +634,21 @@ public class Debugger
 					alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
 					offset++;
 				}
-			}			
+			}
 		}
-		
-		private void maybeDisassemble(Graphics g) 
+
+		private void maybeDisassemble(Graphics g)
 		{
-			if ( lines.isEmpty() ) 
+			if ( lines.isEmpty() )
 			{
 				disassemble( g );
-			} 
+			}
 			else if ( addressToMark != null && lines.stream().noneMatch( line -> line.line.address == addressToMark.shortValue() ) ) {
 				disassemble( g );
 			}
 		}
-		
-		public Short getAddressForPoint(int x,int y) 
+
+		public Short getAddressForPoint(int x,int y)
 		{
 			for ( LineWithBounds l : lines ) {
 				if ( l.isClicked(x, y ) ) {
@@ -476,14 +657,14 @@ public class Debugger
 			}
 			return null;
 		}
-		
+
 		@Override
 		protected void paintComponent(Graphics g)
 		{
 			super.paintComponent(g);
 
 			maybeDisassemble( g );
-			
+
 			for ( int i = 0, y = LINE_HEIGHT ; i < lines.size() ; i++ , y+= LINE_HEIGHT )
 			{
 				final LineWithBounds line = lines.get(i);
@@ -495,11 +676,11 @@ public class Debugger
 					g.setColor(Color.RED);
 					g.drawRect( line.bounds.x , line.bounds.y , line.bounds.width , line.bounds.height );
 				}
-				
+
 				final int lineHeight = line.bounds.height;
 				final int circleX = 5;
 				final int circleY = line.bounds.y;
-				
+
 				if ( driver.getBreakpoint( line.line.address ) != null ) {
 					g.fillArc( circleX , circleY , lineHeight , lineHeight , 0 , 360 );
 				} else {
@@ -507,5 +688,15 @@ public class Debugger
 				}
 			}
 		}
+	}
+
+	private Short queryAddress()
+	{
+		final String s = JOptionPane.showInputDialog(null, "Enter hexadecimal address (0-ffff)", "Enter address" , JOptionPane.PLAIN_MESSAGE );
+
+		if ( s == null ) {
+			return null;
+		}
+		return (short) Integer.valueOf( s ,  16 ).intValue();
 	}
 }

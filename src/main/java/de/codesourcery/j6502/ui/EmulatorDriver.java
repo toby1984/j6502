@@ -2,13 +2,19 @@ package de.codesourcery.j6502.ui;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.apache.commons.lang.StringUtils;
+
+import de.codesourcery.j6502.assembler.SourceMap;
+import de.codesourcery.j6502.disassembler.Disassembler;
+import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.Emulator;
-import de.codesourcery.j6502.ui.Debugger.Mode;
+import de.codesourcery.j6502.utils.SourceHelper;
 
 public abstract class EmulatorDriver extends Thread
 {
@@ -17,10 +23,18 @@ public abstract class EmulatorDriver extends Thread
 
 	public volatile Throwable lastException;
 
+	public static enum Mode { SINGLE_STEP , CONTINOUS; }
+
 	private final AtomicReference<Mode> currentMode = new AtomicReference<Mode>(Mode.SINGLE_STEP);
 
 	private final Emulator emulator;
-	
+
+	// FIXME: Remove debug code when done
+	public volatile boolean logEachStep = false;
+	// FIXME: Remove debug code when done
+	public volatile SourceMap sourceMap = null;
+	public volatile SourceHelper sourceHelper = null;
+
 	private Breakpoint oneShotBreakpoint = null;
 	private final Breakpoint[] breakpoints = new Breakpoint[65536];
 
@@ -101,7 +115,7 @@ public abstract class EmulatorDriver extends Thread
 	{
 		this.emulator = emulator;
 		setDaemon(true);
-		setName("emulator-thread");
+		setName("emulator-driver-thread");
 	}
 
 	public Mode getMode()
@@ -114,6 +128,7 @@ public abstract class EmulatorDriver extends Thread
 		final Cmd cmd;
 		if ( Mode.CONTINOUS.equals( newMode ) )
 		{
+			System.out.println("Breakpoints: "+getBreakpoints());
 			cmd = startCommand(true);
 		} else {
 			cmd = stopCommand(true);
@@ -212,13 +227,46 @@ public abstract class EmulatorDriver extends Thread
 				onStart();
 			}
 
-			Throwable exception = null;
 			synchronized( emulator )
 			{
 				final long cycles = cpu.cycles;
 				try {
 					lastException = null;
+
+					/*
+					 * Here the magic happens....
+					 */
+					final short oldAdr = cpu.pc;
+
+					if ( logEachStep )
+					{
+						Disassembler dis = new Disassembler();
+						final AtomicReference<Line> line = new AtomicReference<>(null);
+						boolean printed = false;
+						if ( sourceHelper != null && sourceMap != null ) {
+							Optional<Integer> lineNo = sourceMap.getLineNumberForAddress( oldAdr );
+							if ( lineNo.isPresent() )
+							{
+								String lineText = sourceHelper.getLineText( lineNo.get() );
+								final String col0 = "(line "+lineNo.get()+")";
+								final String col1 = lineText;
+								System.out.print( StringUtils.rightPad( col0 , 15 )+"  "+StringUtils.rightPad( col1 ,  20 )+" ; ");
+								printed = true;
+							}
+						}
+						if ( ! printed )
+						{
+							dis.disassemble( emulator.getMemory() , oldAdr , 3 , l -> line.compareAndSet( null , l ) );
+							System.out.println( line.get() );
+						}
+					}
 					emulator.singleStep();
+
+					if ( logEachStep )
+					{
+						System.out.println( cpu );
+					}
+
 					final long elapsedCycles = cpu.cycles - cycles;
 					cyclesRemaining -= elapsedCycles;
 					Breakpoint bp = breakpoints[ cpu.pc & 0xffff ];
@@ -233,29 +281,25 @@ public abstract class EmulatorDriver extends Thread
 						}
 						sendCmd( stopCommand( false ) );
 					}
+
+					if ( cyclesRemaining <= 0 )
+					{
+						tick();
+					}
 				}
 				catch(final Throwable e)
 				{
 					e.printStackTrace();
-					exception = e;
+					isRunnable = false;
+					lastException = e;
+					cyclesRemaining = 0;
+					sendCmd( stopCommand( false ) );
 				}
-			}
-
-			if ( cyclesRemaining <= 0 )
-			{
-				tick();
-			}
-
-			if ( exception != null )
-			{
-				lastException = exception;
-				cyclesRemaining = 0;
-				sendCmd( stopCommand( false ) );
 			}
 		}
 	}
-	
-	public void addBreakpoint(Breakpoint bp) 
+
+	public void addBreakpoint(Breakpoint bp)
 	{
 		if (bp.isOneshot) {
 			this.oneShotBreakpoint = bp;
@@ -291,13 +335,13 @@ public abstract class EmulatorDriver extends Thread
 		}
 		return false;
 	}
-	
-	public Breakpoint getBreakpoint(short address) 
+
+	public Breakpoint getBreakpoint(short address)
 	{
 		return breakpoints[ address & 0xffff ];
 	}
-	
-	public List<Breakpoint> getBreakpoints() 
+
+	public List<Breakpoint> getBreakpoints()
 	{
 		List<Breakpoint> result = new ArrayList<>();
 		for ( int i = 0 , len = breakpoints.length ; i < len ; i++ ) {
@@ -309,12 +353,12 @@ public abstract class EmulatorDriver extends Thread
 		return result;
 	}
 
-	public void stepReturn() 
+	public void stepReturn()
 	{
 		boolean breakpointAdded = false;
 		synchronized( emulator )
 		{
-			if ( canStepOver() ) 
+			if ( canStepOver() )
 			{
 				addBreakpoint( new Breakpoint( (short) (emulator.getCPU().pc+3) , true  ) );
 				breakpointAdded = true;
@@ -325,7 +369,7 @@ public abstract class EmulatorDriver extends Thread
 		}
 	}
 
-	public void removeBreakpoint(Breakpoint breakpoint) 
+	public void removeBreakpoint(Breakpoint breakpoint)
 	{
 		if ( breakpoint.isOneshot ) {
 			if ( oneShotBreakpoint != null && oneShotBreakpoint.address == breakpoint.address ) {
@@ -334,5 +378,12 @@ public abstract class EmulatorDriver extends Thread
 		} else {
 			this.breakpoints[ breakpoint.address & 0xffff ] = null;
 		}
+	}
+
+	public void removeAllBreakpoints() {
+		for ( int i = 0 ; i < breakpoints.length ; i++ ) {
+			breakpoints[i] = null;
+		}
+		oneShotBreakpoint = null;
 	}
 }

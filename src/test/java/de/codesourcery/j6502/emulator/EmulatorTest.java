@@ -1,13 +1,18 @@
 package de.codesourcery.j6502.emulator;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import junit.framework.TestCase;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.lang.StringUtils;
 
@@ -16,10 +21,15 @@ import de.codesourcery.j6502.assembler.AssemblerTest;
 import de.codesourcery.j6502.assembler.parser.Lexer;
 import de.codesourcery.j6502.assembler.parser.Parser;
 import de.codesourcery.j6502.assembler.parser.Scanner;
+import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
+import de.codesourcery.j6502.ui.Breakpoint;
+import de.codesourcery.j6502.ui.EmulatorDriver;
+import de.codesourcery.j6502.ui.EmulatorDriver.Mode;
 import de.codesourcery.j6502.utils.HexDump;
+import de.codesourcery.j6502.utils.SourceHelper;
 
 public class EmulatorTest  extends TestCase
 {
@@ -402,6 +412,85 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		.writeWord( CPU.BRK_VECTOR_LOCATION , PRG_LOAD_ADDRESS+4 )
 		.assertFlagsNotSet(CPU.Flag.BREAK)
 		.assertX( 0x12 );
+	}
+
+	public void testSanity() throws IOException, InterruptedException
+	{
+		final String source = loadTestProgram();
+
+		final AST ast;
+		try {
+			ast = new Parser( new Lexer( new Scanner( source ) ) ).parse();
+		}
+		catch(Exception e)
+		{
+			DisassemblerTest.maybePrintError( source , e );
+			throw e;
+		}
+
+		final SourceHelper helper = new SourceHelper( source );
+		final Assembler a = new Assembler();
+		final byte[] binary = a.assemble( ast , helper );
+		final int origin = a.getOrigin();
+
+		final IMemoryProvider provider = new IMemoryProvider() {
+
+			@Override
+			public void loadInto(IMemoryRegion region) {
+				region.bulkWrite( (short) origin , binary , 0 , binary.length );
+			}
+		};
+
+		final Emulator e = new Emulator();
+		e.setMemoryProvider( provider );
+
+		CountDownLatch stopped = new CountDownLatch(1);
+
+		final EmulatorDriver driver = new EmulatorDriver( e ) {
+
+			@Override
+			protected void onStartHook() {
+			}
+
+			@Override
+			protected void onStopHook(Throwable t) {
+				stopped.countDown();
+			}
+
+			@Override
+			protected void tick() {
+			}
+		};
+
+		e.reset();
+		e.getCPU().pc = (short) origin;
+
+		driver.logEachStep = true;
+		driver.sourceHelper = helper;
+		driver.sourceMap = a.getSourceMap();
+
+		driver.start();
+		driver.addBreakpoint( new Breakpoint( (short) 0x45bf , false ) );
+		driver.setMode( Mode.CONTINOUS );
+
+		if ( ! stopped.await( 5 , TimeUnit.SECONDS ) )
+		{
+			driver.setMode(Mode.SINGLE_STEP);
+			fail("Test failed to complete after 5 seconds");
+		}
+		byte outcome = e.getMemory().readByte(  (short) 0x210 ); // EXPECTED FINAL RESULTS: $0210 = FF
+		assertEquals( "Test failed , failed test no. "+(outcome & 0xff), (byte) 0xff , outcome );
+	}
+
+	public static String loadTestProgram() throws IOException
+	{
+		InputStream in = EmulatorTest.class.getResourceAsStream( "/test.asm" );
+		assertNotNull( in );
+
+		final StringBuilder buffer = new StringBuilder();
+		IOUtils.readLines( in ).forEach( line -> buffer.append( line ).append("\n") );
+		final String source = buffer.toString();
+		return source;
 	}
 
 	public void testSTX() {

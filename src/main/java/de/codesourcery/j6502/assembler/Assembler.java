@@ -8,12 +8,17 @@ import de.codesourcery.j6502.assembler.parser.ast.IASTNode;
 import de.codesourcery.j6502.assembler.parser.ast.ICompilationContextAware;
 import de.codesourcery.j6502.assembler.parser.ast.IValueNode;
 import de.codesourcery.j6502.utils.HexDump;
+import de.codesourcery.j6502.utils.ITextRegion;
+import de.codesourcery.j6502.utils.SourceHelper;
+import de.codesourcery.j6502.utils.SourceHelper.TextLocation;
 
 
 
 public class Assembler
 {
-	protected DefaultContext context = new DefaultContext();
+	protected static final boolean DEBUG_ENABLED = false;
+
+	protected DefaultContext context;
 
 	protected final class DefaultContext implements ICompilationContext
 	{
@@ -23,9 +28,15 @@ public class Assembler
 		protected int currentAddress;
 		protected int currentPassNo = 0;
 
+		private final SourceMap sourceMap = new SourceMap();
+		private final SourceHelper sourceHelper;
 		private final ISymbolTable symbolTable = new SymbolTable();
 
 		private boolean originSet = false;
+
+		public DefaultContext(SourceHelper sourceHelper) {
+			this.sourceHelper = sourceHelper;
+		}
 
 		@Override
 		public void setOrigin(short adr)
@@ -106,7 +117,9 @@ public class Assembler
 
 		@Override
 		public void debug(IASTNode node, String msg) {
-			System.out.println("PASS #"+currentPassNo+" : "+node+" ("+node.toString()+") : "+msg);
+			if ( DEBUG_ENABLED ) {
+				System.out.println("PASS #"+currentPassNo+" : "+node+" ("+node.toString()+") : "+msg);
+			}
 		}
 
 		public void onePass(AST ast)
@@ -115,12 +128,30 @@ public class Assembler
 			currentAddress = 0;
 			currentWriteOffset = 0;
 			buffer = new byte[1024];
+			sourceMap.clear();
 
 			final Consumer<IASTNode> visitor1 = n ->
 			{
 				if ( n instanceof ICompilationContextAware)
 				{
-					((ICompilationContextAware) n).visit( context );
+					final int start = currentAddress;
+					((ICompilationContextAware) n).visit( this );
+					final int end = currentAddress;
+
+					if ( start != end && sourceHelper != null )
+					{
+						ITextRegion region = n.getTextRegion();
+						if ( region == null ) {
+							region = n.getTextRegionIncludingChildren();
+						}
+						if ( region != null )
+						{
+							TextLocation loc = sourceHelper.getLocation( region.getStartingOffset() );
+							if ( loc != null ) {
+								sourceMap.addAddressRange( (short) start  , end-start , loc.lineNumber );
+							}
+						}
+					}
 				}
 			};
 
@@ -130,7 +161,7 @@ public class Assembler
 			{
 				if ( n instanceof ICompilationContextAware)
 				{
-					((ICompilationContextAware) n).passFinished( context );
+					((ICompilationContextAware) n).passFinished( this );
 				}
 			};
 
@@ -180,9 +211,18 @@ public class Assembler
 
 	public byte[] assemble(AST ast)
 	{
-		context = new DefaultContext();
+		return assemble(ast,null);
+	}
+
+	public byte[] assemble(AST ast,SourceHelper helper)
+	{
+		context = new DefaultContext( helper);
 		context.onePass( ast );
 		context.onePass( ast );
 		return context.getBytes();
+	}
+
+	public SourceMap getSourceMap() {
+		return context.sourceMap;
 	}
 }

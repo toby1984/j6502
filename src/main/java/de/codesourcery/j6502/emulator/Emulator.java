@@ -60,6 +60,8 @@ public class Emulator
 
 	public void singleStep()
 	{
+		short oldPc = cpu.pc;
+
 		if ( PRINT_DISASSEMBLY )
 		{
 			System.out.println("=====================");
@@ -80,12 +82,19 @@ public class Emulator
 			});
 		}
 
-		doSingleStep();
-		
+		try {
+			doSingleStep();
+		}
+		finally
+		{
+			memory.tick( cpu );
+		}
+
 		if ( PRINT_DISASSEMBLY ) {
 			System.out.println( cpu );
 		}
-		cpu.previousPC = cpu.pc;
+
+		cpu.previousPC = oldPc;
 	}
 
 	private void doSingleStep()

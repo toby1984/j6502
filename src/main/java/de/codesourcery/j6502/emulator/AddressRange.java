@@ -23,6 +23,12 @@ public final class AddressRange {
 		}
 	}
 
+	public boolean contains(short adr)
+	{
+		int extended = adr & 0xffff;
+		return startAddress <= extended && extended < endAddress;
+	}
+
 	public static AddressRange range(int start,int end) {
 		if ( end < start ) {
 			throw new IllegalArgumentException("end < start ?");

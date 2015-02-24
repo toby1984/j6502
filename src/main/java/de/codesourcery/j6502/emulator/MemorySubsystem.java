@@ -100,7 +100,7 @@ public final class MemorySubsystem extends IMemoryRegion
 	private WriteOnceMemory kernelROM;
 	private WriteOnceMemory charROM;
 	private WriteOnceMemory basicROM;
-	private IMemoryRegion ioArea;
+	private IOArea ioArea;
 	private IMemoryRegion cartROMLow;
 	private IMemoryRegion cartROMHi;
 
@@ -315,6 +315,11 @@ public final class MemorySubsystem extends IMemoryRegion
 		System.out.println( this );
 	}
 
+	public void tick(CPU cpu)
+	{
+		ioArea.tick( cpu );
+	}
+
 	private void createRegions(int index)
 	{
 		// kernel ROM
@@ -330,7 +335,7 @@ public final class MemorySubsystem extends IMemoryRegion
 		loadROM( "basic_v2.rom" , basicROM );
 
 		// I/O area
-		ioArea = new Memory("I/O area", Bank.BANK5.range );
+		ioArea = new IOArea("I/O area", Bank.BANK5.range );
 
 		cartROMLow = null;
 		cartROMHi = null;
@@ -471,7 +476,7 @@ public final class MemorySubsystem extends IMemoryRegion
 				final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
 				if ( DEBUG_WRITES) {
 					System.out.println("writeByte(): Writing byte $"+HexDump.toHex(value)+" to "+HexDump.toAdr( offset )+" [translated: "+HexDump.toAdr(realOffset)+"] from "+region );
-				}				
+				}
 				region.writeByte( (short) realOffset , value );
 		}
 	}

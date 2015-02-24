@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.ui;
 
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Point;
 import java.io.BufferedWriter;
@@ -13,46 +14,44 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
-import javax.swing.JInternalFrame;
-
-public class WindowLocationHelper 
+public class WindowLocationHelper
 {
 	protected static final String SIZE_PREFIX = "size.";
 	protected static final String LOCATION_PREFIX = "loc.";
 	private Map<String,SizeAndLocation> locations = null;
-	
+
 	private final File file;
-	
+
 	public interface ILocationAware
 	{
-		public void setInternalFrame(JInternalFrame frame);
-		
-		public JInternalFrame getInternalFrame();
+		public void setLocationPeer(Component frame);
+
+		public Component getLocationPeer();
 	}
-	
+
 	protected static final class SizeAndLocation
 	{
 		public final Point location;
 		public final Dimension size;
-		
+
 		public SizeAndLocation(Point location, Dimension size) {
 			this.location = location;
 			this.size = size;
 		}
-		
-		public static SizeAndLocation valueOf(ILocationAware loc) 
+
+		public static SizeAndLocation valueOf(ILocationAware loc)
 		{
-			final JInternalFrame frame = loc.getInternalFrame();
+			final Component frame = loc.getLocationPeer();
 			return new SizeAndLocation( new Point( frame.getLocation() ) , new Dimension( frame.getSize() ) );
 		}
-		
-		public void apply(ILocationAware loc) 
+
+		public void apply(ILocationAware loc)
 		{
 			System.out.println("Setting "+loc.getClass().getName()+" to "+this);
-			loc.getInternalFrame().setLocation( new Point( location ) );
-			loc.getInternalFrame().setPreferredSize( new Dimension( this.size ) );
+			loc.getLocationPeer().setLocation( new Point( location ) );
+			loc.getLocationPeer().setPreferredSize( new Dimension( this.size ) );
 		}
-		
+
 		public void write(String clazz,BufferedWriter writer) throws IOException {
 			writer.write( LOCATION_PREFIX+clazz+"="+location.x+","+location.y+"\n");
 			writer.write( SIZE_PREFIX+clazz+"="+size.width+","+size.height+"\n");
@@ -63,14 +62,14 @@ public class WindowLocationHelper
 			return "SizeAndLocation [location=" + location + ", size=" + size+ "]";
 		}
 	}
-	
-	public WindowLocationHelper() 
+
+	public WindowLocationHelper()
 	{
 		final File homeDir = new File( (String) System.getProperties().get("user.home") );
 		file = new File( homeDir , ".c64_windowlocations" );
 	}
-	
-	private void loadLocations() 
+
+	private void loadLocations()
 	{
 		if ( locations != null ) {
 			return;
@@ -78,21 +77,21 @@ public class WindowLocationHelper
 
 		final Map<String,Point> locs = new HashMap<>();
 		final Map<String,Point> dims = new HashMap<>();
-		
+
 		java.io.BufferedReader reader = null;
-		try 
+		try
 		{
-			if ( file.exists() ) 
+			if ( file.exists() )
 			{
 				reader = new java.io.BufferedReader( new FileReader( file ) );
 				String line;
-				while ( ( line = reader.readLine()) != null ) 
+				while ( ( line = reader.readLine()) != null )
 				{
-					if ( line.startsWith( LOCATION_PREFIX ) ) 
+					if ( line.startsWith( LOCATION_PREFIX ) )
 					{
 						line = line.substring( LOCATION_PREFIX.length() );
 						String[] split = line.split("=");
-						if ( split.length == 2 ) 
+						if ( split.length == 2 )
 						{
 							String clazz = split[0];
 							Point loc = readPoint( split[1]);
@@ -101,7 +100,7 @@ public class WindowLocationHelper
 					} else if ( line.startsWith( SIZE_PREFIX ) ) {
 						line = line.substring( SIZE_PREFIX.length() );
 						String[] split = line.split("=");
-						if ( split.length == 2 ) 
+						if ( split.length == 2 )
 						{
 							String clazz = split[0];
 							Point size = readPoint( split[1]);
@@ -118,7 +117,7 @@ public class WindowLocationHelper
 			}
 		}
 		final HashMap<String,SizeAndLocation> tmp = new HashMap<>();
-		
+
 		final Set<String> allKeys = new HashSet<>();
 		allKeys.addAll( locs.keySet() );
 		allKeys.addAll( dims.keySet() );
@@ -131,8 +130,8 @@ public class WindowLocationHelper
 		}
 		locations = tmp;
 	}
-	
-	private Point readPoint(String s) 
+
+	private Point readPoint(String s)
 	{
 		String[] parts = s.split(",");
 		if ( parts.length == 2 ) {
@@ -140,33 +139,33 @@ public class WindowLocationHelper
 		}
 		return null;
 	}
-	
-	public void applyLocation(ILocationAware window) 
+
+	public void applyLocation(ILocationAware window)
 	{
 		loadLocations();
 		final SizeAndLocation loc = locations.get( window.getClass().getName() );
-		if ( loc != null ) 
+		if ( loc != null )
 		{
 			System.out.println("Apply: "+loc+" to "+window);
 			loc.apply( window );
 		}
 	}
-	
-	public void saveLocation(ILocationAware window) 
+
+	public void saveLocation(ILocationAware window)
 	{
 		loadLocations();
 		SizeAndLocation valueOf = SizeAndLocation.valueOf(window);
 		System.out.println("UPDATE: "+window.getClass().getName()+" -> "+valueOf);
 		locations.put( window.getClass().getName() , valueOf );
 	}
-	
-	public void saveAll() throws IOException 
+
+	public void saveAll() throws IOException
 	{
 		loadLocations();
-		
-		try ( BufferedWriter writer = new BufferedWriter( new FileWriter( file ) ) ) 
+
+		try ( BufferedWriter writer = new BufferedWriter( new FileWriter( file ) ) )
 		{
-			for ( Entry<String, SizeAndLocation> entry : locations.entrySet() ) 
+			for ( Entry<String, SizeAndLocation> entry : locations.entrySet() )
 			{
 				entry.getValue().write( entry.getKey() ,  writer );
 			}

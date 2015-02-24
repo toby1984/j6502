@@ -11,6 +11,13 @@ public class CPU
 	public static final int RESET_VECTOR_LOCATION = 0xfffc;
 	public static final int BRK_VECTOR_LOCATION = 0xfffe;
 
+	/*
+On an NMI, the CPU pushes the low byte and the high byte of the program counter as well as the processor status onto the stack, disables interrupts and
+loads the vector from $FFFA/$FFFB into the program counter and continues fetching instructions from there.
+On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFFE/$FFFF.
+	 */
+	public static final int IRQ_VECTOR_LOCATION = 0xfffe;
+
 	private final IMemoryRegion memory;
 
 	public long cycles = 0;
@@ -47,6 +54,37 @@ public class CPU
 	public CPU(IMemoryRegion memory)
 	{
 		this.memory = memory;
+	}
+
+	public void interrupt(IMemoryRegion mainMemory)
+	{
+		if ( ! isSet(Flag.IRQ_DISABLE ) )
+		{
+			push( (byte) ( ( pc & 0xff00) >>8 ) ,  memory ); // push pc hi
+			push( (byte) ( pc & 0xff ) , memory ); // push pc lo
+			push( flags , memory ); // push processor flags
+			pc = memory.readWord( (short) CPU.IRQ_VECTOR_LOCATION );
+		}
+	}
+
+	public void push(short value,IMemoryRegion region)
+	{
+		final byte hi = (byte) ((value >> 8) & 0xff);
+		final byte lo = (byte) (value & 0xff);
+		push( hi , region );
+		push( lo , region );
+	}
+
+	public void push(byte value,IMemoryRegion region)
+	{
+		decSP();
+		region.writeByte( sp , value );
+	}
+
+	public byte pop(IMemoryRegion region) {
+		final byte result = region.readByte( sp );
+		incSP();
+		return result;
 	}
 
 	public void setFlag(Flag f) {
