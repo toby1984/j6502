@@ -534,9 +534,77 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		.assertX( 0x12 );
 	}
 
+	public void testSanity2() throws Exception {
+
+		final String source = loadTestProgram( "/overflow_test.asm");
+
+		final AST ast;
+		try {
+			ast = new Parser( new Lexer( new Scanner( source ) ) ).parse();
+		}
+		catch(Exception e)
+		{
+			DisassemblerTest.maybePrintError( source , e );
+			throw e;
+		}
+
+		final SourceHelper helper = new SourceHelper( source );
+		final Assembler a = new Assembler();
+		final byte[] binary = a.assemble( ast , helper );
+		final int origin = a.getOrigin();
+
+		final IMemoryProvider provider = new IMemoryProvider() {
+
+			@Override
+			public void loadInto(IMemoryRegion region) {
+				region.bulkWrite( (short) origin , binary , 0 , binary.length );
+			}
+		};
+
+		final Emulator e = new Emulator();
+		e.setMemoryProvider( provider );
+
+		CountDownLatch stopped = new CountDownLatch(1);
+
+		final EmulatorDriver driver = new EmulatorDriver( e ) {
+
+			@Override
+			protected void onStartHook() {
+			}
+
+			@Override
+			protected void onStopHook(Throwable t) {
+				stopped.countDown();
+			}
+
+			@Override
+			protected void tick() {
+			}
+		};
+
+		e.reset();
+		e.getCPU().pc( origin );
+
+		driver.logEachStep = true;
+		driver.sourceHelper = helper;
+		driver.sourceMap = a.getSourceMap();
+
+		driver.start();
+		driver.addBreakpoint( new Breakpoint( (short) 0x103e , false ) );
+		driver.setMode( Mode.CONTINOUS );
+
+		if ( ! stopped.await( 5 , TimeUnit.SECONDS ) )
+		{
+			driver.setMode(Mode.SINGLE_STEP);
+			fail("Test failed to complete after 5 seconds");
+		}
+		byte outcome = (byte) e.getMemory().readByte( 0xa000 );
+		assertEquals( "Test failed" , (byte) 0 , outcome );
+	}
+
 	public void testSanity() throws IOException, InterruptedException
 	{
-		final String source = loadTestProgram();
+		final String source = loadTestProgram( "/test.asm");
 
 		final AST ast;
 		try {
@@ -602,9 +670,9 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		assertEquals( "Test failed , failed test no. "+(outcome & 0xff), (byte) 0xff , outcome );
 	}
 
-	public static String loadTestProgram() throws IOException
+	public static String loadTestProgram(String classpath) throws IOException
 	{
-		InputStream in = EmulatorTest.class.getResourceAsStream( "/test.asm" );
+		InputStream in = EmulatorTest.class.getResourceAsStream( classpath );
 		assertNotNull( in );
 
 		final StringBuilder buffer = new StringBuilder();
