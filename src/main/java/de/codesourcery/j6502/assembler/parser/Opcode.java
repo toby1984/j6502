@@ -329,12 +329,49 @@ There is no way to add without carry. Return To Index
 			System.out.print("ADC: "+a+"+"+b+"+ ( "+( cpu.isSet(Flag.CARRY) ? 1 : 0 )+" )" );
 
 			// see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
-			cpu.setFlag(CPU.Flag.OVERFLOW, ( (a^result)&(b^result)&0x80 ) != 0 );
+			cpu.setFlag(CPU.Flag.OVERFLOW, ( (a^result) & (b^result) & 0x80 ) != 0 );
 			cpu.setFlag( CPU.Flag.NEGATIVE , ( result & 0b1000_0000) != 0 );
 			cpu.setFlag( CPU.Flag.ZERO , ( result & 0xff) == 0 );
 
 			// FIXME: Handle BCD mode
 			if ( cpu.isSet( Flag.DECIMAL_MODE ) ) {
+				/*
+				 * taken from http://www.fceux.com/web/help/fceux.html?6502CPU.html 
+        unsigned
+          A,  // Accumulator
+          AL, // low nybble of accumulator 
+          AH, // high nybble of accumulator
+          C,  // Carry flag
+          Z,  // Zero flag
+          V,  // oVerflow flag 
+          N,  // Negative flag
+          s;  // value to be added to Accumulator 
+          
+       AL = (A & 15) + (s & 15) + C;         // Calculate the lower nybble. 
+
+       AH = (A >> 4) + (s >> 4) + (AL > 15); // Calculate the upper nybble. 
+
+       if (AL > 9) AL += 6;                  // BCD fixup for lower nybble. 
+
+       Z = ((A + s + C) & 255 != 0);         // Zero flag is set just
+
+                                                like in Binary mode.
+
+        // Negative and Overflow flags are set with the same logic than in
+        // Binary mode, but after fixing the lower nybble. 
+
+       N = (AH & 8 != 0);
+
+       V = ((AH << 4) ^ A) & 128 && !((A ^ s) & 128);
+
+       if (AH > 9) AH += 6;                  // BCD fixup for upper nybble.
+
+       // Carry is the only flag set after fixing the result.
+
+       C = (AH > 15);
+
+       A = ((AH << 4) | (AL & 15)) & 255;				 
+				 */
 				throw new RuntimeException("ADC with BCD currently not implemented");
 			}
 			cpu.setFlag( Flag.CARRY , result > 255 );
@@ -420,6 +457,38 @@ lack thereof and the sign (i.e. A>=$80) of the accumulator.
 			// FIXME: Handle BCD mode
 
 			if ( cpu.isSet( Flag.DECIMAL_MODE ) ) {
+				/* taken from http://www.fceux.com/web/help/fceux.html?6502CPU.html
+        unsigned
+          A,  // Accumulator
+          AL, // low nybble of accumulator 
+          AH, // high nybble of accumulator
+          C,  // Carry flag
+          Z,  // Zero flag 
+          V,  // oVerflow flag
+          N,  // Negative flag
+
+          s;  // value to be added to Accumulator
+
+       AL = (A & 15) - (s & 15) - !C;        // Calculate the lower nybble.
+
+       if (AL & 16) AL -= 6;                 // BCD fixup for lower nybble.
+
+       AH = (A >> 4) - (s >> 4) - (AL & 16); // Calculate the upper nybble.
+
+       if (AH & 16) AH -= 6;                 // BCD fixup for upper nybble.
+
+       // The flags are set just like in Binary mode.
+
+       C = (A - s - !C) & 256 != 0;
+
+       Z = (A - s - !C) & 255 != 0;
+
+       V = ((A - s - !C) ^ s) & 128 && (A ^ s) & 128;
+
+       N = (A - s - !C) & 128 != 0;
+
+       A = ((AH << 4) | (AL & 15)) & 255;				 
+				 */
 				throw new RuntimeException("SBC with BCD currently not implemented");
 			}
 
