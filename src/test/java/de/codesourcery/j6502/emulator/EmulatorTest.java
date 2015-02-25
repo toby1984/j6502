@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import junit.framework.TestCase;
 
@@ -22,6 +23,7 @@ import de.codesourcery.j6502.assembler.parser.Lexer;
 import de.codesourcery.j6502.assembler.parser.Parser;
 import de.codesourcery.j6502.assembler.parser.Scanner;
 import de.codesourcery.j6502.assembler.parser.ast.AST;
+import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
@@ -92,31 +94,111 @@ Indirect,Y    CMP ($44),Y   $D1  2   5+
 	public void testSBC() {
 
 		/*
-MODE           SYNTAX       HEX LEN TIM
-Immediate     SBC #$44      $E9  2   2
-Zero Page     SBC $44       $E5  2   3
-Zero Page,X   SBC $44,X     $F5  2   4
-Absolute      SBC $4400     $ED  3   4
-Absolute,X    SBC $4400,X   $FD  3   4+
-Absolute,Y    SBC $4400,Y   $F9  3   4+
-Indirect,X    SBC ($44,X)   $E1  2   6
-Indirect,Y    SBC ($44),Y   $F1  2   5+
+Inputs	       Outputs		    Example
+M7 	N7 	C6     C7 	B	S7 	V	Borrow / Overflow	                    Hex	Unsigned	             Signed
+0	1	0       0   1	0	0	Unsigned borrow but no signed overflow	0x50-0xf0=0x60	80-240=96	 80--16=96
+0	1	1       0   1	1	1	Unsigned borrow and signed overflow	    0x50-0xb0=0xa0	80-176=160	 80--80=-96
+0	0	0       0   1	1	0	Unsigned borrow but no signed overflow	0x50-0x70=0xe0	80-112=224	 80-112=-32
+0	0	1       1   0	0	0	No unsigned borrow or signed overflow	0x50-0x30=0x120	80-48=32	 80-48=32
+1	1	0       0   1	1	0	Unsigned borrow but no signed overflow	0xd0-0xf0=0xe0	208-240=224	-48--16=-32
+1	1	1       1   0	0	0	No unsigned borrow or unsigned overflow	0xd0-0xb0=0x120	208-176=32	-48--80=32
+1	0	0       1   0	0	1	No unsigned borrow but signed overflow	0xd0-0x70=0x160	208-112=96	-48-112=96
+
+1	0	1       1   0	1	0	No unsigned borrow or signed overflow	0xd0-0x30=0x1a0	208-48=160	-48-48=-96
 		 */
+		// carry clear => borrow    => CLC
+		// carry set   => no borrow => SEC
+		execute("SEC\n LDA #80\n SBC #240").assertA( 96 ).assertFlags(); // carry = 1 => NO BORROW
+		execute("SEC\n LDA #80\n SBC #176").assertA( 160 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW); // carry = 0 => BORROW
+		execute("SEC\n LDA #80\n SBC #112").assertA( 224 ).assertFlags(CPU.Flag.NEGATIVE); // carry = 0 => BORROW
+		execute("SEC\n LDA #80\n SBC #48").assertA( 32 ).assertFlags(CPU.Flag.CARRY); // carry = 0 => BORROW
+
+		execute("SEC\n LDA #208\n SBC #240").assertA( 224 ).assertFlags(CPU.Flag.NEGATIVE); // carry = 0 => BORROW
+		execute("SEC\n LDA #208\n SBC #176").assertA( 32 ).assertFlags(CPU.Flag.CARRY); // carry = 0 => BORROW
+
+		execute("SEC\n LDA #208\n SBC #112").assertA( 96 ).assertFlags(CPU.Flag.OVERFLOW, CPU.Flag.CARRY ); // carry = 0 => BORROW
+		execute("SEC\n LDA #208\n SBC #48").assertA( 160 ).assertFlags(CPU.Flag.NEGATIVE, CPU.Flag.CARRY ); // carry = 0 => BORROW
+	}
+
+	public void testOverflowBit()
+	{
+		// -64 - 64 = -128 -1 = -129
+		execute("SEC\n LDA #$C0\n SBC #$40").assertA( -129 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.OVERFLOW); //  -64 - 64 - 1 = -129, returns V = 1
+
+		// >>>>>>>>>>>>>>> examples taken from http://www.6502.org/tutorials/vflag.html
+
+        /* SEC      ; -128 - 1 = -129, returns V = 1
+        * LDA #$80
+        * SBC #$01
+        */
+		execute("SEC\n LDA #$80\n SBC #$01").assertA(-129).assertFlags( CPU.Flag.CARRY );
 
 		/*
-  IF (P.D)
-    t = bcd(A) - bcd(M) - !P.C
-    P.V = (t>99 OR t<0) ? 1:0
-  ELSE
-    t = A - M - !P.C
-    P.V = (t>127 OR t<-128) ? 1:0
-  P.C = (t>=0) ? 1:0
-  P.N = t.7
-  P.Z = (t==0) ? 1:0
-  A = t & 0xFF
+		 *   CLC      ; 1 + 1 = 2, returns V = 0
+         * LDA #$01
+         * ADC #$01 */
+		execute("CLC\n LDA #$01\n ADC #$01").assertFlagsNotSet( CPU.Flag.OVERFLOW );
+
+         /*
+         * CLC      ; 1 + -1 = 0, returns V = 0
+         * LDA #$01
+         * ADC #$FF
+         */
+		execute("CLC\n LDA #$01\n ADC #$ff").assertFlagsNotSet( CPU.Flag.OVERFLOW );
+
+         /* CLC      ; 127 + 1 = 128, returns V = 1
+         * LDA #$7F
+         * ADC #$01
+         */
+		execute("CLC\n LDA #$7f\n ADC #$01").assertFlags( CPU.Flag.OVERFLOW , CPU.Flag.NEGATIVE );
+
+         /* CLC      ; -128 + -1 = -129, returns V = 1
+         * LDA #$80
+         * ADC #$FF
+         */
+		execute("CLC\n LDA #$80\n ADC #$ff").assertFlags( CPU.Flag.OVERFLOW , CPU.Flag.CARRY );
+
+         /* SEC      ; 0 - 1 = -1, returns V = 0
+         * LDA #$00
+         * SBC #$01
+         */
+		execute("SEC\n LDA #$00\n SBC #$01").assertFlagsNotSet( CPU.Flag.OVERFLOW );
+
+         /* SEC      ; 127 - -1 = 128, returns V = 1
+         * LDA #$7F
+         * SBC #$FF
 		 */
-		// FIXME: Write tests !
-		fail("testSBC() needs to be implemented");
+		execute("SEC\n LDA #$7f\n SBC #$ff").assertFlags( CPU.Flag.OVERFLOW , CPU.Flag.NEGATIVE , CPU.Flag.CARRY );
+
+		execute("SEC\n LDA #$3F\n ADC #$40").assertA( 128 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.NEGATIVE); // 63 + 64 + 1 = 128, returns V = 1
+	}
+
+	public void testADC2() {
+		/*
+Inputs	    Outputs		    Example
+M7 	N7 	C6 	C7 	S7 	V	Carry / Overflow	                    Hex	            Unsigned	Signed
+0	0	0	0	0	0	No unsigned carry or signed overflow	0x50+0x10=0x60	80+16=96	80+16=96
+0	0	1	0	1	1	No unsigned carry but signed overflow	0x50+0x50=0xa0	80+80=160	80+80=-96
+0	1	0	0	1	0	No unsigned carry or signed overflow	0x50+0x90=0xe0	80+144=224	80+-112=-32
+0	1	1	1	0	0	Unsigned carry, but no signed overflow	0x50+0xd0=0x120	80+208=288	80+-48=32
+1	0	0	0	1	0	No unsigned carry or signed overflow	0xd0+0x10=0xe0	208+16=224	-48+16=-32
+1	0	1	1	0	0	Unsigned carry but no unsigned overflow	0xd0+0x50=0x120	208+80=288	-48+80=32
+
+1	1	0	1	0	1	Unsigned carry and signed overflow	    0xd0+0x90=0x160	208+144=352	-48+-112=96
+
+1	1	1	1	1	0	Unsigned carry, but no signed overflow	0xd0+0xd0=0x1a0	208+208=416	-48+-48=-96
+		 */
+		execute("CLC\n LDA #80\n ADC #16\n").assertA( 96 ).assertFlags();
+		execute("CLC\n LDA #80\n ADC #80\n").assertA( 160 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.NEGATIVE);
+		execute("CLC\n LDA #80\n ADC #144\n").assertA( 224 ).assertFlags(CPU.Flag.NEGATIVE);
+		execute("CLC\n LDA #80\n ADC #208\n").assertA( 288 ).assertFlags(CPU.Flag.CARRY);
+
+		execute("CLC\n LDA #208\n ADC #16\n").assertA( 224 ).assertFlags(CPU.Flag.NEGATIVE);
+		execute("CLC\n LDA #208\n ADC #80\n").assertA( 288 ).assertFlags(CPU.Flag.CARRY);
+
+		execute("CLC\n LDA #208\n ADC #144\n").assertA( 352 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.OVERFLOW);
+		execute("CLC\n LDA #208\n ADC #208\n").assertA( 416 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.NEGATIVE);
+
 	}
 
 	public void testADC() {
@@ -145,7 +227,7 @@ Indirect,Y    ADC ($44),Y   $71  2   5+
 			 */
 
 		execute("LDA #$01 CLC\n ADC #$01").assertA( 0x02 ).assertFlags();
-		execute("LDA #$ff CLC\n ADC #$01").assertA( 0x00 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.OVERFLOW , CPU.Flag.CARRY);
+		execute("LDA #$ff CLC\n ADC #$01").assertA( 0x00 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY);
 		execute("LDA #$7f CLC\n ADC #$01").assertA( 0x80 ).assertFlags(CPU.Flag.OVERFLOW , CPU.Flag.NEGATIVE );
 
 		execute("LDA #$01 STA $44 CLC\n LDA #$01\n ADC $44").assertA( 0x02 ).assertFlags();
@@ -286,6 +368,44 @@ ASL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 
 		execute("CLC\n LDA #"+hex(pattern1)+"\n STA $4000\n ASL $4000").assertMemoryContains( 0x4000 , pattern2 ).assertFlagsNotSet(CPU.Flag.CARRY);
 		execute("CLC\n LDX #$10\n LDA #"+hex(pattern1)+"\n STA $4000,X\n ASL $4000,X").assertMemoryContains( 0x4010, pattern2 ).assertFlagsNotSet(CPU.Flag.CARRY);
+	}
+
+	public void testShift()
+	{
+		// $4b = 1001011
+		String source = "LDA #$4B\n "
+				+ "LSR\n " // 0100101 , Carry = 1
+				+ "ASL"; // 1001010 , Carry = 0
+		execute(source).assertA( 0b1001010 ).assertFlagsNotSet(CPU.Flag.CARRY);
+	}
+
+	public void testShift2() {
+		 final String source="LDA #$b4\n"+ // 10110100
+           "STA $70  \n"+
+           "LDX $70  \n"+
+           "ORA #$03 \n"+ // 10110111
+           "STA $0C,X\n"+
+           "ROL $C0  \n"+
+           "ROR $C0  \n"+
+           "ROR $C0  \n"+
+           "LDA $0C,X";
+
+		 	final int[] pc = { 0 };
+			execute(source)
+			.beforeEachStep( emulator -> {
+				pc[0] = emulator.getCPU().pc();
+			})
+			.afterEachStep(emulator ->
+			{
+				System.out.println("------------");
+				final int end = emulator.getCPU().pc();
+				Disassembler dis = new Disassembler();
+				dis.disassemble( emulator.getMemory() , pc[0] , end - pc[0] , line -> System.out.println(line) );
+				final byte value = (byte) emulator.getMemory().readByte( 0xc0 );
+				System.out.println( emulator.getCPU() );
+				System.out.println("$c0 = $"+HexDump.byteToString( value )+" %"+HexDump.toBinaryString( value) );
+			})
+			.assertMemoryContains( 0xc0 ,  0b01011011 ).assertFlags(CPU.Flag.CARRY);
 	}
 
 	public void testLSR() {
@@ -849,19 +969,31 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 		private boolean executed = false;
 
 		private final List<Runnable> blocks = new ArrayList<>();
+		private final List<Consumer<Emulator>> afterEachStep = new ArrayList<>();
+		private final List<Consumer<Emulator>> beforeEachStep = new ArrayList<>();
 
 		private final boolean failOnBreak;
-		
+
 		public Helper(String source) {
 			this.source = source;
 			this.failOnBreak = true;
 		}
-		
+
+		public Helper afterEachStep(Consumer<Emulator> r) {
+			afterEachStep.add(r);
+			return this;
+		}
+
+		public Helper beforeEachStep(Consumer<Emulator> r) {
+			beforeEachStep.add(r);
+			return this;
+		}
+
 		public Helper(String source, boolean failOnBreak ) {
 			this.source = source;
 			this.failOnBreak = failOnBreak;
 		}
-		
+
 		public Helper assertFlags(CPU.Flag... flags)
 		{
 			maybeExecute();
@@ -968,7 +1100,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 			final int expected = value;
 			final int actual = emulator.getCPU().getAccumulator();
 			assertEquals( "Expected accumulator to contain "+hex((byte)expected)+" ("+bin((byte) expected)+")"
-					+ " but was "+hex((byte)actual)+" ("+bin((byte)actual)+")",expected & 0xff , actual & 0xff );
+					+ " but was "+hex((byte)actual)+" ("+bin((byte)actual)+")", expected & 0xff , actual & 0xff );
 			return this;
 		}
 
@@ -1130,8 +1262,11 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 				int instructions = maxInstructions;
 				while ( instructions-- > 0 )
 				{
-					try {
+					try
+					{
+						beforeEachStep.forEach( r -> r.accept( emulator ) );
 						emulator.singleStep();
+						afterEachStep.forEach( r -> r.accept( emulator ) );
 					} catch(final InvalidOpcodeException e) {
 						break;
 					}
@@ -1174,7 +1309,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 	{
 		return new Helper(source,failOnBreak);
 	}
-	
+
 	private static String bin(byte b) {
 		return "0b"+StringUtils.leftPad( Integer.toBinaryString( b & 0xff ) , 8 , '0' );
 	}
@@ -1186,8 +1321,8 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 	private static String hex(short b) {
 		return "$"+HexDump.toHex( b );
 	}
-	
+
 	private static String hex(int b) {
 		return "$"+HexDump.toHex( (short) b );
-	}	
+	}
 }

@@ -50,7 +50,7 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		public byte clear(byte flags) { return (byte) (flags&~value); }
 		public byte set(byte flags) { return (byte) (flags | value); }
 	}
-	
+
 	public void pc(int value) {
 		this.pc = value & 0xffff;
 	}
@@ -58,15 +58,15 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 	public int pc() {
 		return pc;
 	}
-	
+
 	public void incPC() {
 		this.pc = (this.pc + 1) & 0xffff;
 	}
-	
+
 	public void incPC(int increment) {
 		this.pc = (this.pc + increment) & 0xffff;
 	}
-	
+
 	public CPU(IMemoryRegion memory)
 	{
 		this.memory = memory;
@@ -131,7 +131,7 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		System.out.println("CPU.reset(): Settings PC to "+HexDump.toAdr( pc ) );
 		setAccumulator(0);
 		setX((byte) 0);
-		setY((byte) 0);		
+		setY((byte) 0);
 		sp = 0x1ff;
 		flags = CPU.Flag.IRQ_DISABLE.set((byte) 0);
 	}
@@ -151,12 +151,14 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		final String dump = getStackDump();
 
 		final StringBuilder buffer = new StringBuilder();
+
+		final String accuBinary = HexDump.toBinaryString( (byte) accumulator );
 		buffer
 		.append( "PC: ").append( HexDump.toHexBigEndian( pc ) )
 		.append("    ")
 		.append( flagBuffer )
 		.append("    ")
-		.append("A: ").append( HexDump.byteToString( (byte) getAccumulator() ) )
+		.append("A: ").append( HexDump.byteToString( (byte) getAccumulator() ) ).append("( "+accuBinary+" )")
 		.append("    ")
 		.append("X: ").append( HexDump.byteToString( (byte) getX() ) )
 		.append("    ")

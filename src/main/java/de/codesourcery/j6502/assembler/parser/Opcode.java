@@ -321,32 +321,24 @@ There is no way to add without carry. Return To Index
 				default:
 					throw new RuntimeException("Unreachable code reached");
 			}
-			b &= 0xff;
 
-			/*
-  t = A + M + P.C
-  P.V = (A.7!=t.7) ? 1:0
-  P.N = A.7
-  P.Z = (t==0) ? 1:0
-  IF (P.D)
-    t = bcd(A) + bcd(M) + P.C
-    P.C = (t>99) ? 1:0
-  ELSE
-    P.C = (t>255) ? 1:0
-  A = t & 0xFF
-			 */
-			final int a = (cpu.getAccumulator() & 0xff );
+			final int a = cpu.getAccumulator();
+
+			// perform UNSIGNED addition
 			final int result = a + b + ( cpu.isSet(Flag.CARRY) ? 1 : 0 );
+			System.out.print("ADC: "+a+"+"+b+"+ ( "+( cpu.isSet(Flag.CARRY) ? 1 : 0 )+" )" );
 
-			cpu.setFlag(CPU.Flag.OVERFLOW , ( a & 0b1000_0000) != ( result & 0b1000_0000) );
+			// see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+			cpu.setFlag(CPU.Flag.OVERFLOW, ( (a^result)&(b^result)&0x80 ) != 0 );
 			cpu.setFlag( CPU.Flag.NEGATIVE , ( result & 0b1000_0000) != 0 );
 			cpu.setFlag( CPU.Flag.ZERO , ( result & 0xff) == 0 );
+
 			// FIXME: Handle BCD mode
 			if ( cpu.isSet( Flag.DECIMAL_MODE ) ) {
 				throw new RuntimeException("ADC with BCD currently not implemented");
 			}
-			cpu.setFlag( Flag.CARRY , result >255 );
-			cpu.setAccumulator((byte) result);
+			cpu.setFlag( Flag.CARRY , result > 255 );
+			cpu.setAccumulator(result);
 		}
 	},
 	CMP("CMP")
@@ -422,7 +414,15 @@ lack thereof and the sign (i.e. A>=$80) of the accumulator.
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b111 ); }
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator)
+		{
+
+			// FIXME: Handle BCD mode
+
+			if ( cpu.isSet( Flag.DECIMAL_MODE ) ) {
+				throw new RuntimeException("SBC with BCD currently not implemented");
+			}
+
 			/*
 MODE           SYNTAX       HEX LEN TIM
 Immediate     SBC #$44      $E9  2   2
@@ -474,33 +474,29 @@ operation. If the carry is cleared by the operation, it indicates a borrow occur
 				default:
 					throw new RuntimeException("Unreachable code reached");
 			}
-			b &= 0xff;
 
 			/*
-  IF (P.D)
-    t = bcd(A) - bcd(M) - !P.C
-    P.V = (t>99 OR t<0) ? 1:0
-  ELSE
-    t = A - M - !P.C
-    P.V = (t>127 OR t<-128) ? 1:0
-  P.C = (t>=0) ? 1:0
-  P.N = t.7
-  P.Z = (t==0) ? 1:0
-  A = t & 0xFF
+M - N - B	SBC of M and N with borrow B
+→ M - N - B + 256	Add 256, which doesn't change the 8-bit value.
+= M - N - (1-C) + 256	Replace B with the inverted carry flag.
+= M + (255-N) + C	Simple algebra.
+= M + (ones complement of N) + C	255 - N is the same as flipping the bits.
 			 */
-			final int a = (cpu.getAccumulator() & 0xff );
-			final int result = a - b - ( cpu.isCleared(Flag.CARRY) ? 1 : 0 );
+			final int a = cpu.getAccumulator();
+			b = 255-b;
+			int result = a + b + ( cpu.isSet(Flag.CARRY) ? 1 : 0 );
+
+			// see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+			cpu.setFlag(CPU.Flag.OVERFLOW, ( (a^result) & (b^result) & 0x80 ) != 0 );
+			cpu.setFlag( CPU.Flag.NEGATIVE , ( result & 0b1000_0000) != 0 );
+			cpu.setFlag( CPU.Flag.ZERO , ( result & 0xff) == 0 );
 
 			// FIXME: Handle BCD mode
 			if ( cpu.isSet( Flag.DECIMAL_MODE ) ) {
-				throw new RuntimeException("SBC with BCD currently not implemented");
+				throw new RuntimeException("ADC with BCD currently not implemented");
 			}
-			// (t>127 OR t<-128) ? 1:0
-			cpu.setFlag(CPU.Flag.OVERFLOW , (result > 127) || (result < -128) );
-			cpu.setFlag( Flag.CARRY , ( result & ~0b0111_1111) == 0 );
-			cpu.setFlag( CPU.Flag.NEGATIVE , ( result & 0b1000_0000) != 0 );
-			cpu.setFlag( CPU.Flag.ZERO , ( result & 0xff) == 0 );
-			cpu.setAccumulator((byte) result);
+			cpu.setFlag( Flag.CARRY , result > 255 );
+			cpu.setAccumulator(result);
 		}
 	},
 	// generic #2
@@ -534,18 +530,18 @@ ASL shifts all bits left one position. 0 is shifted into bit 0 and the original 
 			switch(opcode)
 			{
 				case 0x0A: // Accumulator   ROL A         $2A  1   2
-					result = ((cpu.getAccumulator() & 0xff) << 1);
+					result = cpu.getAccumulator() << 1;
 					cpu.setAccumulator(result);
 					cpu.incPC();
 					cpu.cycles += 2;
 					cpu.setFlag(Flag.ZERO , ( result & 0xff) == 0 );
-					cpu.setFlag(Flag.NEGATIVE , (result & 0b10000000) != 0 );
-					cpu.setFlag(Flag.CARRY , (result & 0b100000000) != 0 );
+					cpu.setFlag(Flag.NEGATIVE , (result & 0b1000_0000) != 0 );
+					cpu.setFlag(Flag.CARRY , (result &  0b1_0000_0000) != 0 );
 					return; /* RETURN ! */
 				case 0x06: // Zero Page     ROL $44       $26  2   5
 					adr = memory.readByte( cpu.pc()+1);
 					cpu.incPC(2);
-					result = ((memory.readByte( adr ) & 0xff) << 1);
+					result = memory.readByte( adr ) << 1;
 					cpu.cycles += 5;
 					break;
 				case 0x16: // Zero Page,X   ROL $44,X     $36  2   6
@@ -553,20 +549,20 @@ ASL shifts all bits left one position. 0 is shifted into bit 0 and the original 
 					cpu.incPC(2);
 					adr += cpu.getX();
 					adr &= 0xff;
-					result = ((memory.readByte( adr ) & 0xff) << 1);
+					result = memory.readByte( adr ) << 1;
 					cpu.cycles += 6;
 					break;
 				case 0x0E: // Absolute      ROL $4400     $2E  3   6
 					adr = memory.readWord( cpu.pc()+1 );
 					cpu.incPC(3);
-					result = ((memory.readByte( adr ) & 0xff) << 1);
+					result = memory.readByte( adr ) << 1;
 					cpu.cycles += 6;
 					break;
 				case 0x1E: // Absolute,X    ROL $4400,X   $3E  3   7
 					adr = memory.readWord( cpu.pc()+1 );
 					cpu.incPC(3);
 					adr += cpu.getX();
-					result = ((memory.readByte( adr ) & 0xff) << 1);
+					result = memory.readByte( adr ) << 1;
 					cpu.cycles += 7;
 					break;
 				default:
@@ -574,8 +570,8 @@ ASL shifts all bits left one position. 0 is shifted into bit 0 and the original 
 			}
 			memory.writeByte( adr , (byte) result );
 			cpu.setFlag(Flag.ZERO , (result & 0xff) == 0 );
-			cpu.setFlag(Flag.NEGATIVE , (result & 0b10000000) != 0 );
-			cpu.setFlag(Flag.CARRY , (result & 0b100000000) != 0 );
+			cpu.setFlag(Flag.NEGATIVE , (result & 0b1000_0000) != 0 );
+			cpu.setFlag(Flag.CARRY , (result  & 0b1_0000_0000) != 0 );
 		}
 	},
 	ROL("ROL")
@@ -605,18 +601,18 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 			switch(opcode)
 			{
 				case 0x2A: // Accumulator   ROL A         $2A  1   2
-					result = ((cpu.getAccumulator() & 0xff) << 1) | carryMask ;
+					result = (cpu.getAccumulator() << 1) | carryMask ;
 					cpu.setAccumulator((byte) result);
 					cpu.incPC();
 					cpu.cycles += 2;
 					cpu.setFlag(Flag.ZERO , ( result & 0xff) == 0 );
-					cpu.setFlag(Flag.NEGATIVE , (result & 0b10000000) != 0 );
-					cpu.setFlag(Flag.CARRY , (result & 0b100000000) != 0 );
+					cpu.setFlag(Flag.NEGATIVE , (result &   0b1000_0000) != 0 );
+					cpu.setFlag(Flag.CARRY ,    (result & 0b1_0000_0000) != 0 );
 					return; /* RETURN ! */
 				case 0x26: // Zero Page     ROL $44       $26  2   5
 					adr = memory.readByte( cpu.pc()+1 );
 					cpu.incPC(2);
-					result = ((memory.readByte( adr ) & 0xff) << 1) | carryMask;
+					result = (memory.readByte( adr ) << 1) | carryMask;
 					cpu.cycles += 5;
 					break;
 				case 0x36: // Zero Page,X   ROL $44,X     $36  2   6
@@ -624,20 +620,20 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 					cpu.incPC(2);
 					adr += cpu.getX();
 					adr &= 0xff;
-					result = ((memory.readByte( adr ) & 0xff) << 1) | carryMask;
+					result = (memory.readByte( adr ) << 1) | carryMask;
 					cpu.cycles += 6;
 					break;
 				case 0x2E: // Absolute      ROL $4400     $2E  3   6
 					adr = memory.readWord( cpu.pc()+1);
 					cpu.incPC(3);
-					result = ((memory.readByte( adr ) & 0xff) << 1) | carryMask;
+					result = (memory.readByte( adr ) << 1) | carryMask;
 					cpu.cycles += 6;
 					break;
 				case 0x3E: // Absolute,X    ROL $4400,X   $3E  3   7
 					adr = memory.readWord( cpu.pc()+1 );
 					cpu.incPC(3);
 					adr += cpu.getX();
-					result = ((memory.readByte( adr ) & 0xff) << 1) | carryMask;
+					result = (memory.readByte( adr ) << 1) | carryMask;
 					cpu.cycles += 7;
 					break;
 				default:
@@ -676,16 +672,15 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 			LSR shifts all bits right one position. 0 is shifted into bit 7 and the original bit 0 is shifted into the Carry.
 			 */
 
-
 			final int origValue;
 			int adr;
 			final int result;
 			switch(opcode)
 			{
 				case 0x4A: // Accumulator   ROR A         $2A  1   2
-					origValue = cpu.getAccumulator() & 0xff;
-					result = ( origValue >>> 1);
-					cpu.setAccumulator((byte) result);
+					origValue = cpu.getAccumulator();
+					result = origValue >>> 1;
+					cpu.setAccumulator( result);
 					cpu.incPC();
 					cpu.cycles += 2;
 					cpu.setFlag(Flag.ZERO , ( result & 0xff) == 0 );
@@ -695,7 +690,7 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 				case 0x46: // Zero Page     ROR $44       $26  2   5
 					adr = memory.readByte( cpu.pc()+1);
 					cpu.incPC(2);
-					origValue = (memory.readByte( adr ) & 0xff);
+					origValue = memory.readByte( adr );
 					result = (origValue >>> 1);
 					cpu.cycles += 5;
 					break;
@@ -704,14 +699,14 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 					cpu.incPC(2);
 					adr += cpu.getX();
 					adr &= 0xff;
-					origValue = (memory.readByte( adr ) & 0xff);
+					origValue = memory.readByte( adr );
 					result = (origValue >>> 1);
 					cpu.cycles += 6;
 					break;
 				case 0x4E: // Absolute      ROR $4400     $2E  3   6
 					adr = memory.readWord( cpu.pc()+1 );
 					cpu.incPC(3);
-					origValue = memory.readByte( adr ) & 0xff;
+					origValue = memory.readByte( adr );
 					result = (origValue >>> 1);
 					cpu.cycles += 6;
 					break;
@@ -719,7 +714,7 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 					adr = memory.readWord( cpu.pc()+1 );
 					cpu.incPC(3);
 					adr += cpu.getX();
-					origValue = (memory.readByte( adr ) & 0xff);
+					origValue = memory.readByte( adr );
 					result = (origValue >>> 1);
 					cpu.cycles += 7;
 					break;
@@ -766,7 +761,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 			switch(opcode)
 			{
 				case 0x6A: // Accumulator   ROR A         $2A  1   2
-					origValue = cpu.getAccumulator() & 0xff;
+					origValue = cpu.getAccumulator();
 					result = ( origValue >> 1) | carryMask ;
 					cpu.setAccumulator((byte) result);
 					cpu.incPC();
@@ -778,8 +773,8 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 				case 0x66: // Zero Page     ROR $44       $26  2   5
 					adr = memory.readByte( cpu.pc() + 1);
 					cpu.incPC(2);
-					origValue = (memory.readByte( adr ) & 0xff);
-					result = (origValue << 1) | carryMask;
+					origValue = memory.readByte( adr );
+					result = (origValue >> 1) | carryMask;
 					cpu.cycles += 5;
 					break;
 				case 0x76: // Zero Page,X   ROR $44,X     $36  2   6
@@ -787,23 +782,23 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 					cpu.incPC(2);
 					adr += cpu.getX();
 					adr &= 0xff;
-					origValue = (memory.readByte( adr ) & 0xff);
-					result = (origValue << 1) | carryMask;
+					origValue = memory.readByte( adr );
+					result = (origValue >> 1) | carryMask;
 					cpu.cycles += 6;
 					break;
 				case 0x6E: // Absolute      ROR $4400     $2E  3   6
 					adr = memory.readWord( cpu.pc()+1 );
 					cpu.incPC(3);
-					origValue = memory.readByte( adr ) & 0xff;
-					result = (origValue << 1) | carryMask;
+					origValue = memory.readByte( adr );
+					result = (origValue >> 1) | carryMask;
 					cpu.cycles += 6;
 					break;
 				case 0x7E: // Absolute,X    ROR $4400,X   $3E  3   7
 					adr = memory.readWord( cpu.pc()+1 );
 					cpu.incPC(3);
 					adr += cpu.getX();
-					origValue = (memory.readByte( adr ) & 0xff);
-					result = (origValue << 1) | carryMask;
+					origValue = memory.readByte( adr );
+					result = (origValue >> 1) | carryMask;
 					cpu.cycles += 7;
 					break;
 				default:
@@ -811,7 +806,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 			}
 			memory.writeByte( adr , (byte) result );
 			cpu.setFlag(Flag.ZERO , (result & 0xff) == 0 );
-			cpu.setFlag(Flag.NEGATIVE , (result & 0b10000000) != 0 );
+			cpu.setFlag(Flag.NEGATIVE , (result & 0b1000_0000) != 0 );
 			cpu.setFlag(Flag.CARRY , (origValue & 0x01) != 0);
 		}
 	},
@@ -2123,7 +2118,7 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		 */
 		final int adr1 = cpu.pc();
 		final int op = memory.readByte( adr1); // read opcode
-		
+
 		final byte byteOffset = (byte) memory.readByte( adr1 +1 ); // read offset
 		cpu.incPC(2);
 		final int offset = byteOffset; // sign-extent byte -> int
@@ -2143,10 +2138,12 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		}
 		if ( takeBranch )
 		{
+			System.out.println("*** branch taken ***");
 			final int newPC = cpu.pc() + offset;
 			cpu.pc( newPC );
 			cpu.cycles += (3 + (isAcrossPageBoundary( adr1 , newPC ) ? 1 : 0) );
 		} else {
+			System.out.println("*** branch NOT taken ***");
 			cpu.cycles += 2;
 		}
 	}

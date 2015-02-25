@@ -178,4 +178,8 @@ public class HexDump {
 	public void setBytesPerLine(int i) {
 		this.bytesPerLine = i;
 	}
+
+	public static String toBinaryString(byte v) {
+		return "%"+StringUtils.leftPad( Integer.toBinaryString( v & 0xff ) , 8 , '0' );
+	}
 }
