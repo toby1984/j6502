@@ -276,16 +276,8 @@ Indirect,Y    EOR ($44),Y   $51  2   5+
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b011 ); }
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) {
-			/*
- Affects Flags: S V Z C
-
-+ add 1 cycle if page boundary crossed
-
-ADC results are dependant on the setting of the decimal flag. In decimal mode, addition is carried out on the assumption that the values involved are packed BCD (Binary Coded Decimal).
-
-There is no way to add without carry. Return To Index
-			 */
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) 
+		{
 			int b;
 			switch( opcode )
 			{
@@ -321,50 +313,39 @@ There is no way to add without carry. Return To Index
 				default:
 					throw new RuntimeException("Unreachable code reached");
 			}
-
-			final int a = cpu.getAccumulator();
-
-			// perform UNSIGNED addition
-			final int result = a + b + ( cpu.isSet(Flag.CARRY) ? 1 : 0 );
-			System.out.print("ADC: "+a+"+"+b+"+ ( "+( cpu.isSet(Flag.CARRY) ? 1 : 0 )+" )" );
-
-			// see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
-			cpu.setFlag(CPU.Flag.OVERFLOW, ( (a^result) & (b^result) & 0x80 ) != 0 );
-			cpu.setFlag( CPU.Flag.NEGATIVE , ( result & 0b1000_0000) != 0 );
-			cpu.setFlag( CPU.Flag.ZERO , ( result & 0xff) == 0 );
-
+			
 			// FIXME: Handle BCD mode
 			if ( cpu.isSet( Flag.DECIMAL_MODE ) ) {
 				/*
 				 * taken from http://www.fceux.com/web/help/fceux.html?6502CPU.html 
         unsigned
           A,  // Accumulator
-          AL, // low nybble of accumulator 
-          AH, // high nybble of accumulator
+          AL, // low nibble of accumulator 
+          AH, // high nibble of accumulator
           C,  // Carry flag
           Z,  // Zero flag
           V,  // oVerflow flag 
           N,  // Negative flag
           s;  // value to be added to Accumulator 
           
-       AL = (A & 15) + (s & 15) + C;         // Calculate the lower nybble. 
+       AL = (A & 15) + (s & 15) + C;         // Calculate the lower nibble. 
 
-       AH = (A >> 4) + (s >> 4) + (AL > 15); // Calculate the upper nybble. 
+       AH = (A >> 4) + (s >> 4) + (AL > 15); // Calculate the upper nibble. 
 
-       if (AL > 9) AL += 6;                  // BCD fixup for lower nybble. 
+       if (AL > 9) AL += 6;                  // BCD fixup for lower nibble. 
 
        Z = ((A + s + C) & 255 != 0);         // Zero flag is set just
 
                                                 like in Binary mode.
 
         // Negative and Overflow flags are set with the same logic than in
-        // Binary mode, but after fixing the lower nybble. 
+        // Binary mode, but after fixing the lower nibble. 
 
        N = (AH & 8 != 0);
 
        V = ((AH << 4) ^ A) & 128 && !((A ^ s) & 128);
 
-       if (AH > 9) AH += 6;                  // BCD fixup for upper nybble.
+       if (AH > 9) AH += 6;                  // BCD fixup for upper nibble.
 
        // Carry is the only flag set after fixing the result.
 
@@ -374,8 +355,9 @@ There is no way to add without carry. Return To Index
 				 */
 				throw new RuntimeException("ADC with BCD currently not implemented");
 			}
-			cpu.setFlag( Flag.CARRY , result > 255 );
-			cpu.setAccumulator(result);
+			final int a = cpu.getAccumulator();
+			final int carry = cpu.isSet( CPU.Flag.CARRY) ? 1 : 0;
+			adc(cpu,a,b,carry);
 		}
 	},
 	CMP("CMP")
@@ -453,45 +435,6 @@ lack thereof and the sign (i.e. A>=$80) of the accumulator.
 		@Override
 		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator)
 		{
-
-			// FIXME: Handle BCD mode
-
-			if ( cpu.isSet( Flag.DECIMAL_MODE ) ) {
-				/* taken from http://www.fceux.com/web/help/fceux.html?6502CPU.html
-        unsigned
-          A,  // Accumulator
-          AL, // low nybble of accumulator 
-          AH, // high nybble of accumulator
-          C,  // Carry flag
-          Z,  // Zero flag 
-          V,  // oVerflow flag
-          N,  // Negative flag
-
-          s;  // value to be added to Accumulator
-
-       AL = (A & 15) - (s & 15) - !C;        // Calculate the lower nybble.
-
-       if (AL & 16) AL -= 6;                 // BCD fixup for lower nybble.
-
-       AH = (A >> 4) - (s >> 4) - (AL & 16); // Calculate the upper nybble.
-
-       if (AH & 16) AH -= 6;                 // BCD fixup for upper nybble.
-
-       // The flags are set just like in Binary mode.
-
-       C = (A - s - !C) & 256 != 0;
-
-       Z = (A - s - !C) & 255 != 0;
-
-       V = ((A - s - !C) ^ s) & 128 && (A ^ s) & 128;
-
-       N = (A - s - !C) & 128 != 0;
-
-       A = ((AH << 4) | (AL & 15)) & 255;				 
-				 */
-				throw new RuntimeException("SBC with BCD currently not implemented");
-			}
-
 			/*
 MODE           SYNTAX       HEX LEN TIM
 Immediate     SBC #$44      $E9  2   2
@@ -543,6 +486,45 @@ operation. If the carry is cleared by the operation, it indicates a borrow occur
 				default:
 					throw new RuntimeException("Unreachable code reached");
 			}
+			
+
+			// FIXME: Handle BCD mode
+
+			if ( cpu.isSet( Flag.DECIMAL_MODE ) ) {
+				/* taken from http://www.fceux.com/web/help/fceux.html?6502CPU.html
+        unsigned
+          A,  // Accumulator
+          AL, // low nibble of accumulator 
+          AH, // high nibble of accumulator
+          C,  // Carry flag
+          Z,  // Zero flag 
+          V,  // oVerflow flag
+          N,  // Negative flag
+
+          s;  // value to be added to Accumulator
+
+       AL = (A & 15) - (s & 15) - !C;        // Calculate the lower nibble.
+
+       if (AL & 16) AL -= 6;                 // BCD fixup for lower nibble.
+
+       AH = (A >> 4) - (s >> 4) - (AL & 16); // Calculate the upper nibble.
+
+       if (AH & 16) AH -= 6;                 // BCD fixup for upper nibble.
+
+       // The flags are set just like in Binary mode.
+
+       C = (A - s - !C) & 256 != 0;
+
+       Z = (A - s - !C) & 255 != 0;
+
+       V = ((A - s - !C) ^ s) & 128 && (A ^ s) & 128;
+
+       N = (A - s - !C) & 128 != 0;
+
+       A = ((AH << 4) | (AL & 15)) & 255;				 
+				 */
+				throw new RuntimeException("SBC with BCD currently not implemented");
+			}
 
 			/*
 M - N - B	SBC of M and N with borrow B
@@ -552,20 +534,8 @@ M - N - B	SBC of M and N with borrow B
 = M + (ones complement of N) + C	255 - N is the same as flipping the bits.
 			 */
 			final int a = cpu.getAccumulator();
-			b = 255-b;
-			int result = a + b + ( cpu.isSet(Flag.CARRY) ? 1 : 0 );
-
-			// see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
-			cpu.setFlag(CPU.Flag.OVERFLOW, ( (a^result) & (b^result) & 0x80 ) != 0 );
-			cpu.setFlag( CPU.Flag.NEGATIVE , ( result & 0b1000_0000) != 0 );
-			cpu.setFlag( CPU.Flag.ZERO , ( result & 0xff) == 0 );
-
-			// FIXME: Handle BCD mode
-			if ( cpu.isSet( Flag.DECIMAL_MODE ) ) {
-				throw new RuntimeException("ADC with BCD currently not implemented");
-			}
-			cpu.setFlag( Flag.CARRY , result > 255 );
-			cpu.setAccumulator(result);
+			final int carry = cpu.isSet( CPU.Flag.CARRY) ? 1 : 0;
+			adc( cpu , a , ( ~b & 0xff ) , carry );
 		}
 	},
 	// generic #2
@@ -1358,42 +1328,42 @@ Absolute      CPY $4400     $CC  3   4
 	BPL("BPL")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x10 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleConditionalBranch( cpu , memory ); }
 	},
 	BMI("BMI")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x30 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleConditionalBranch( cpu , memory ); }
 	},
 	BVC("BVC")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x50 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleConditionalBranch( cpu , memory ); }
 	},
 	BVS("BVS")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x70 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleConditionalBranch( cpu , memory ); }
 	},
 	BCC("BCC")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0x90 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleConditionalBranch( cpu , memory ); }
 	},
 	BCS("BCS")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0xb0 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleConditionalBranch( cpu , memory ); }
 	},
 	BNE("BNE")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0xd0 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleConditionalBranch( cpu , memory ); }
 	},
 	BEQ("BEQ")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleConditionalBranch( ins , writer , (byte) 0xf0 ); }
-		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleBranch( cpu , memory ); }
+		@Override public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) { handleConditionalBranch( cpu , memory ); }
 	},
 	BRK("BRK") {
 
@@ -1467,11 +1437,11 @@ Subroutines are normally terminated by a RTS op code.
 			if ( (opcode & 0xff ) != 0x20 ) {
 				throw new RuntimeException("Unreachable code reached");
 			}
-			cpu.incPC(); // skip 1 byte opcode
-			final int jumpTarget = memory.readWord( cpu.pc() ); // read 2 byte word
-			int adr = cpu.pc();
-			adr++; // this would usually be +=2 but since JSR needs to push address-1 we'll just increment by 1 here
-			cpu.pushWord( (short) adr , memory );
+			final int pc = cpu.pc();
+			final int jumpTarget = memory.readWord( pc+1 ); // read 2 byte word
+			int returnAdr = pc+2; // this would usually be +=2 but since JSR needs to push address-1 we'll just increment by 1 here
+			System.out.println("JSR: PC = "+HexDump.toAdr( pc )+" , jumping to "+HexDump.toAdr( jumpTarget )+" , return address: "+HexDump.toAdr( returnAdr+1 ) );
+			cpu.pushWord( (short) returnAdr , memory );
 			cpu.pc( jumpTarget );
 			cpu.cycles += 6;
 		}
@@ -1505,10 +1475,12 @@ Subroutines are normally terminated by a RTS op code.
 			if ( (opcode & 0xff) != 0x60 ) {
 				throw new RuntimeException("Unreachable code reached");
 			}
+			System.out.print("RTS: cpu at pc = "+HexDump.toAdr( cpu.pc() )+" , SP = "+HexDump.toAdr( cpu.sp )+" , returning to ");
 			final int lo = cpu.pop(memory ) & 0xff;
 			final int hi = cpu.pop(memory ) & 0xff;
 			short adr = (short) (hi<<8 | lo);
 			adr++;
+			System.out.println( HexDump.toAdr( adr ) );
 			cpu.pc( adr );
 			cpu.cycles += 6;
 		}
@@ -2030,33 +2002,33 @@ Subroutines are normally terminated by a RTS op code.
 
 	private static void writeIndirectIndexedY(int accumulator, CPU cpu, IMemoryRegion memory) {
 		final int adr1111 = memory.readByte(cpu.pc() +1 ); // zp offset
-		cpu.incPC(2);
 		final int adr2222 = memory.readWord( adr1111 );
 		final int adr3333 = adr2222 + cpu.getY();
 		memory.writeByte( adr3333 ,(byte) accumulator );
+		cpu.incPC(2);		
 	}
 
 	private static void writeIndexedIndirectX(int value, CPU cpu, IMemoryRegion memory)
 	{
 		final int adr111 = memory.readByte( cpu.pc()+1); // zp offset
-		cpu.incPC(2);
 		final int adr222 = adr111 + cpu.getX() ; // zp + offset
 		final int adr333 = memory.readWord( (short) adr222 );
 		memory.writeByte( (short) adr333 , (byte) value );
+		cpu.incPC(2);		
 	}
 
 	private static void writeAbsoluteYValue(int value , CPU cpu, IMemoryRegion memory) {
-		final int adr11 = memory.readWord( cpu.pc() +1);
+		
+		final int baseAddr = memory.readWord( cpu.pc() +1); 
+		final int adr11 = baseAddr + cpu.getY();
+		memory.writeByte( (short) adr11  , (byte) value ); // accu:= mem[ zp_adr + x ]		
 		cpu.incPC(3);
-		final int adr22 = adr11 + (cpu.getY() & 0xff);
-		memory.writeByte( (short) adr22  , (byte) value ); // accu:= mem[ zp_adr + x ]
 	}
 
 	private static void writeAbsoluteXValue(int value, CPU cpu, IMemoryRegion memory) {
-		final int adr1 = memory.readWord( cpu.pc()+1);
+		final int adr1 = memory.readWord( cpu.pc() +1 ) + cpu.getX();
+		memory.writeByte( (short) adr1  , (byte) value ); // accu:= mem[ zp_adr + x ]
 		cpu.incPC(3);
-		final int adr2 = adr1 + (cpu.getX() & 0xff);
-		memory.writeByte( (short) adr2  , (byte) value ); // accu:= mem[ zp_adr + x ]
 	}
 
 	private static void writeAbsoluteValue(int value, CPU cpu, IMemoryRegion memory)
@@ -2068,22 +2040,22 @@ Subroutines are normally terminated by a RTS op code.
 	private static void writeAbsoluteZeroPageXValue(int value, CPU cpu, IMemoryRegion memory) {
 		int adr = memory.readByte( cpu.pc() + 1 );
 		adr += cpu.getX();
-		cpu.incPC(2);
 		memory.writeByte( (short) (adr & 0xff) , (byte) value ); // accu:= mem[ zp_adr + x ]
+		cpu.incPC(2);		
 	}
 
 	private static void writeAbsoluteZeroPageYValue(int value, CPU cpu, IMemoryRegion memory) {
 		int adr = memory.readByte( cpu.pc() +1 );
 		adr = adr + cpu.getY();
-		cpu.incPC(2);
 		memory.writeByte( (short) (adr & 0xff) , (byte) value ); // accu:= mem[ zp_adr + x ]
+		cpu.incPC(2);		
 	}
 
 	private static void writeZeroPage(int value,CPU cpu,IMemoryRegion memory)
 	{
 		final int adr = memory.readByte( cpu.pc()+1 );
-		cpu.incPC(2);
 		memory.writeByte( adr & 0xff , (byte) value );
+		cpu.incPC(2);		
 	}
 
 	private static void handleStackInstruction(CPU cpu,IMemoryRegion memory)
@@ -2167,7 +2139,7 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		cpu.cycles += 2;
 	}
 
-	private static void handleBranch(CPU cpu,IMemoryRegion memory) {
+	private static void handleConditionalBranch(CPU cpu,IMemoryRegion memory) {
 		/*
 		 * When the 6502 is ready for the next instruction it increments the program counter before fetching the instruction.
 		 * Once it has the op code, it increments the program counter by the length of the operand, if any.
@@ -2207,12 +2179,12 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		}
 		if ( takeBranch )
 		{
-			System.out.println("*** branch taken ***");
+//			System.out.println("*** branch taken ***");
 			final int newPC = cpu.pc() + offset;
 			cpu.pc( newPC );
 			cpu.cycles += (3 + (isAcrossPageBoundary( adr1 , newPC ) ? 1 : 0) );
 		} else {
-			System.out.println("*** branch NOT taken ***");
+//			System.out.println("*** branch NOT taken ***");
 			cpu.cycles += 2;
 		}
 	}
@@ -2316,5 +2288,16 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		value += incDec;
 		memory.writeByte( address , (byte) value );
 		updateZeroSigned( value , cpu );
+	}
+	
+	private static void adc(CPU cpu,int a,int b,int carry) 
+	{
+		int result = (a & 0xff) + (b & 0xff) + carry;
+		int carry6 = (a & 0x7f) + (b & 0x7f) + carry;
+		cpu.setFlag( Flag.CARRY , ((result & 0x100) != 0) );
+		cpu.setFlag( Flag.OVERFLOW, (carry ^ (carry6 & 0x80)) != 0 );
+		cpu.setFlag( Flag.NEGATIVE , ( result & 0b1000_0000) != 0 );
+		cpu.setFlag( Flag.ZERO , ( result & 0xff) == 0 );
+		cpu.setAccumulator(result);		
 	}
 }

@@ -544,7 +544,11 @@ public class Debugger
 				@Override
 				public void keyReleased(java.awt.event.KeyEvent e)
 				{
-					if ( e.getKeyCode() == KeyEvent.VK_PAGE_DOWN ) {
+					if ( e.getKeyCode() == KeyEvent.VK_DOWN ) {
+						lineDown();
+					} else if ( e.getKeyCode() == KeyEvent.VK_UP) {
+						lineUp();
+					} else if ( e.getKeyCode() == KeyEvent.VK_PAGE_DOWN ) {
 						pageDown();
 					} else if ( e.getKeyCode() == KeyEvent.VK_PAGE_UP ) {
 						pageUp();
@@ -585,6 +589,20 @@ public class Debugger
 			lines.clear();
 			repaint();
 		}
+		
+		public void lineUp() {
+			this.currentAddress = (short) ( ( this.currentAddress -1 ));
+			this.addressToMark = null;
+			lines.clear();
+			repaint();
+		}		
+		
+		public void lineDown() {
+			this.currentAddress = (short) (  this.currentAddress + 1 );
+			this.addressToMark = null;
+			lines.clear();
+			repaint();
+		}		
 
 		public void pageDown() {
 			this.currentAddress = (short) ( this.currentAddress + bytesToDisassemble/2 );
@@ -631,10 +649,10 @@ public class Debugger
 							lines.add( new LineWithBounds( line , bounds ) );
 							y += LINE_HEIGHT;
 						}
-							};
-							dis.disassemble( emulator.getMemory() , offset, bytesToDisassemble , lineConsumer);
-							alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
-							offset++;
+					};
+					dis.disassemble( emulator.getMemory() , offset, bytesToDisassemble , lineConsumer);
+					alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
+					offset++;
 				}
 			}
 		}

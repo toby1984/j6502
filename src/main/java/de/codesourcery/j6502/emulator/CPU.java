@@ -94,7 +94,12 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 	public void pushByte(byte value,IMemoryRegion region)
 	{
 		decSP();
-		region.writeByte( sp , value );
+		MemorySubsystem.mayWriteToStack = true;
+		try {
+			region.writeByte( sp , value );
+		} finally {
+			MemorySubsystem.mayWriteToStack = false;
+		}
 	}
 
 	public int pop(IMemoryRegion region) {
@@ -226,7 +231,7 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 	}
 
 	public void setX(int x) {
-		this.x = x & 0xff;
+		this.x = (x & 0xff);
 	}
 
 	public int getY() {
@@ -234,7 +239,7 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 	}
 
 	public void setY(int y) {
-		this.y = y & 0xff;
+		this.y = (y & 0xff);
 	}
 
 	public int getAccumulator() {

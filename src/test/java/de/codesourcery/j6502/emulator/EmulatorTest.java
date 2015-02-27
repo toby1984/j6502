@@ -96,7 +96,7 @@ Indirect,Y    CMP ($44),Y   $D1  2   5+
 		// SEC ; 0 - 1 = -1, returns V = 0
 		// LDA #$00
 		// SBC #$01
-		execute("SEC\n LDA #0\n SBC #1").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE); // carry = 1 => NO BORROW
+		execute("SEC\n LDA #0\n SBC #1").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE,Flag.OVERFLOW); // carry = 1 => NO BORROW
 		/*
 Inputs	       Outputs		    Example
 M7 	N7 	C6     C7 	B	S7 	V	Borrow / Overflow	                    Hex	Unsigned	             Signed
@@ -199,13 +199,13 @@ M7 	N7 	C6 	    C7 	S7 	V	Carry / Overflow	                    Hex	            U
 		execute("CLC\n LDA #80\n ADC #16\n").assertA( 96 ).assertFlags();
 		execute("CLC\n LDA #80\n ADC #80\n").assertA( 160 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.NEGATIVE);
 		execute("CLC\n LDA #80\n ADC #144\n").assertA( 224 ).assertFlags(CPU.Flag.NEGATIVE);
-		execute("CLC\n LDA #80\n ADC #208\n").assertA( 288 ).assertFlags(CPU.Flag.CARRY);
+		execute("CLC\n LDA #80\n ADC #208\n").assertA( 288 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.OVERFLOW);
 
 		execute("CLC\n LDA #208\n ADC #16\n").assertA( 224 ).assertFlags(CPU.Flag.NEGATIVE);
-		execute("CLC\n LDA #208\n ADC #80\n").assertA( 288 ).assertFlags(CPU.Flag.CARRY);
+		execute("CLC\n LDA #208\n ADC #80\n").assertA( 288 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.OVERFLOW);
 
-		execute("CLC\n LDA #208\n ADC #144\n").assertA( 352 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.OVERFLOW);
-		execute("CLC\n LDA #208\n ADC #208\n").assertA( 416 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.NEGATIVE);
+		execute("CLC\n LDA #208\n ADC #144\n").assertA( 352 ).assertFlags(CPU.Flag.CARRY);
+		execute("CLC\n LDA #208\n ADC #208\n").assertA( 416 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW);
 	}
 	
 //	public void testADCDecimalMode() {
@@ -261,7 +261,7 @@ Indirect,Y    ADC ($44),Y   $71  2   5+
 			 */
 		
 		// b4( %10110100 ) = 180
-		execute("CLC LDA #$b4 ADC #$b4").assertA( 0x02 ).assertFlags();
+		execute("CLC\n LDA #$b4\n ADC #$b4").assertA( 0x68 ).assertFlags(Flag.CARRY);
 		
 		execute("LDA #$01 CLC\n ADC #$01").assertA( 0x02 ).assertFlags();
 		execute("LDA #$ff CLC\n ADC #$01").assertA( 0x00 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY);

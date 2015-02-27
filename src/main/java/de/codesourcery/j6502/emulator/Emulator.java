@@ -56,6 +56,8 @@ public class Emulator
 
 		// reset CPU, will initialize PC from RESET_VECTOR_LOCATION
 		cpu.reset();
+		
+		MemorySubsystem.mayWriteToStack = false;
 	}
 
 	public void singleStep()
