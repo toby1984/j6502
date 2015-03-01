@@ -85,6 +85,11 @@ public class AssemblerTest extends TestCase {
 		final String s = "ORA  $e1; 000f:  05 e1    ..";
 		assertCompilesTo(s , 0x05 , 0xe1 );
 	}
+	
+	public void testSTA2() {
+		final String s = "STA $01,Y";
+		assertCompilesTo(s , 0x99 , 0x01 , 0x00 );
+	}
 
 	public void testASL2() {
 		final String s = "ASL  $ff9e , X; 005a:  1e 9e 5a ..Z";

@@ -702,50 +702,48 @@ b9:
 test09:
   ; prepare memory
   LDA #$54
-  STA $32
+  STA $32 ; $32 = $54
   LDA #$B3
-  STA $A1
+  STA $A1  ; $A1 = B3
   LDA #$87
-  STA $43
+  STA $43  ; $43 = $87
 
   ; BPL
-  LDX #$A1
-  BPL bpl1 ; not taken
-  LDX #$32
+  LDX #$A1 ; load NEGATIVE number
+  BPL bpl1 ; not taken -- branch on PLUS
+  LDX #$32 ; load positive number
+
 bpl1:
-  LDY $00,X
-  BPL bpl2 ; taken
+  LDY $00,X ; LDY $32 => Y = $54 = positive number
+  BPL bpl2 ; taken 
   LDA #$05 ; not done
   LDX $A1 ; not done
-bpl2:
-
-  ; BMI
-  BMI bmi1 ; not taken
-  SBC #$03
+  
+bpl2: ; BMI
+  BMI bmi1 ; not taken ; 
+  SBC #$03 ; A = $87 - $03 = $84 , Flags: CARRY, NEGATIVE
 bmi1:
   BMI bmi2 ; taken
   LDA #$41 ; not done
-bmi2:
-
-  ; BVC
-  EOR #$30
-  STA $32
-  ADC $00,X
-  BVC bvc1 ; not taken
+  
+bmi2:  ; BVC
+  EOR #$30 ; A = $84 EOR $30 = $B4
+  STA $32 ; $32 = $B4
+  ADC $00,X ; X = $32 , A = $b4+b4 , Flags: .O...I.C 
+  BVC bvc1 ; not taken because overflow set
   LDA #$03
 bvc1:
-  STA $54
-  LDX $00,Y
-  ADC $51,X
-  BVC bvc2 ; taken
+  STA $54 ; $54 = $03 
+  LDX $00,Y ; LDX $54 => X = $03
+  ADC $51,X ; ADC $54 ; A = $07 ($03+$03+carry)
+  BVC bvc2 ; taken because overflow is now clear
   LDA #$E5 ; not done
-bvc2:
 
-  ; BVS
-  ADC $40,X
-  BVS bvs1 ; not taken
-  STA $0001,Y
-  ADC $55
+bvc2:  ; BVS
+  ADC $40,X   ; ADC $43 ; A = $07 + $87 = $8e , negative
+  BVS bvs1    ; not taken
+  STA $0001,Y ; STA $55 , $55 = $84
+  ADC $55      ; A = $84 + $84
 bvs1:
   BVS bvs2 ; taken
   LDA #$00

@@ -28,7 +28,7 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 	private int y;
 	public short sp;
 
-	public byte flags;
+	private byte flags = CPU.Flag.EXTENSION.set((byte)0); // bit is always set
 
 	public static enum Flag
 	{
@@ -37,7 +37,7 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		IRQ_DISABLE(1 <<2 , "I"), // 4
 		DECIMAL_MODE(1 <<3 , "D"), // 8
 		BREAK(1 <<4 , "B"), // 16
-		UNUSED(1 <<5 , "X" ), // 32
+		EXTENSION(1 <<5 , "X" ), // 32
 		OVERFLOW(1 <<6  , "O" ), // 64
 		NEGATIVE(1 <<7 , "N"); // 128
 
@@ -49,6 +49,14 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		public boolean isNotSet(byte flags) { return (flags&value) == 0; }
 		public byte clear(byte flags) { return (byte) (flags&~value); }
 		public byte set(byte flags) { return (byte) (flags | value); }
+	}
+	
+	public byte getFlagBits() {
+		return flags;
+	}
+	
+	public void setFlagBits(byte bits) {
+		this.flags = CPU.Flag.EXTENSION.set( bits ); // extension bit is always set
 	}
 
 	public void pc(int value) {
@@ -138,7 +146,7 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		setX((byte) 0);
 		setY((byte) 0);
 		sp = 0x1ff;
-		flags = CPU.Flag.IRQ_DISABLE.set((byte) 0);
+		setFlagBits( CPU.Flag.IRQ_DISABLE.set( (byte) 0) );
 	}
 
 	@Override
@@ -212,15 +220,14 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 	}
 
 	public void incSP() {
-		short expanded = this.sp;
-		expanded &= 0xff;
+		int expanded = this.sp &0xff;
 		expanded++;
+		expanded &= 0xff;
 		this.sp = (short) ((0x0100 | expanded));
 	}
 
 	public void decSP() {
-		short expanded = this.sp;
-		expanded &= 0xff;
+		int expanded = this.sp & 0xff;
 		expanded--;
 		expanded &= 0xff;
 		this.sp = (short) ((0x0100 | expanded));

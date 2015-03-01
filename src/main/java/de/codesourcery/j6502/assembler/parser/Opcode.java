@@ -265,9 +265,8 @@ Indirect,Y    EOR ($44),Y   $51  2   5+
 					throw new RuntimeException("Unreachable code reached");
 			}
 
-			final byte result = (byte) (cpu.getAccumulator() ^ value);
+			final int result = cpu.getAccumulator() ^ value;
 			cpu.setAccumulator(result);
-
 			updateZeroSigned( result , cpu );
 		}
 	},
@@ -534,7 +533,11 @@ M - N - B	SBC of M and N with borrow B
 = M + (ones complement of N) + C	255 - N is the same as flipping the bits.
 			 */
 			final int a = cpu.getAccumulator();
-			final int carry = cpu.isSet( CPU.Flag.CARRY) ? 1 : 0;
+			/*
+			 * ADC: Carry set   = +1 ,
+			 * SBC: Carry clear = -1
+			 */
+			final int carry = cpu.isSet( CPU.Flag.CARRY) ? 1: 0;
 			adc( cpu , a , ( ~b & 0xff ) , carry );
 		}
 	},
@@ -1403,7 +1406,7 @@ Absolute      CPY $4400     $CC  3   4
 			cpu.incPC();
 			cpu.pushByte((byte) ( cpu.pc() >>8 ), memory ); // push pc hi
 			cpu.pushByte((byte) ( cpu.pc() & 0xff ), memory ); // push pc lo
-			cpu.pushByte(CPU.Flag.BREAK.set( cpu.flags ), memory ); // BRK bit is SET on flags pushed to stack
+			cpu.pushByte(CPU.Flag.BREAK.set( cpu.getFlagBits() ), memory ); // BRK bit is SET on flags pushed to stack
 			cpu.pc( memory.readWord( CPU.BRK_VECTOR_LOCATION ) );
 			cpu.cycles += 7;
 		}
@@ -1453,7 +1456,7 @@ Subroutines are normally terminated by a RTS op code.
 			if ( (opcode & 0xff) != 0x40 ) {
 				throw new RuntimeException("Unreachable code reached");
 			}
-			cpu.flags = (byte) cpu.pop(memory );
+			cpu.setFlagBits( (byte) cpu.pop(memory ) );
 			final int lo = cpu.pop(memory );
 			final int hi = cpu.pop(memory );
 			cpu.pc( hi<<8 | lo );
@@ -1652,7 +1655,8 @@ Subroutines are normally terminated by a RTS op code.
 		 */
 		final IASTNode child0 = ins.child(0);
 		int opCode=0;
-		switch( ins.getAddressingMode() )
+		AddressingMode addressingMode = ins.getAddressingMode();
+		switch( addressingMode )
 		{
 			case ABSOLUTE:
 				// MODE           SYNTAX         HEX LEN TIM
@@ -1676,12 +1680,17 @@ Subroutines are normally terminated by a RTS op code.
 				writer.writeWord( child0.child(0) );
 				break;
 			case ZERO_PAGE_Y:
-			case ZERO_PAGE_X:
+			case ZERO_PAGE_X:				
 				// MODE           SYNTAX         HEX LEN TIM
 				// Zero Page,X   LDA $44,X     $B5  2   4
 				opCode = (aaa << 5) | ( 0b101 << 2) | cc;
-				writer.writeByte( (byte) opCode ); // LDA $44,X
-				writer.writeByte( child0.child(0) );
+				if ( ins.opcode == Opcode.STA && addressingMode == AddressingMode.ZERO_PAGE_Y) {
+					writer.writeByte( (byte) 0x99 ); // LDA $44,X
+					writer.writeWord( child0.child(0) );
+				} else {
+					writer.writeByte( (byte) opCode ); // LDA $44,X
+					writer.writeByte( child0.child(0) );
+				}
 				break;
 			case IMMEDIATE:
 				// MODE           SYNTAX         HEX LEN TIM
@@ -2089,13 +2098,13 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 				cpu.incPC();
 				cpu.cycles += 4;
 				break;
-			case 0x08: // PHP (PusH Processor status)     $08  3
-				cpu.pushByte(cpu.flags, memory );
+			case 0x08: // PHP (PusH Processor status)     $08  3				
+				cpu.pushByte(cpu.getFlagBits(), memory );
 				cpu.incPC();
 				cpu.cycles += 3;
 				break;
 			case 0x28: // PLP (POP Processor status)     $28  4
-				cpu.flags = (byte) cpu.pop(memory );
+				cpu.setFlagBits( (byte) cpu.pop(memory ) );
 				cpu.incPC();
 				cpu.cycles += 4;
 				break;
@@ -2179,12 +2188,12 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		}
 		if ( takeBranch )
 		{
-//			System.out.println("*** branch taken ***");
+			System.out.println("*** branch taken ***");
 			final int newPC = cpu.pc() + offset;
 			cpu.pc( newPC );
 			cpu.cycles += (3 + (isAcrossPageBoundary( adr1 , newPC ) ? 1 : 0) );
 		} else {
-//			System.out.println("*** branch NOT taken ***");
+			System.out.println("*** branch NOT taken ***");
 			cpu.cycles += 2;
 		}
 	}
@@ -2293,9 +2302,14 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 	private static void adc(CPU cpu,int a,int b,int carry) 
 	{
 		int result = (a & 0xff) + (b & 0xff) + carry;
-		int carry6 = (a & 0x7f) + (b & 0x7f) + carry;
+		boolean c6 = ( ( (a & 0b0111_1111) + (b & 0b0111_1111) + carry) & 0x80 ) != 0; 
+		
+		boolean m7 = (a & 0b1000_0000) != 0;
+		boolean n7 = (b & 0b1000_0000) != 0;
+		boolean s7 = (result & 0x80) != 0;
+		
 		cpu.setFlag( Flag.CARRY , ((result & 0x100) != 0) );
-		cpu.setFlag( Flag.OVERFLOW, (carry ^ (carry6 & 0x80)) != 0 );
+		cpu.setFlag( Flag.OVERFLOW, (!m7&!n7&c6) | (m7&n7&!c6));
 		cpu.setFlag( Flag.NEGATIVE , ( result & 0b1000_0000) != 0 );
 		cpu.setFlag( Flag.ZERO , ( result & 0xff) == 0 );
 		cpu.setAccumulator(result);		
