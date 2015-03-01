@@ -6,6 +6,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.event.KeyAdapter;
 import java.awt.event.MouseAdapter;
@@ -86,10 +87,6 @@ public class Debugger
 			{
 				lastTick = now;
 				SwingUtilities.invokeLater( () -> updateWindows() );
-
-				final IMemoryRegion memory = emulator.getMemory();
-
-				System.out.println( HexDump.INSTANCE.dump( (short) 1024 ,  memory ,  1024 ,  25*40 ) );
 			}
 		}
 	};
@@ -100,6 +97,7 @@ public class Debugger
 	private final DisassemblyPanel disassembly = new DisassemblyPanel();
 	private final HexDumpPanel hexPanel = new HexDumpPanel();
 	private final CPUStatusPanel cpuPanel = new CPUStatusPanel();
+	private final ScreenPanel screenPanel = new ScreenPanel();
 
 	public static void main(String[] args)
 	{
@@ -125,6 +123,10 @@ public class Debugger
 
 		final JInternalFrame hexPanelFrame = wrap( "Memory" , hexPanel );
 		desktop.add( hexPanelFrame  );
+		
+		final JInternalFrame screenPanelFrame = wrap( "Screen" , screenPanel );
+		desktop.add( screenPanelFrame  );		
+		
 
 		final JFrame frame = new JFrame("");
 		frame.addWindowListener( new WindowAdapter() {
@@ -341,8 +343,31 @@ public class Debugger
 			pc = emulator.getCPU().pc();
 		}
 		disassembly.setAddress( (short) pc , (short) pc );
+		screenPanel.repaint();
 		cpuPanel.repaint();
 		hexPanel.repaint();
+	}
+	
+	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.ILocationAware {
+
+		private Component frame;
+		
+		@Override
+		public void setLocationPeer(Component frame) {
+			this.frame = frame;
+		}
+
+		@Override
+		public Component getLocationPeer() {
+			return this.frame;
+		}
+		
+		@Override
+		protected void paintComponent(Graphics g) 
+		{
+			super.paintComponent(g);
+			emulator.getVIC().render( (Graphics2D) g , getWidth() , getHeight() );
+		}		
 	}
 
 	// CPU status
@@ -424,7 +449,7 @@ public class Debugger
 
 	protected final class HexDumpPanel extends JPanel implements WindowLocationHelper.ILocationAware
 	{
-		private final int bytesToDisplay = 128;
+		private final int bytesToDisplay = 25*40;
 
 		private Component peer;
 

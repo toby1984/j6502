@@ -19,6 +19,9 @@ public class Emulator
 	protected static final String EMPTY_STRING = "";
 
 	private final MemorySubsystem memory = new MemorySubsystem();
+	
+	private final VIC vic =new VIC(memory);
+	
 	private final CPU cpu = new CPU( this.memory );
 
 	private IMemoryProvider memoryProvider;
@@ -32,6 +35,10 @@ public class Emulator
 		if ( this.memoryProvider != null ) {
 			this.memoryProvider.loadInto( memory );
 		}
+	}
+	
+	public VIC getVIC() {
+		return vic;
 	}
 
 	public CPU getCPU() {
@@ -56,6 +63,8 @@ public class Emulator
 
 		// reset CPU, will initialize PC from RESET_VECTOR_LOCATION
 		cpu.reset();
+		
+		vic.reset();
 		
 		MemorySubsystem.mayWriteToStack = false;
 	}

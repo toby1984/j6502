@@ -1443,7 +1443,7 @@ Subroutines are normally terminated by a RTS op code.
 			final int pc = cpu.pc();
 			final int jumpTarget = memory.readWord( pc+1 ); // read 2 byte word
 			int returnAdr = pc+2; // this would usually be +=2 but since JSR needs to push address-1 we'll just increment by 1 here
-			System.out.println("JSR: PC = "+HexDump.toAdr( pc )+" , jumping to "+HexDump.toAdr( jumpTarget )+" , return address: "+HexDump.toAdr( returnAdr+1 ) );
+//			System.out.println("JSR: PC = "+HexDump.toAdr( pc )+" , jumping to "+HexDump.toAdr( jumpTarget )+" , return address: "+HexDump.toAdr( returnAdr+1 ) );
 			cpu.pushWord( (short) returnAdr , memory );
 			cpu.pc( jumpTarget );
 			cpu.cycles += 6;
@@ -1478,12 +1478,12 @@ Subroutines are normally terminated by a RTS op code.
 			if ( (opcode & 0xff) != 0x60 ) {
 				throw new RuntimeException("Unreachable code reached");
 			}
-			System.out.print("RTS: cpu at pc = "+HexDump.toAdr( cpu.pc() )+" , SP = "+HexDump.toAdr( cpu.sp )+" , returning to ");
+//			System.out.print("RTS: cpu at pc = "+HexDump.toAdr( cpu.pc() )+" , SP = "+HexDump.toAdr( cpu.sp )+" , returning to ");
 			final int lo = cpu.pop(memory ) & 0xff;
 			final int hi = cpu.pop(memory ) & 0xff;
 			short adr = (short) (hi<<8 | lo);
 			adr++;
-			System.out.println( HexDump.toAdr( adr ) );
+//			System.out.println( HexDump.toAdr( adr ) );
 			cpu.pc( adr );
 			cpu.cycles += 6;
 		}
@@ -2188,12 +2188,12 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		}
 		if ( takeBranch )
 		{
-			System.out.println("*** branch taken ***");
+//			System.out.println("*** branch taken ***");
 			final int newPC = cpu.pc() + offset;
 			cpu.pc( newPC );
 			cpu.cycles += (3 + (isAcrossPageBoundary( adr1 , newPC ) ? 1 : 0) );
 		} else {
-			System.out.println("*** branch NOT taken ***");
+//			System.out.println("*** branch NOT taken ***");
 			cpu.cycles += 2;
 		}
 	}

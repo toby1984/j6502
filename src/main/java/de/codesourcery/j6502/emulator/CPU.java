@@ -101,18 +101,19 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 
 	public void pushByte(byte value,IMemoryRegion region)
 	{
-		decSP();
 		MemorySubsystem.mayWriteToStack = true;
 		try {
 			region.writeByte( sp , value );
+			decSP();			
 		} finally {
 			MemorySubsystem.mayWriteToStack = false;
 		}
 	}
 
-	public int pop(IMemoryRegion region) {
+	public int pop(IMemoryRegion region) 
+	{
+		incSP();		
 		final int result = region.readByte( sp );
-		incSP();
 		return result;
 	}
 

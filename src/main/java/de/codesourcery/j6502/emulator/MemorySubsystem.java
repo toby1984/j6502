@@ -54,6 +54,8 @@ public final class MemorySubsystem extends IMemoryRegion
 			this.range = range;
 		}
 	}
+	
+	private final VIC vic = new VIC(this);
 
 	// line is LOW-ACTIVE
 	private boolean exrom;
@@ -102,7 +104,7 @@ public final class MemorySubsystem extends IMemoryRegion
 	private WriteOnceMemory kernelROM;
 	private WriteOnceMemory charROM;
 	private WriteOnceMemory basicROM;
-	private IOArea ioArea;
+	private final IOArea ioArea = new IOArea("I/O area", Bank.BANK5.range );
 	private IMemoryRegion cartROMLow;
 	private IMemoryRegion cartROMHi;
 
@@ -331,15 +333,13 @@ public final class MemorySubsystem extends IMemoryRegion
 		loadROM("kernel_v3.rom" , kernelROM );
 
 		// char ROM
-		charROM = new WriteOnceMemory("Char ROM" , Bank.BANK5.range );
-		loadROM("character.rom" , charROM );
+		charROM = loadCharacterROM();
 
 		// basic ROM
 		basicROM = new WriteOnceMemory("Basic ROM" , Bank.BANK3.range );
 		loadROM( "basic_v2.rom" , basicROM );
 
 		// I/O area
-		ioArea = new IOArea("I/O area", Bank.BANK5.range );
 
 		cartROMLow = null;
 		cartROMHi = null;
@@ -371,16 +371,21 @@ public final class MemorySubsystem extends IMemoryRegion
 				cartROMHi = new Memory("Cart ROM hi" , Bank.BANK6.range );
 				break;
 		}
-
+	}
+	
+	public static WriteOnceMemory loadCharacterROM() {
+		WriteOnceMemory rom = new WriteOnceMemory("Char ROM" , Bank.BANK5.range );
+		loadROM("character.rom", rom );
+		return rom;
 	}
 
-	private void loadROM(String string, WriteOnceMemory region)
+	private static void loadROM(String string, WriteOnceMemory region)
 	{
 		final String path ="/roms/"+string;
 		if ( DEBUG_ROM_IMAGES ) {
 			System.out.println("Loading ROM: "+string);
 		}
-		final InputStream in = getClass().getResourceAsStream( path );
+		final InputStream in = MemorySubsystem.class.getResourceAsStream( path );
 		if ( in == null ) {
 			throw new RuntimeException("Failed to load ROM from classpath: "+string);
 		}
@@ -438,9 +443,9 @@ public final class MemorySubsystem extends IMemoryRegion
 		switch(wrappedOffset)
 		{
 			case 0:
-				return plaDataDirection;
+				return plaDataDirection & 0xff;
 			case 1:
-				return plaLatchBits;
+				return plaLatchBits & 0xff;
 			default:
 				final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
 				final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
