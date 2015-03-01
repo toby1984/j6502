@@ -47,6 +47,8 @@ import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.EmulatorTest;
 import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
+import de.codesourcery.j6502.emulator.Keyboard;
+import de.codesourcery.j6502.emulator.Keyboard.Key;
 import de.codesourcery.j6502.ui.EmulatorDriver.Mode;
 import de.codesourcery.j6502.ui.WindowLocationHelper.ILocationAware;
 import de.codesourcery.j6502.utils.HexDump;
@@ -351,6 +353,32 @@ public class Debugger
 	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.ILocationAware {
 
 		private Component frame;
+		
+		public ScreenPanel() 
+		{
+			setFocusable(true);
+			setRequestFocusEnabled(true);
+			addKeyListener( new KeyAdapter() 
+			{
+				@Override
+				public void keyPressed(java.awt.event.KeyEvent e) 
+				{
+					Key pressed = Keyboard.keyCodeToKey( e.getKeyCode() );
+					if ( pressed != null ) {
+						emulator.keyPressed( pressed );
+					}
+				}
+				
+				@Override
+				public void keyReleased(java.awt.event.KeyEvent e) 
+				{
+					Key released = Keyboard.keyCodeToKey( e.getKeyCode() );
+					if ( released != null ) {
+						emulator.keyReleased( released );
+					}					
+				}
+			});
+		}
 		
 		@Override
 		public void setLocationPeer(Component frame) {

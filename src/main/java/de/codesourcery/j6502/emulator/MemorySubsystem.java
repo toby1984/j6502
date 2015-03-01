@@ -531,4 +531,8 @@ public final class MemorySubsystem extends IMemoryRegion
 		}
 		return buffer.toString();
 	}
+	
+	public IOArea getIOArea() {
+		return ioArea;
+	}
 }

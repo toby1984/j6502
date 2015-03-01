@@ -280,13 +280,11 @@ public class VIC
 	
 	private Color getBorderColor() {
 		int borderColor = readByte( VIC_BORDER_COLOR ) & 0b1111;
-		System.out.println("Border color: "+borderColor);
 		return AWT_COLORS[ borderColor ];
 	}
 	
 	private Color getBackgroundColor() {
 		int bgColor = readByte( VIC_BACKGROUND_COLOR ) & 0b1111;
-		System.out.println("BG color: "+bgColor);
 		return AWT_COLORS[ bgColor ];
 	}	
 
@@ -357,7 +355,7 @@ public class VIC
 		bufferGraphics.setColor( getBackgroundColor() );
 		bufferGraphics.fillRect( BORDER_WIDTH_PIXELS , BORDER_HEIGHT_PIXELS , VIEWPORT_WIDTH , VIEWPORT_HEIGHT );		
 		
-		System.out.println("Video RAM = "+HexDump.toAdr( videoRAM ) );
+//		System.out.println("Video RAM = "+HexDump.toAdr( videoRAM ) );
 //		System.out.println("Glyph RAM = "+HexDump.toAdr( glyphRAM ) );		
 		for ( int y = 0 ; y < SCREEN_ROWS ; y++ ) 
 		{

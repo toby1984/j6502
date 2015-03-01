@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 import de.codesourcery.j6502.assembler.parser.Opcode;
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.Disassembler.Line;
+import de.codesourcery.j6502.emulator.Keyboard.Key;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
 import de.codesourcery.j6502.utils.HexDump;
 
@@ -250,4 +251,14 @@ public class Emulator
 				unknownOpcode( op ); // never returns
 		}
 	}
+	
+	public void keyPressed(Key key) {
+		System.out.println("Pressed: "+key);
+		memory.getIOArea().keyPressed( key );
+	}
+	
+	public void keyReleased(Key key) {
+		System.out.println("Released: "+key);
+		memory.getIOArea().keyReleased( key );
+	}		
 }
