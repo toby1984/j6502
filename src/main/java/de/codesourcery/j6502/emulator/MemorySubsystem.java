@@ -11,7 +11,7 @@ public final class MemorySubsystem extends IMemoryRegion
 	private static final boolean DEBUG_READS = false;
 	private static final boolean DEBUG_WRITES = false;
 	private static final boolean DEBUG_ROM_IMAGES = false;
-	
+
 	public static boolean mayWriteToStack = true;
 
 	public static enum Bank
@@ -54,8 +54,6 @@ public final class MemorySubsystem extends IMemoryRegion
 			this.range = range;
 		}
 	}
-	
-	private final VIC vic = new VIC(this);
 
 	// line is LOW-ACTIVE
 	private boolean exrom;
@@ -77,7 +75,6 @@ public final class MemorySubsystem extends IMemoryRegion
      * Bit 7: Direction of Bit 7 I/O on port at next address.  Not used.
 	 */
 	private byte plaDataDirection = 0b00101111; // port directional data register, address $00
-
 
 	/* CPU on-chip data register
 	 *
@@ -104,7 +101,7 @@ public final class MemorySubsystem extends IMemoryRegion
 	private WriteOnceMemory kernelROM;
 	private WriteOnceMemory charROM;
 	private WriteOnceMemory basicROM;
-	private final IOArea ioArea = new IOArea("I/O area", Bank.BANK5.range );
+	private final IOArea ioArea = new IOArea("I/O area", Bank.BANK5.range , this );
 	private IMemoryRegion cartROMLow;
 	private IMemoryRegion cartROMHi;
 
@@ -140,7 +137,7 @@ public final class MemorySubsystem extends IMemoryRegion
 	public void reset()
 	{
 		mayWriteToStack = true;
-		
+
 		exrom = true; // line is LOW = ACTIVE so setting it to 'true' means disabled/not present
 		game = true;  // line is LOW = ACTIVE so setting it to 'true' means disabled/not present
 
@@ -148,6 +145,16 @@ public final class MemorySubsystem extends IMemoryRegion
 		plaLatchBits = 0b00110111; // BASIC ROM , KERNEL ROM , I/O AREA
 
 		setupMemoryLayout();
+
+		ioArea.reset();
+
+		ram0.reset();
+		ram1.reset();
+		ram2.reset();
+		ram3.reset();
+		ram4.reset();
+		ram5.reset();
+		ram6.reset();
 	}
 
 	public void setMemoryLayout( byte latchBits) {
@@ -372,7 +379,7 @@ public final class MemorySubsystem extends IMemoryRegion
 				break;
 		}
 	}
-	
+
 	public static WriteOnceMemory loadCharacterROM() {
 		WriteOnceMemory rom = new WriteOnceMemory("Char ROM" , Bank.BANK5.range );
 		loadROM("character.rom", rom );
@@ -477,11 +484,14 @@ public final class MemorySubsystem extends IMemoryRegion
 				plaDataDirection = value;
 				break;
 			case 1:
+				int oldValue = plaLatchBits & 0xff;
 				plaLatchBits = value;
-				setupMemoryLayout();
+				if ( oldValue != (plaLatchBits & 0xff) ) {
+					setupMemoryLayout();
+				}
 				break;
 			default:
-				if ( ! mayWriteToStack && (wrappedOffset >= 0x0102 && wrappedOffset <= 0x01ff ) ) 
+				if ( ! mayWriteToStack && (wrappedOffset >= 0x0102 && wrappedOffset <= 0x01ff ) )
 				{
 					System.out.flush();
 					System.err.flush();
@@ -531,7 +541,7 @@ public final class MemorySubsystem extends IMemoryRegion
 		}
 		return buffer.toString();
 	}
-	
+
 	public IOArea getIOArea() {
 		return ioArea;
 	}

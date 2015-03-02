@@ -17,6 +17,14 @@ public final class WriteOnceMemory extends Memory {
 		super.writeByte(offset, value);
 	}
 
+	@Override
+	public void reset()
+	{
+		if ( ! writeProtected ) {
+			super.reset();
+		}
+	}
+
 	public void writeProtect() {
 		this.writeProtected = true;
 	}

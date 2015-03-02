@@ -139,9 +139,9 @@ M7 	N7 	C6 	    C7 	S7 	V	Carry / Overflow	                    Hex	            U
 0	1	1	    1	0	0	Unsigned carry, but no signed overflow	0x50+0xd0=0x120	80+208=288	80+-48=32
 1	0	0	    0	1	0	No unsigned carry or signed overflow	0xd0+0x10=0xe0	208+16=224	-48+16=-32
 1	0	1	    1	0	0	Unsigned carry but no unsigned overflow	0xd0+0x50=0x120	208+80=288	-48+80=32
-                
+
 1	1	0	    1	0	1	Unsigned carry and signed overflow	    0xd0+0x90=0x160	208+144=352	-48+-112=96
-                
+
 1	1	1	    1	1	0	Unsigned carry, but no signed overflow	0xd0+0xd0=0x1a0	208+208=416	-48+-48=-96
 		 */
 		execute("CLC\n LDA #80\n ADC #16\n").assertA( 96 ).assertFlags();
@@ -155,7 +155,7 @@ M7 	N7 	C6 	    C7 	S7 	V	Carry / Overflow	                    Hex	            U
 		execute("CLC\n LDA #208\n ADC #144\n").assertA( 352 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.OVERFLOW);
 		execute("CLC\n LDA #208\n ADC #208\n").assertA( 416 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.NEGATIVE);
 	}
-	
+
 //	public void testADCDecimalMode() {
 	/* TAKEN FROM http://visual6502.org/wiki/index.php?title=6502DecimalMode
     00 + 00 and C=0 gives 00 and N=0 V=0 Z=1 C=0 (simulate)
@@ -167,26 +167,26 @@ M7 	N7 	C6 	    C7 	S7 	V	Carry / Overflow	                    Hex	            U
     80 + f0 and C=0 gives d0 and N=0 V=1 Z=0 C=1 (simulate)
     80 + fa and C=0 gives e0 and N=1 V=0 Z=0 C=1 (simulate)
     2f + 4f and C=0 gives 74 and N=0 V=0 Z=0 C=0 (simulate)
-    
-    6f + 00 and C=1 gives 76 and N=0 V=0 Z=0 C=0 (simulate) 		 
+
+    6f + 00 and C=1 gives 76 and N=0 V=0 Z=0 C=0 (simulate)
 	 */
 //		execute("SED\n CLC\n LDA #$0\n ADC #0\n").assertA( 0 ).assertFlags(CPU.Flag.ZERO);
 //		execute("SED\n SEC\n LDA #$79\n ADC #0\n").assertA( 0x80 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW);
 //		execute("SED\n CLC\n LDA #$24\n ADC #$56\n").assertA( 0x80 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW);
 //		execute("SED\n CLC\n LDA #$93\n ADC #$82\n").assertA( 0x75 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.CARRY);
 //		execute("SED\n CLC\n LDA #$89\n ADC #$76\n").assertA( 0x65 ).assertFlags(CPU.Flag.CARRY);
-//		execute("SED\n SEC\n LDA #$89\n ADC #$76\n").assertA( 0x66 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY);		
+//		execute("SED\n SEC\n LDA #$89\n ADC #$76\n").assertA( 0x66 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY);
 //		execute("SED\n CLC\n LDA #$80\n ADC #$f0\n").assertA( 0xd0 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.CARRY);
 //		execute("SED\n CLC\n LDA #$80\n ADC #$fa\n").assertA( 0xe0 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.CARRY);
-//		
+//
 //		execute("SED\n CLC\n LDA #$2f\n ADC #$4f\n").assertA( 0x74 ).assertFlags();
-//		execute("SED\n SEC\n LDA #$6f\n ADC #$00\n").assertA( 0x76 ).assertFlags();	
+//		execute("SED\n SEC\n LDA #$6f\n ADC #$00\n").assertA( 0x76 ).assertFlags();
 //	}
 
 	public void testADC() {
 		// b4( %10110100 ) = 180
 		execute("SEC\n LDA #$03\n ADC #$03").assertA( 0x07 ).assertFlags();
-		
+
 		execute("LDA #$01 CLC\n ADC #$01").assertA( 0x02 ).assertFlags();
 		execute("LDA #$ff CLC\n ADC #$01").assertA( 0x00 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY);
 		execute("LDA #$7f CLC\n ADC #$01").assertA( 0x80 ).assertFlags(CPU.Flag.OVERFLOW , CPU.Flag.NEGATIVE );
@@ -546,10 +546,6 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		e.reset();
 		e.getCPU().pc( origin );
 
-		driver.logEachStep = true;
-		driver.sourceHelper = helper;
-		driver.sourceMap = a.getSourceMap();
-
 		driver.start();
 		driver.addBreakpoint( new Breakpoint( (short) 0x103e , false ) );
 		driver.setMode( Mode.CONTINOUS );
@@ -568,7 +564,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		int value = (byte) 0x8e;
 		System.out.println("result: "+(value+value));
 //		fail("abort");
-		
+
 		final String source = loadTestProgram( "/test.asm");
 
 		final AST ast;
@@ -617,10 +613,6 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 
 		e.reset();
 		e.getCPU().pc( origin );
-
-		driver.logEachStep = true;
-		driver.sourceHelper = helper;
-		driver.sourceMap = a.getSourceMap();
 
 		driver.start();
 		driver.addBreakpoint( new Breakpoint( (short) 0x45c0 , false ) );
@@ -1299,7 +1291,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 					try
 					{
 						beforeEachStep.forEach( r -> r.accept( emulator ) );
-						emulator.singleStep();
+						emulator.doOneCycle();
 						afterEachStep.forEach( r -> r.accept( emulator ) );
 					} catch(final InvalidOpcodeException e) {
 						break;

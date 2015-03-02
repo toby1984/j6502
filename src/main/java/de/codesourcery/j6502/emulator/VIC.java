@@ -4,9 +4,7 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 
-import de.codesourcery.j6502.utils.HexDump;
-
-public class VIC 
+public class VIC
 {
 	public  static final Color Black 	     = color( 0, 0, 0); // 0
 	public  static final Color White        = color( 255, 255, 255); // 1
@@ -18,23 +16,28 @@ public class VIC
 	public  static final Color Yellow         = color( 238, 238, 119 ); // 7
 	public  static final Color Orange       = color( 221, 136, 85); // 8
 	public  static final Color Brown        = color( 102, 68, 0); // 9
-	public  static final Color Lightred    = color( 255, 119, 119); // 10 
+	public  static final Color Lightred    = color( 255, 119, 119); // 10
 	public  static final Color Grey1       = color( 51, 51, 51); // 11
 	public  static final Color Grey2       = color( 119, 119, 119); // 12
 	public  static final Color Lightgreen  = color( 170, 255, 102); // 13
 	public  static final Color Lightblue   = color( 0, 136, 255 ); // 14
 	public  static final Color Lightgrey   = color(  187, 187, 187); // 15
-	
+
+	public long cycleCount;
+	public int rasterLine;
+
+	public short irqOnRaster = -1;
+
 	private static Color color(int r,int g,int b) {
 		return new Color(r,g,b);
-	}		
+	}
 
-	public static final Color[] AWT_COLORS = { Black,White,Red,Cyan,Violet,Green,Blue,Yellow,Orange,Brown,Lightred,Grey1,Grey2,Lightgreen,Lightblue,Lightgrey}; 
+	public static final Color[] AWT_COLORS = { Black,White,Red,Cyan,Violet,Green,Blue,Yellow,Orange,Brown,Lightred,Grey1,Grey2,Lightgreen,Lightblue,Lightgrey};
 
 	public  static final int[] INT_COLORS = new int[16];
-	
+
 	static {
-		for ( int i = 0 ; i < AWT_COLORS.length ; i++ ) 
+		for ( int i = 0 ; i < AWT_COLORS.length ; i++ )
 		{
 			final int rgb = AWT_COLORS[i].getRGB();
 			INT_COLORS[i] = rgb;
@@ -152,96 +155,96 @@ public class VIC
 	public static final boolean VIC_PAL_MODE = true;
 
 	// VIC registers
-	public  static final int VIC_SPRITE0_X_COORD = 0;
-	public  static final int VIC_SPRITE0_Y_COORD = 1;
+	public  static final int VIC_SPRITE0_X_COORD = 0xd000 + 0;
+	public  static final int VIC_SPRITE0_Y_COORD = 0xd000 + 1;
 
-	public  static final int VIC_SPRITE1_X_COORD = 2;
-	public  static final int VIC_SPRITE1_Y_COORD = 3;
+	public  static final int VIC_SPRITE1_X_COORD = 0xd000 + 2;
+	public  static final int VIC_SPRITE1_Y_COORD = 0xd000 + 3;
 
-	public  static final int VIC_SPRITE2_X_COORD = 4;
-	public  static final int VIC_SPRITE2_Y_COORD = 5;
+	public  static final int VIC_SPRITE2_X_COORD = 0xd000 + 4;
+	public  static final int VIC_SPRITE2_Y_COORD = 0xd000 + 5;
 
-	public  static final int VIC_SPRITE3_X_COORD = 6;
-	public  static final int VIC_SPRITE3_Y_COORD = 7;
+	public  static final int VIC_SPRITE3_X_COORD = 0xd000 + 6;
+	public  static final int VIC_SPRITE3_Y_COORD = 0xd000 + 7;
 
-	public  static final int VIC_SPRITE4_X_COORD = 8;
-	public  static final int VIC_SPRITE4_Y_COORD = 9;
+	public  static final int VIC_SPRITE4_X_COORD = 0xd000 + 8;
+	public  static final int VIC_SPRITE4_Y_COORD = 0xd000 + 9;
 
-	public  static final int VIC_SPRITE5_X_COORD = 10;
-	public  static final int VIC_SPRITE5_Y_COORD = 11;
+	public  static final int VIC_SPRITE5_X_COORD = 0xd000 + 10;
+	public  static final int VIC_SPRITE5_Y_COORD = 0xd000 + 11;
 
-	public  static final int VIC_SPRITE6_X_COORD = 12;
-	public  static final int VIC_SPRITE6_Y_COORD = 13;
+	public  static final int VIC_SPRITE6_X_COORD = 0xd000 + 12;
+	public  static final int VIC_SPRITE6_Y_COORD = 0xd000 + 13;
 
-	public  static final int VIC_SPRITE7_X_COORD = 14;
-	public  static final int VIC_SPRITE7_Y_COORD = 15;
+	public  static final int VIC_SPRITE7_X_COORD = 0xd000 + 14;
+	public  static final int VIC_SPRITE7_Y_COORD = 0xd000 + 15;
 
-	public  static final int VIC_SPRITE_X_COORDS_HI_BIT = 15;
+	public  static final int VIC_SPRITE_X_COORDS_HI_BIT = 0xd000 + 15;
 
-	public  static final int VIC_CNTRL1 = 17;
+	public  static final int VIC_CNTRL1 = 0xd000 + 17;
 
-	public  static final int VIC_SCANLINE = 18;
+	public  static final int VIC_SCANLINE = 0xd000 + 18;
 
-	public  static final int VIC_LIGHTPEN_X_COORDS = 19;
-	public  static final int VIC_LIGHTPEN_Y_COORDS = 20;
+	public  static final int VIC_LIGHTPEN_X_COORDS = 0xd000 + 19;
+	public  static final int VIC_LIGHTPEN_Y_COORDS = 0xd000 + 20;
 
-	public  static final int VIC_SPRITE_ENABLE = 21;
+	public  static final int VIC_SPRITE_ENABLE = 0xd000 + 21;
 
-	public  static final int VIC_CTRL2 = 22;
+	public  static final int VIC_CTRL2 = 0xd000 + 22;
 
-	public  static final int VIC_SPRITE_DOUBLE_HEIGHT = 23;
+	public  static final int VIC_SPRITE_DOUBLE_HEIGHT = 0xd000 + 23;
 
-	public  static final int VIC_MEMORY_MAPPING = 24;
+	public  static final int VIC_MEMORY_MAPPING = 0xd000 + 24;
 
-	public  static final int VIC_IRQ_ACTIVE_BITS = 25;
+	public  static final int VIC_IRQ_ACTIVE_BITS = 0xd000 + 25;
 
-	public  static final int VIC_IRQ_ENABLE_BITS = 26;
+	public  static final int VIC_IRQ_ENABLE_BITS = 0xd000 + 26;
 
-	public  static final int VIC_SPRITE_PRIORITY = 27;
+	public  static final int VIC_SPRITE_PRIORITY = 0xd000 + 27;
 
-	public  static final int VIC_SPRITE_MULTICOLOR_MODE = 28;
+	public  static final int VIC_SPRITE_MULTICOLOR_MODE = 0xd000 + 28;
 
-	public  static final int VIC_SPRITE_DOUBLE_WIDTH = 29;
+	public  static final int VIC_SPRITE_DOUBLE_WIDTH = 0xd000 + 29;
 
-	public  static final int VIC_SPRITE_SPRITE_COLLISIONS = 30;
-	public  static final int VIC_SPRITE_BACKGROUND_COLLISIONS = 31;
+	public  static final int VIC_SPRITE_SPRITE_COLLISIONS = 0xd000 + 30;
+	public  static final int VIC_SPRITE_BACKGROUND_COLLISIONS = 0xd000 + 31;
 
-	public  static final int VIC_BORDER_COLOR = 32;
-	public  static final int VIC_BACKGROUND_COLOR = 33;
+	public  static final int VIC_BORDER_COLOR = 0xd000 + 32;
+	public  static final int VIC_BACKGROUND_COLOR = 0xd000 + 33;
 
-	public  static final int VIC_BACKGROUND0_EXT_COLOR = 34;
-	public  static final int VIC_BACKGROUND1_EXT_COLOR = 35;
-	public  static final int VIC_BACKGROUND2_EXT_COLOR = 36;
+	public  static final int VIC_BACKGROUND0_EXT_COLOR = 0xd000 + 34;
+	public  static final int VIC_BACKGROUND1_EXT_COLOR = 0xd000 + 35;
+	public  static final int VIC_BACKGROUND2_EXT_COLOR = 0xd000 + 36;
 
-	public  static final int VIC_SPRITE_COLOR10_MULTICOLOR_MODE = 37;
-	public  static final int VIC_SPRITE_COLOR11_MULTICOLOR_MODE = 38;
+	public  static final int VIC_SPRITE_COLOR10_MULTICOLOR_MODE = 0xd000 + 37;
+	public  static final int VIC_SPRITE_COLOR11_MULTICOLOR_MODE = 0xd000 + 38;
 
-	public  static final int VIC_SPRITE0_COLOR10 = 39;
-	public  static final int VIC_SPRITE1_COLOR10 = 40;
-	public  static final int VIC_SPRITE2_COLOR10 = 41;
-	public  static final int VIC_SPRITE3_COLOR10 = 42;
-	public  static final int VIC_SPRITE4_COLOR10 = 43;
-	public  static final int VIC_SPRITE5_COLOR10 = 44;
-	public  static final int VIC_SPRITE6_COLOR10 = 45;
-	public  static final int VIC_SPRITE7_COLOR10 = 46;	
-	
+	public  static final int VIC_SPRITE0_COLOR10 = 0xd000 + 39;
+	public  static final int VIC_SPRITE1_COLOR10 = 0xd000 + 40;
+	public  static final int VIC_SPRITE2_COLOR10 = 0xd000 + 41;
+	public  static final int VIC_SPRITE3_COLOR10 = 0xd000 + 42;
+	public  static final int VIC_SPRITE4_COLOR10 = 0xd000 + 43;
+	public  static final int VIC_SPRITE5_COLOR10 = 0xd000 + 44;
+	public  static final int VIC_SPRITE6_COLOR10 = 0xd000 + 45;
+	public  static final int VIC_SPRITE7_COLOR10 = 0xd000 + 46;
+
 	public static final int BORDER_HEIGHT_PIXELS = 15;
 	public static final int BORDER_WIDTH_PIXELS = 15;
-	
+
 	public static final int SCREEN_ROWS = 25;
 	public static final int SCREEN_COLS = 40;
-	
+
 	public static final int VIEWPORT_WIDTH = SCREEN_COLS*8;
 	public static final int VIEWPORT_HEIGHT = SCREEN_ROWS*8;
-	
+
 	public static final int BG_BUFFER_WIDTH = 2*BORDER_WIDTH_PIXELS + VIEWPORT_WIDTH;
-	
-	public static final int BG_BUFFER_HEIGHT = 2*BORDER_HEIGHT_PIXELS + VIEWPORT_HEIGHT;	
+
+	public static final int BG_BUFFER_HEIGHT = 2*BORDER_HEIGHT_PIXELS + VIEWPORT_HEIGHT;
 
 	private final IMemoryRegion memory;
 	private BufferedImage buffer;
 	private Graphics2D graphics;
-	
+
 	private WriteOnceMemory characterROM;
 
 	public VIC(IMemoryRegion memory) {
@@ -249,7 +252,7 @@ public class VIC
 	}
 
 	private BufferedImage getBuffer(Graphics2D g) {
-		if ( buffer == null ) 
+		if ( buffer == null )
 		{
 			// 8x8 pixel per character
 			// 40x25 characters on screen
@@ -265,30 +268,30 @@ public class VIC
 		return graphics;
 	}
 
-	private int readByte(int index) {
-		return memory.readByte( 0xd000 + index );
-	}
-	
-	public void reset() 
+	public void reset()
 	{
+		this.cycleCount = 0;
+		this.rasterLine = 0;
+		this.irqOnRaster = -1;
+
 		// CIA2 $dd00: Set bit 0+bit 1 so that VIC bank #0 is selected by default
 		int value = memory.readByte( 0xdd00 ) | 0b11;
 		memory.writeByte( 0xdd00 , (byte) value );
-		
+
 		characterROM = MemorySubsystem.loadCharacterROM();
 	}
-	
+
 	private Color getBorderColor() {
-		int borderColor = readByte( VIC_BORDER_COLOR ) & 0b1111;
+		int borderColor = memory.readByte( VIC_BORDER_COLOR ) & 0b1111;
 		return AWT_COLORS[ borderColor ];
 	}
-	
-	private Color getBackgroundColor() {
-		int bgColor = readByte( VIC_BACKGROUND_COLOR ) & 0b1111;
-		return AWT_COLORS[ bgColor ];
-	}	
 
-	public void render(Graphics2D g,int width,int height) 
+	private Color getBackgroundColor() {
+		int bgColor = memory.readByte( VIC_BACKGROUND_COLOR ) & 0b1111;
+		return AWT_COLORS[ bgColor ];
+	}
+
+	public void render(Graphics2D g,int width,int height)
 	{
 		// video RAM location
 		/*
@@ -297,13 +300,13 @@ public class VIC
 		 *                           vvvvggg
 		 *                          Bit 7..4: Basisadresse des Bildschirmspeichers in aktueller 16K-Bank des VIC = 64*(Bit 7…4)[2]
 		 *                          Bit 3..1: Basisadresse des Zeichensatzes = 1024*(Bit 3…1).
-		 *                          
+		 *
          * When in TEXT SCREEN MODE, the VIC-II looks to 53272 for information on where the character set and text screen character RAM is located:
          *
          * The four most significant bits form a 4-bit number in the range 0 thru 15: Multiplied with 1024 this gives the start address for the screen character RAM.
-         * Bits 1 thru 3 (weights 2 thru 8) form a 3-bit number in the range 0 thru 7: Multiplied with 2048 this gives the start address for the character set. 		                         		 
+         * Bits 1 thru 3 (weights 2 thru 8) form a 3-bit number in the range 0 thru 7: Multiplied with 2048 this gives the start address for the character set.
 		 */
-		int value = readByte(VIC_MEMORY_MAPPING);
+		int value = memory.readByte(VIC_MEMORY_MAPPING);
 		int videoRAMOffset = 1024 * ( ( value & 0b1111_0000) >>4 );
 		int glyphRAMOffset = 2048 * ( ( value & 0b0000_1110) >> 1);
 
@@ -313,16 +316,16 @@ public class VIC
 		 * %01, 1: Bank 2: $8000-$BFFF, 32768-49151
 		 * %10, 2: Bank 1: $4000-$7FFF, 16384-32767
 		 * %11, 3: Bank 0: $0000-$3FFF, 0-16383 (standard)
-		 * 
+		 *
          * Bank no.	Bit pattern in 56576/$DD00    Character ROM available?
          * 3	xxxxxx11	0–16383	$0000–$3FFF	      Yes, at 4096–8192 $1000–$1FFF
          * 2	xxxxxx10	16384–32767	$4000–$7FFF	  No
          * 1	xxxxxx01	32768–49151	$8000–$BFFF	  Yes, at 36864–40959 $9000–$9FFF
-         * 0	xxxxxx00	49152–65535	$C000–$FFFF	  No		 
+         * 0	xxxxxx00	49152–65535	$C000–$FFFF	  No
 		 */
-		final int bankNo = memory.readByte( 0xdd00 ) & 0b11; 
+		final int bankNo = memory.readByte( 0xdd00 ) & 0b11;
 //		System.out.println("Selected VIC bank: "+bankNo);
-		
+
 		int bankAdr;
 		switch( bankNo ) {
 			case 0b00:
@@ -331,10 +334,10 @@ public class VIC
 			case 0b01:
 				bankAdr = 0x8000;
 				break;
-			case 0b10: 
+			case 0b10:
 				bankAdr = 0x4000;
 				break;
-			case 0b11: 
+			case 0b11:
 				bankAdr = 0x0000;
 				break;
 			default:
@@ -347,19 +350,19 @@ public class VIC
 
 		BufferedImage buffer = getBuffer(g);
 		Graphics2D bufferGraphics = getBufferGraphics(g);
-		
+
 		// clear screen
 		bufferGraphics.setColor( getBorderColor() );
 		bufferGraphics.fillRect( 0 , 0 , BG_BUFFER_WIDTH , BG_BUFFER_HEIGHT );
 
 		bufferGraphics.setColor( getBackgroundColor() );
-		bufferGraphics.fillRect( BORDER_WIDTH_PIXELS , BORDER_HEIGHT_PIXELS , VIEWPORT_WIDTH , VIEWPORT_HEIGHT );		
-		
+		bufferGraphics.fillRect( BORDER_WIDTH_PIXELS , BORDER_HEIGHT_PIXELS , VIEWPORT_WIDTH , VIEWPORT_HEIGHT );
+
 //		System.out.println("Video RAM = "+HexDump.toAdr( videoRAM ) );
-//		System.out.println("Glyph RAM = "+HexDump.toAdr( glyphRAM ) );		
-		for ( int y = 0 ; y < SCREEN_ROWS ; y++ ) 
+//		System.out.println("Glyph RAM = "+HexDump.toAdr( glyphRAM ) );
+		for ( int y = 0 ; y < SCREEN_ROWS ; y++ )
 		{
-			for ( int x =0 ; x < SCREEN_COLS ; x++ ) 
+			for ( int x =0 ; x < SCREEN_COLS ; x++ )
 			{
 				final int offset = y * SCREEN_COLS + x;
 				final int color = memory.readByte( colorRAM + offset ) % 0b1111;
@@ -370,23 +373,65 @@ public class VIC
 
 				int glyphAdr = character << 3; // *8 bytes per glyph
 
-				for ( int i = 0 ; i < 8 ; i++ ) 
+				for ( int i = 0 ; i < 8 ; i++ )
 				{
 					// FIXME: I assume that the character ROM is always available to the VIC , this is not
 					// FIXME: 100% technically correct since this actually depends on the selected VIC bank (see above)
 					final int word = characterROM.readByte( glyphAdr );
 
-					for (int mask = 0b10000000 , row = 0 ; row <  8 ; row++ , mask = mask >> 1 ) 
+					for (int mask = 0b10000000 , row = 0 ; row <  8 ; row++ , mask = mask >> 1 )
 					{
 						if ( (word & mask) != 0 ) {
 							buffer.setRGB( xPixel+row,yPixel , INT_COLORS[ color ] );
-						} 
+						}
 					}
 					glyphAdr++;
 					yPixel++;
 				}
 			}
-		}		
+		}
 		g.drawImage( buffer , 0 , 0 , width, height , null );
+	}
+
+	public void tick(CPU cpu)
+	{
+		cycleCount++;
+
+		// decrement
+
+		// Increment current scanline position
+
+		if ( VIC_PAL_MODE ) // 312 raster lines , 57 cycles/line
+		{
+			while ( cycleCount >= 57 ) {
+				rasterLine++;
+				cycleCount-=57;
+			}
+			if ( rasterLine >= 312 ) {
+				rasterLine = 0;
+				cycleCount=0;
+			}
+		} else { // NTSC =>  263 rasterlines and 65 cycles/line
+			while ( cycleCount >= 65 ) {
+				rasterLine++;
+				cycleCount-=65;
+			}
+			if ( rasterLine >= 263 ) {
+				rasterLine = 0;
+				cycleCount=0;
+			}
+		}
+
+		final byte lo = (byte) rasterLine;
+		final byte hi = (byte) (rasterLine>>8);
+
+		int hiBit = memory.readByte( VIC.VIC_CNTRL1 );
+		if ( hi != 0 ) {
+			hiBit |= 0b1000_0000;
+		} else {
+			hiBit &= 0b0111_1111;
+		}
+		memory.writeByte( VIC.VIC_CNTRL1 , (byte) hiBit );
+		memory.writeWord( VIC.VIC_SCANLINE , lo );
 	}
 }

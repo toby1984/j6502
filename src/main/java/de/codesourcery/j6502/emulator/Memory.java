@@ -30,8 +30,6 @@ public class Memory extends IMemoryRegion
 	@Override
 	public void reset()
 	{
-		System.out.println("reset(): Clearing "+this);
-		new Exception().printStackTrace();
 		for ( int i = 0 , len = data.length ; i < len ; i++ ) {
 			data[i] = 0;
 		}

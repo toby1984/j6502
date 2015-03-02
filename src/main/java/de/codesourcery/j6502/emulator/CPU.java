@@ -9,17 +9,12 @@ import de.codesourcery.j6502.utils.HexDump;
 public class CPU
 {
 	public static final int RESET_VECTOR_LOCATION = 0xfffc;
-	public static final int BRK_VECTOR_LOCATION = 0xfffe;
-
-	/*
-On an NMI, the CPU pushes the low byte and the high byte of the program counter as well as the processor status onto the stack, disables interrupts and
-loads the vector from $FFFA/$FFFB into the program counter and continues fetching instructions from there.
-On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFFE/$FFFF.
-	 */
-	public static final int IRQ_VECTOR_LOCATION = 0xfffe;
+	public static final int BRK_VECTOR_LOCATION = 0xfffe; // same as IRQ_VECTOR_LOCATION
+	public static final int IRQ_VECTOR_LOCATION = 0xfffe; // same as BRK_VECTOR_LOCATION
 
 	private final IMemoryRegion memory;
 
+	private boolean interruptQueued;
 	public long cycles = 0;
 	public short previousPC;
 	private int pc;
@@ -50,11 +45,11 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		public byte clear(byte flags) { return (byte) (flags&~value); }
 		public byte set(byte flags) { return (byte) (flags | value); }
 	}
-	
+
 	public byte getFlagBits() {
 		return flags;
 	}
-	
+
 	public void setFlagBits(byte bits) {
 		this.flags = CPU.Flag.EXTENSION.set( bits ); // extension bit is always set
 	}
@@ -80,14 +75,22 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		this.memory = memory;
 	}
 
-	public void interrupt(IMemoryRegion mainMemory)
+	public void performInterrupt(IMemoryRegion mainMemory)
 	{
+		/*
+- On an NMI, the CPU pushes the low byte and the high byte of the program counter as well as the processor status onto the stack,
+  disables interrupts and loads the vector from $FFFA/$FFFB into the program counter and continues fetching instructions from there.
+- On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFFE/$FFFF.
+		 */
 		if ( ! isSet(Flag.IRQ_DISABLE ) )
 		{
 			pushByte( (byte) ( ( pc & 0xff00) >>8 ) ,  memory ); // push pc hi
 			pushByte( (byte) ( pc & 0xff ) , memory ); // push pc lo
 			pushByte( flags , memory ); // push processor flags
+			flags = CPU.Flag.IRQ_DISABLE.set( this.flags );
 			pc = (short) memory.readWord( (short) CPU.IRQ_VECTOR_LOCATION );
+			clearInterruptQueued();
+//			System.out.println("Jumping to interrupt handler @ "+HexDump.toAdr( pc ) );
 		}
 	}
 
@@ -104,17 +107,16 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		MemorySubsystem.mayWriteToStack = true;
 		try {
 			region.writeByte( sp , value );
-			decSP();			
+			decSP();
 		} finally {
 			MemorySubsystem.mayWriteToStack = false;
 		}
 	}
 
-	public int pop(IMemoryRegion region) 
+	public int pop(IMemoryRegion region)
 	{
-		incSP();		
-		final int result = region.readByte( sp );
-		return result;
+		incSP();
+		return region.readByte( sp );
 	}
 
 	public void setFlag(Flag f) {
@@ -146,8 +148,14 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 		setAccumulator(0);
 		setX((byte) 0);
 		setY((byte) 0);
+		clearInterruptQueued();
 		sp = 0x1ff;
 		setFlagBits( CPU.Flag.IRQ_DISABLE.set( (byte) 0) );
+	}
+
+	public void queueInterrupt() {
+//		System.out.println("*** IRQ queued ***");
+		this.interruptQueued = true;
 	}
 
 	@Override
@@ -212,6 +220,14 @@ On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFF
 
 	public Set<Flag> getFlags() {
 		return Arrays.stream( Flag.values() ).filter( f -> f.isSet( this.flags ) ).collect(Collectors.toSet());
+	}
+
+	public boolean isInterruptQueued() {
+		return interruptQueued;
+	}
+
+	public void clearInterruptQueued() {
+		this.interruptQueued = false;
 	}
 
 	public void setSP(int value)

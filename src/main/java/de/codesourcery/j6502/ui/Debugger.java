@@ -85,7 +85,7 @@ public class Debugger
 		{
 			final long now = System.currentTimeMillis();
 			long age = now - lastTick;
-			if ( age > 1000 )
+			if ( age > 250 ) // do not post more than 60 events / second to not overload the Swing Event handling queue
 			{
 				lastTick = now;
 				SwingUtilities.invokeLater( () -> updateWindows() );
@@ -125,10 +125,10 @@ public class Debugger
 
 		final JInternalFrame hexPanelFrame = wrap( "Memory" , hexPanel );
 		desktop.add( hexPanelFrame  );
-		
+
 		final JInternalFrame screenPanelFrame = wrap( "Screen" , screenPanel );
-		desktop.add( screenPanelFrame  );		
-		
+		desktop.add( screenPanelFrame  );
+
 
 		final JFrame frame = new JFrame("");
 		frame.addWindowListener( new WindowAdapter() {
@@ -349,37 +349,37 @@ public class Debugger
 		cpuPanel.repaint();
 		hexPanel.repaint();
 	}
-	
+
 	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.ILocationAware {
 
 		private Component frame;
-		
-		public ScreenPanel() 
+
+		public ScreenPanel()
 		{
 			setFocusable(true);
 			setRequestFocusEnabled(true);
-			addKeyListener( new KeyAdapter() 
+			addKeyListener( new KeyAdapter()
 			{
 				@Override
-				public void keyPressed(java.awt.event.KeyEvent e) 
+				public void keyPressed(java.awt.event.KeyEvent e)
 				{
 					Key pressed = Keyboard.keyCodeToKey( e.getKeyCode() );
 					if ( pressed != null ) {
 						emulator.keyPressed( pressed );
 					}
 				}
-				
+
 				@Override
-				public void keyReleased(java.awt.event.KeyEvent e) 
+				public void keyReleased(java.awt.event.KeyEvent e)
 				{
 					Key released = Keyboard.keyCodeToKey( e.getKeyCode() );
 					if ( released != null ) {
 						emulator.keyReleased( released );
-					}					
+					}
 				}
 			});
 		}
-		
+
 		@Override
 		public void setLocationPeer(Component frame) {
 			this.frame = frame;
@@ -389,13 +389,13 @@ public class Debugger
 		public Component getLocationPeer() {
 			return this.frame;
 		}
-		
+
 		@Override
-		protected void paintComponent(Graphics g) 
+		protected void paintComponent(Graphics g)
 		{
 			super.paintComponent(g);
 			emulator.getVIC().render( (Graphics2D) g , getWidth() , getHeight() );
-		}		
+		}
 	}
 
 	// CPU status
@@ -642,20 +642,20 @@ public class Debugger
 			lines.clear();
 			repaint();
 		}
-		
+
 		public void lineUp() {
 			this.currentAddress = (short) ( ( this.currentAddress -1 ));
 			this.addressToMark = null;
 			lines.clear();
 			repaint();
-		}		
-		
+		}
+
 		public void lineDown() {
 			this.currentAddress = (short) (  this.currentAddress + 1 );
 			this.addressToMark = null;
 			lines.clear();
 			repaint();
-		}		
+		}
 
 		public void pageDown() {
 			this.currentAddress = (short) ( this.currentAddress + bytesToDisassemble/2 );

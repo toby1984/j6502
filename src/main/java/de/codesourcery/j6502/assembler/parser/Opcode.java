@@ -275,7 +275,7 @@ Indirect,Y    EOR ($44),Y   $51  2   5+
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b011 ); }
 
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator) 
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator)
 		{
 			int b;
 			switch( opcode )
@@ -312,33 +312,33 @@ Indirect,Y    EOR ($44),Y   $51  2   5+
 				default:
 					throw new RuntimeException("Unreachable code reached");
 			}
-			
+
 			// FIXME: Handle BCD mode
 			if ( cpu.isSet( Flag.DECIMAL_MODE ) ) {
 				/*
-				 * taken from http://www.fceux.com/web/help/fceux.html?6502CPU.html 
+				 * taken from http://www.fceux.com/web/help/fceux.html?6502CPU.html
         unsigned
           A,  // Accumulator
-          AL, // low nibble of accumulator 
+          AL, // low nibble of accumulator
           AH, // high nibble of accumulator
           C,  // Carry flag
           Z,  // Zero flag
-          V,  // oVerflow flag 
+          V,  // oVerflow flag
           N,  // Negative flag
-          s;  // value to be added to Accumulator 
-          
-       AL = (A & 15) + (s & 15) + C;         // Calculate the lower nibble. 
+          s;  // value to be added to Accumulator
 
-       AH = (A >> 4) + (s >> 4) + (AL > 15); // Calculate the upper nibble. 
+       AL = (A & 15) + (s & 15) + C;         // Calculate the lower nibble.
 
-       if (AL > 9) AL += 6;                  // BCD fixup for lower nibble. 
+       AH = (A >> 4) + (s >> 4) + (AL > 15); // Calculate the upper nibble.
+
+       if (AL > 9) AL += 6;                  // BCD fixup for lower nibble.
 
        Z = ((A + s + C) & 255 != 0);         // Zero flag is set just
 
                                                 like in Binary mode.
 
         // Negative and Overflow flags are set with the same logic than in
-        // Binary mode, but after fixing the lower nibble. 
+        // Binary mode, but after fixing the lower nibble.
 
        N = (AH & 8 != 0);
 
@@ -350,7 +350,7 @@ Indirect,Y    EOR ($44),Y   $51  2   5+
 
        C = (AH > 15);
 
-       A = ((AH << 4) | (AL & 15)) & 255;				 
+       A = ((AH << 4) | (AL & 15)) & 255;
 				 */
 				throw new RuntimeException("ADC with BCD currently not implemented");
 			}
@@ -485,7 +485,7 @@ operation. If the carry is cleared by the operation, it indicates a borrow occur
 				default:
 					throw new RuntimeException("Unreachable code reached");
 			}
-			
+
 
 			// FIXME: Handle BCD mode
 
@@ -493,10 +493,10 @@ operation. If the carry is cleared by the operation, it indicates a borrow occur
 				/* taken from http://www.fceux.com/web/help/fceux.html?6502CPU.html
         unsigned
           A,  // Accumulator
-          AL, // low nibble of accumulator 
+          AL, // low nibble of accumulator
           AH, // high nibble of accumulator
           C,  // Carry flag
-          Z,  // Zero flag 
+          Z,  // Zero flag
           V,  // oVerflow flag
           N,  // Negative flag
 
@@ -520,7 +520,7 @@ operation. If the carry is cleared by the operation, it indicates a borrow occur
 
        N = (A - s - !C) & 128 != 0;
 
-       A = ((AH << 4) | (AL & 15)) & 255;				 
+       A = ((AH << 4) | (AL & 15)) & 255;
 				 */
 				throw new RuntimeException("SBC with BCD currently not implemented");
 			}
@@ -1456,10 +1456,12 @@ Subroutines are normally terminated by a RTS op code.
 			if ( (opcode & 0xff) != 0x40 ) {
 				throw new RuntimeException("Unreachable code reached");
 			}
-			cpu.setFlagBits( (byte) cpu.pop(memory ) );
-			final int lo = cpu.pop(memory );
-			final int hi = cpu.pop(memory );
-			cpu.pc( hi<<8 | lo );
+			cpu.setFlagBits( (byte) cpu.pop(memory ) ); // flags
+			final int lo = cpu.pop(memory ); //  lo
+			final int hi = cpu.pop(memory ); //hi
+			int returnAddress = hi<<8 | lo;
+//			System.out.println("Returning from interrupt to "+HexDump.toAdr( returnAddress ) );
+			cpu.pc( returnAddress );
 			cpu.cycles += 6;
 		}
 	},
@@ -1680,7 +1682,7 @@ Subroutines are normally terminated by a RTS op code.
 				writer.writeWord( child0.child(0) );
 				break;
 			case ZERO_PAGE_Y:
-			case ZERO_PAGE_X:				
+			case ZERO_PAGE_X:
 				// MODE           SYNTAX         HEX LEN TIM
 				// Zero Page,X   LDA $44,X     $B5  2   4
 				opCode = (aaa << 5) | ( 0b101 << 2) | cc;
@@ -2014,7 +2016,7 @@ Subroutines are normally terminated by a RTS op code.
 		final int adr2222 = memory.readWord( adr1111 );
 		final int adr3333 = adr2222 + cpu.getY();
 		memory.writeByte( adr3333 ,(byte) accumulator );
-		cpu.incPC(2);		
+		cpu.incPC(2);
 	}
 
 	private static void writeIndexedIndirectX(int value, CPU cpu, IMemoryRegion memory)
@@ -2023,14 +2025,14 @@ Subroutines are normally terminated by a RTS op code.
 		final int adr222 = adr111 + cpu.getX() ; // zp + offset
 		final int adr333 = memory.readWord( (short) adr222 );
 		memory.writeByte( (short) adr333 , (byte) value );
-		cpu.incPC(2);		
+		cpu.incPC(2);
 	}
 
 	private static void writeAbsoluteYValue(int value , CPU cpu, IMemoryRegion memory) {
-		
-		final int baseAddr = memory.readWord( cpu.pc() +1); 
+
+		final int baseAddr = memory.readWord( cpu.pc() +1);
 		final int adr11 = baseAddr + cpu.getY();
-		memory.writeByte( (short) adr11  , (byte) value ); // accu:= mem[ zp_adr + x ]		
+		memory.writeByte( (short) adr11  , (byte) value ); // accu:= mem[ zp_adr + x ]
 		cpu.incPC(3);
 	}
 
@@ -2050,21 +2052,21 @@ Subroutines are normally terminated by a RTS op code.
 		int adr = memory.readByte( cpu.pc() + 1 );
 		adr += cpu.getX();
 		memory.writeByte( (short) (adr & 0xff) , (byte) value ); // accu:= mem[ zp_adr + x ]
-		cpu.incPC(2);		
+		cpu.incPC(2);
 	}
 
 	private static void writeAbsoluteZeroPageYValue(int value, CPU cpu, IMemoryRegion memory) {
 		int adr = memory.readByte( cpu.pc() +1 );
 		adr = adr + cpu.getY();
 		memory.writeByte( (short) (adr & 0xff) , (byte) value ); // accu:= mem[ zp_adr + x ]
-		cpu.incPC(2);		
+		cpu.incPC(2);
 	}
 
 	private static void writeZeroPage(int value,CPU cpu,IMemoryRegion memory)
 	{
 		final int adr = memory.readByte( cpu.pc()+1 );
 		memory.writeByte( adr & 0xff , (byte) value );
-		cpu.incPC(2);		
+		cpu.incPC(2);
 	}
 
 	private static void handleStackInstruction(CPU cpu,IMemoryRegion memory)
@@ -2098,7 +2100,7 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 				cpu.incPC();
 				cpu.cycles += 4;
 				break;
-			case 0x08: // PHP (PusH Processor status)     $08  3				
+			case 0x08: // PHP (PusH Processor status)     $08  3
 				cpu.pushByte(cpu.getFlagBits(), memory );
 				cpu.incPC();
 				cpu.cycles += 3;
@@ -2290,7 +2292,7 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 				cycles = 7;
 				break;
 			default:
-				throw new RuntimeException("Unreachable code reached");
+				throw new RuntimeException("Unhandled switch/case reached for opcode "+HexDump.toHexBigEndian( opcode ) +" @ PC = "+HexDump.toAdr( cpu.pc() ) );
 		}
 		cpu.cycles += cycles;
 		int value = memory.readByte( address );
@@ -2298,20 +2300,20 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 		memory.writeByte( address , (byte) value );
 		updateZeroSigned( value , cpu );
 	}
-	
-	private static void adc(CPU cpu,int a,int b,int carry) 
+
+	private static void adc(CPU cpu,int a,int b,int carry)
 	{
 		int result = (a & 0xff) + (b & 0xff) + carry;
-		boolean c6 = ( ( (a & 0b0111_1111) + (b & 0b0111_1111) + carry) & 0x80 ) != 0; 
-		
+		boolean c6 = ( ( (a & 0b0111_1111) + (b & 0b0111_1111) + carry) & 0x80 ) != 0;
+
 		boolean m7 = (a & 0b1000_0000) != 0;
 		boolean n7 = (b & 0b1000_0000) != 0;
 		boolean s7 = (result & 0x80) != 0;
-		
+
 		cpu.setFlag( Flag.CARRY , ((result & 0x100) != 0) );
 		cpu.setFlag( Flag.OVERFLOW, (!m7&!n7&c6) | (m7&n7&!c6));
 		cpu.setFlag( Flag.NEGATIVE , ( result & 0b1000_0000) != 0 );
 		cpu.setFlag( Flag.ZERO , ( result & 0xff) == 0 );
-		cpu.setAccumulator(result);		
+		cpu.setAccumulator(result);
 	}
 }

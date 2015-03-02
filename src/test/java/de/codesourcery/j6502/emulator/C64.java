@@ -18,7 +18,7 @@ public class C64
 		while ( i-- >= 0 )
 		{
 			try {
-				emulator.singleStep();
+				emulator.doOneCycle();
 			}
 			catch(final InvalidOpcodeException e)
 			{

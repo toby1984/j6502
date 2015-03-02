@@ -2,16 +2,11 @@ package de.codesourcery.j6502.ui;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.commons.lang.StringUtils;
-
 import de.codesourcery.j6502.assembler.SourceMap;
-import de.codesourcery.j6502.disassembler.Disassembler;
-import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.utils.SourceHelper;
@@ -19,9 +14,11 @@ import de.codesourcery.j6502.utils.SourceHelper;
 public abstract class EmulatorDriver extends Thread
 {
 	private static final AtomicLong CMD_ID = new AtomicLong(0);
-	private static final long CALLBACK_INVOKE_CYCLES = 100000;
+	private static final long CALLBACK_INVOKE_CYCLES = 1000000;
 
 	public volatile Throwable lastException;
+
+	public static final boolean PRINT_SPEED = false;
 
 	public static enum Mode { SINGLE_STEP , CONTINOUS; }
 
@@ -29,9 +26,6 @@ public abstract class EmulatorDriver extends Thread
 
 	private final Emulator emulator;
 
-	// FIXME: Remove debug code when done
-	public volatile boolean logEachStep = false;
-	// FIXME: Remove debug code when done
 	public volatile SourceMap sourceMap = null;
 	public volatile SourceHelper sourceHelper = null;
 
@@ -184,6 +178,7 @@ public abstract class EmulatorDriver extends Thread
 		boolean justStarted = true;
 		boolean isRunnable = false;
 
+		long startTime = System.currentTimeMillis();
 		long cyclesRemaining = CALLBACK_INVOKE_CYCLES;
 		while( true )
 		{
@@ -224,51 +219,21 @@ public abstract class EmulatorDriver extends Thread
 				}
 				lastException = null;
 				cyclesRemaining = CALLBACK_INVOKE_CYCLES;
+				if ( PRINT_SPEED ) {
+					startTime = System.currentTimeMillis();
+				}
 				onStart();
 			}
 
 			synchronized( emulator )
 			{
-				final long cycles = cpu.cycles;
-				try {
+				try
+				{
 					lastException = null;
 
-					/*
-					 * Here the magic happens....
-					 */
-					final int oldAdr = cpu.pc();
+					emulator.doOneCycle();
+					cyclesRemaining--;
 
-					if ( logEachStep )
-					{
-						Disassembler dis = new Disassembler();
-						final AtomicReference<Line> line = new AtomicReference<>(null);
-						boolean printed = false;
-						if ( sourceHelper != null && sourceMap != null ) {
-							Optional<Integer> lineNo = sourceMap.getLineNumberForAddress( oldAdr );
-							if ( lineNo.isPresent() )
-							{
-								String lineText = sourceHelper.getLineText( lineNo.get() );
-								final String col0 = "(line "+lineNo.get()+")";
-								final String col1 = lineText;
-								System.out.print( StringUtils.rightPad( col0 , 15 )+"  "+StringUtils.rightPad( col1 ,  20 )+" ; ");
-								printed = true;
-							}
-						}
-						if ( ! printed )
-						{
-							dis.disassemble( emulator.getMemory() , oldAdr , 3 , l -> line.compareAndSet( null , l ) );
-							System.out.println( line.get() );
-						}
-					}
-					emulator.singleStep();
-
-					if ( logEachStep )
-					{
-						System.out.println( cpu );
-					}
-
-					final long elapsedCycles = cpu.cycles - cycles;
-					cyclesRemaining -= elapsedCycles;
 					Breakpoint bp = breakpoints[ cpu.pc() ];
 					if ( bp == null && ( oneShotBreakpoint != null && oneShotBreakpoint.address == cpu.pc() ) ) {
 						bp = oneShotBreakpoint;
@@ -285,6 +250,15 @@ public abstract class EmulatorDriver extends Thread
 					if ( cyclesRemaining <= 0 )
 					{
 						tick();
+						if ( PRINT_SPEED )
+						{
+							long now = System.currentTimeMillis();
+							float cyclesPerSecond = CALLBACK_INVOKE_CYCLES / ( (now - startTime ) / 1000f );
+							float khz = cyclesPerSecond / 1000f;
+							System.out.println("CPU frequency: "+khz+" kHz");
+							startTime = now;
+						}
+						cyclesRemaining = CALLBACK_INVOKE_CYCLES;
 					}
 				}
 				catch(final Throwable e)
@@ -301,10 +275,13 @@ public abstract class EmulatorDriver extends Thread
 
 	public void addBreakpoint(Breakpoint bp)
 	{
-		if (bp.isOneshot) {
-			this.oneShotBreakpoint = bp;
-		} else {
-			this.breakpoints[ bp.address & 0xffff ] = bp;
+		synchronized(emulator)
+		{
+			if (bp.isOneshot) {
+				this.oneShotBreakpoint = bp;
+			} else {
+				this.breakpoints[ bp.address & 0xffff ] = bp;
+			}
 		}
 	}
 
@@ -315,7 +292,9 @@ public abstract class EmulatorDriver extends Thread
 		synchronized( emulator )
 		{
 			lastException = null;
-			emulator.singleStep();
+			do {
+				emulator.doOneCycle();
+			} while ( emulator.getCPU().cycles > 0 );
 		}
 	}
 
@@ -338,16 +317,20 @@ public abstract class EmulatorDriver extends Thread
 
 	public Breakpoint getBreakpoint(short address)
 	{
-		return breakpoints[ address & 0xffff ];
+		synchronized(emulator) {
+			return breakpoints[ address & 0xffff ];
+		}
 	}
 
 	public List<Breakpoint> getBreakpoints()
 	{
 		List<Breakpoint> result = new ArrayList<>();
-		for ( int i = 0 , len = breakpoints.length ; i < len ; i++ ) {
-			Breakpoint breakpoint = breakpoints[i];
-			if ( breakpoint != null && ! breakpoint.isOneshot ) {
-				result.add( breakpoint );
+		synchronized(emulator) {
+			for ( int i = 0 , len = breakpoints.length ; i < len ; i++ ) {
+				Breakpoint breakpoint = breakpoints[i];
+				if ( breakpoint != null && ! breakpoint.isOneshot ) {
+					result.add( breakpoint );
+				}
 			}
 		}
 		return result;
@@ -371,19 +354,26 @@ public abstract class EmulatorDriver extends Thread
 
 	public void removeBreakpoint(Breakpoint breakpoint)
 	{
-		if ( breakpoint.isOneshot ) {
-			if ( oneShotBreakpoint != null && oneShotBreakpoint.address == breakpoint.address ) {
-				oneShotBreakpoint = null;
+		synchronized(emulator)
+		{
+			if ( breakpoint.isOneshot ) {
+				if ( oneShotBreakpoint != null && oneShotBreakpoint.address == breakpoint.address ) {
+					oneShotBreakpoint = null;
+				}
+			} else {
+				this.breakpoints[ breakpoint.address & 0xffff ] = null;
 			}
-		} else {
-			this.breakpoints[ breakpoint.address & 0xffff ] = null;
 		}
 	}
 
-	public void removeAllBreakpoints() {
-		for ( int i = 0 ; i < breakpoints.length ; i++ ) {
-			breakpoints[i] = null;
+	public void removeAllBreakpoints()
+	{
+		synchronized(emulator)
+		{
+			for ( int i = 0 ; i < breakpoints.length ; i++ ) {
+				breakpoints[i] = null;
+			}
+			oneShotBreakpoint = null;
 		}
-		oneShotBreakpoint = null;
 	}
 }

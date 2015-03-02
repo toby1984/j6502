@@ -20,9 +20,9 @@ public class Emulator
 	protected static final String EMPTY_STRING = "";
 
 	private final MemorySubsystem memory = new MemorySubsystem();
-	
+
 	private final VIC vic =new VIC(memory);
-	
+
 	private final CPU cpu = new CPU( this.memory );
 
 	private IMemoryProvider memoryProvider;
@@ -37,7 +37,7 @@ public class Emulator
 			this.memoryProvider.loadInto( memory );
 		}
 	}
-	
+
 	public VIC getVIC() {
 		return vic;
 	}
@@ -64,14 +64,25 @@ public class Emulator
 
 		// reset CPU, will initialize PC from RESET_VECTOR_LOCATION
 		cpu.reset();
-		
+
 		vic.reset();
-		
+
 		MemorySubsystem.mayWriteToStack = false;
 	}
 
-	public void singleStep()
+	public void doOneCycle()
 	{
+		if ( cpu.cycles > 0 )
+		{
+			cpu.cycles--;
+			return;
+		}
+
+		if ( cpu.isInterruptQueued() && ! cpu.isSet(CPU.Flag.IRQ_DISABLE ) )
+		{
+			cpu.performInterrupt(memory);
+		}
+
 		int oldPc = cpu.pc();
 
 		if ( PRINT_DISASSEMBLY )
@@ -251,14 +262,14 @@ public class Emulator
 				unknownOpcode( op ); // never returns
 		}
 	}
-	
+
 	public void keyPressed(Key key) {
 		System.out.println("Pressed: "+key);
-		memory.getIOArea().keyPressed( key );
+		memory.getIOArea().getCIA1().keyPressed( key );
 	}
-	
+
 	public void keyReleased(Key key) {
 		System.out.println("Released: "+key);
-		memory.getIOArea().keyReleased( key );
-	}		
+		memory.getIOArea().getCIA1().keyReleased( key );
+	}
 }
