@@ -18,7 +18,7 @@ public abstract class EmulatorDriver extends Thread
 
 	public volatile Throwable lastException;
 
-	public static final boolean PRINT_SPEED = false;
+	public static final boolean PRINT_SPEED = true;
 
 	public static enum Mode { SINGLE_STEP , CONTINOUS; }
 
@@ -178,6 +178,7 @@ public abstract class EmulatorDriver extends Thread
 		boolean justStarted = true;
 		boolean isRunnable = false;
 
+		float dummy = 0;
 		long startTime = System.currentTimeMillis();
 		long cyclesRemaining = CALLBACK_INVOKE_CYCLES;
 		while( true )
@@ -224,6 +225,10 @@ public abstract class EmulatorDriver extends Thread
 				}
 				onStart();
 			}
+			
+//			for ( int i = 130 ; i > 0 ; i-- ) {
+//				dummy += Math.sqrt( i );
+//			}
 
 			synchronized( emulator )
 			{
@@ -255,7 +260,7 @@ public abstract class EmulatorDriver extends Thread
 							long now = System.currentTimeMillis();
 							float cyclesPerSecond = CALLBACK_INVOKE_CYCLES / ( (now - startTime ) / 1000f );
 							float khz = cyclesPerSecond / 1000f;
-							System.out.println("CPU frequency: "+khz+" kHz");
+							System.out.println("CPU frequency: "+khz+" kHz "+dummy);
 							startTime = now;
 						}
 						cyclesRemaining = CALLBACK_INVOKE_CYCLES;
