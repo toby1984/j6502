@@ -1,6 +1,7 @@
 package de.codesourcery.j6502.emulator;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -44,6 +45,24 @@ public class CPU
 		public boolean isNotSet(byte flags) { return (flags&value) == 0; }
 		public byte clear(byte flags) { return (byte) (flags&~value); }
 		public byte set(byte flags) { return (byte) (flags | value); }
+		
+		public static String toFlagString(byte bitMask) 
+		{
+			StringBuilder result = new StringBuilder();
+			for ( Flag f : values() ) {
+				result.append( f.isSet( bitMask ) ? f.symbol : '.' );
+			}
+			return result.toString();
+		}
+		
+		public static byte toBitMask(Collection<CPU.Flag> flags) 
+		{
+			int result = 0;
+			for ( CPU.Flag f : flags ) {
+				result |= f.value;
+			}
+			return (byte) result;
+		}
 	}
 
 	public byte getFlagBits() {
@@ -155,7 +174,9 @@ public class CPU
 
 	public void queueInterrupt() {
 //		System.out.println("*** IRQ queued ***");
-		this.interruptQueued = true;
+		if ( ! isSet(CPU.Flag.IRQ_DISABLE ) ) {
+			this.interruptQueued = true;
+		}
 	}
 
 	@Override

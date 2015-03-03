@@ -70,7 +70,7 @@ public class HexDump {
 				final boolean doMark = mark && adr == addressToMark;
 				char toAppend;
 				if ( intValue >= 32 && intValue < 127 ) {
-					toAppend = intValue;
+					toAppend = CharsetConverter.petToASCII( value );
 				} else {
 					toAppend = '.';
 				}

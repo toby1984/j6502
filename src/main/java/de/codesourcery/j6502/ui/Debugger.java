@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.ui;
 
+import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -9,6 +10,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
@@ -18,7 +20,11 @@ import java.awt.geom.Rectangle2D;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import javax.swing.JButton;
@@ -28,11 +34,12 @@ import javax.swing.JFrame;
 import javax.swing.JInternalFrame;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
 import javax.swing.SwingUtilities;
+import javax.swing.table.AbstractTableModel;
 
 import org.apache.commons.io.IOUtils;
-
-import com.sun.glass.events.KeyEvent;
 
 import de.codesourcery.j6502.assembler.Assembler;
 import de.codesourcery.j6502.assembler.parser.Lexer;
@@ -43,12 +50,14 @@ import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.CPU;
+import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.EmulatorTest;
 import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.emulator.Keyboard;
 import de.codesourcery.j6502.emulator.Keyboard.Key;
+import de.codesourcery.j6502.ui.EmulatorDriver.IBreakpointLister;
 import de.codesourcery.j6502.ui.EmulatorDriver.Mode;
 import de.codesourcery.j6502.ui.WindowLocationHelper.ILocationAware;
 import de.codesourcery.j6502.utils.HexDump;
@@ -95,10 +104,12 @@ public class Debugger
 
 	private final List<ILocationAware> locationAware = new ArrayList<>();
 
+	private final BreakpointModel bpModel = new BreakpointModel();
 	private final ButtonToolbar toolbar = new ButtonToolbar();
 	private final DisassemblyPanel disassembly = new DisassemblyPanel();
 	private final HexDumpPanel hexPanel = new HexDumpPanel();
 	private final CPUStatusPanel cpuPanel = new CPUStatusPanel();
+	private final BreakpointsWindow breakpointsWindow = new BreakpointsWindow();
 	private final ScreenPanel screenPanel = new ScreenPanel();
 
 	public static void main(String[] args)
@@ -110,6 +121,8 @@ public class Debugger
 
 		emulator.reset();
 
+		driver.addBreakpointListener( disassembly );
+		driver.addBreakpointListener( bpModel );
 		driver.start();
 
 		final JDesktopPane desktop = new JDesktopPane();
@@ -125,10 +138,12 @@ public class Debugger
 
 		final JInternalFrame hexPanelFrame = wrap( "Memory" , hexPanel );
 		desktop.add( hexPanelFrame  );
+		
+		final JInternalFrame breakpointsFrame = wrap( "Breakpoints" , breakpointsWindow );
+		desktop.add( breakpointsFrame  );		
 
 		final JInternalFrame screenPanelFrame = wrap( "Screen" , screenPanel );
 		desktop.add( screenPanelFrame  );
-
 
 		final JFrame frame = new JFrame("");
 		frame.addWindowListener( new WindowAdapter() {
@@ -558,7 +573,7 @@ public class Debugger
 		}
 	}
 
-	protected final class DisassemblyPanel extends JPanel implements WindowLocationHelper.ILocationAware
+	protected final class DisassemblyPanel extends JPanel implements WindowLocationHelper.ILocationAware , IBreakpointLister
 	{
 		private final Disassembler dis = new Disassembler().setAnnotate(true);
 
@@ -630,7 +645,6 @@ public class Debugger
 							} else {
 								driver.addBreakpoint( new Breakpoint( adr , false ) );
 							}
-							repaint();
 						}
 					}
 				}
@@ -702,10 +716,10 @@ public class Debugger
 							lines.add( new LineWithBounds( line , bounds ) );
 							y += LINE_HEIGHT;
 						}
-					};
-					dis.disassemble( emulator.getMemory() , offset, bytesToDisassemble , lineConsumer);
-					alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
-					offset++;
+							};
+							dis.disassemble( emulator.getMemory() , offset, bytesToDisassemble , lineConsumer);
+							alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
+							offset++;
 				}
 			}
 		}
@@ -761,6 +775,21 @@ public class Debugger
 				}
 			}
 		}
+
+		@Override
+		public void breakpointAdded(Breakpoint bp) {
+			SwingUtilities.invokeLater( () -> repaint() );			
+		}
+
+		@Override
+		public void breakpointRemoved(Breakpoint bp) {
+			SwingUtilities.invokeLater( () -> repaint() );
+		}
+
+		@Override
+		public void breakpointReplaced(Breakpoint old, Breakpoint newBp) {
+			SwingUtilities.invokeLater( () -> repaint() );			
+		}
 	}
 
 	private Short queryAddress()
@@ -772,4 +801,170 @@ public class Debugger
 		}
 		return (short) Integer.valueOf( s ,  16 ).intValue();
 	}
+
+	public final class BreakpointsWindow extends JPanel implements ILocationAware {
+
+		private Component peer;
+
+		public BreakpointsWindow() 
+		{
+			final JTable breakpointTable = new JTable( bpModel );
+			setup( breakpointTable );
+			final JScrollPane scrollPane = new JScrollPane( breakpointTable );
+			setup( scrollPane );
+			
+			breakpointTable.setMinimumSize( new Dimension(50,50 ) );
+			setLayout( new BorderLayout() );
+			add( scrollPane , BorderLayout.CENTER );
+			
+			breakpointTable.addKeyListener( new KeyAdapter() 
+			{
+				public void keyReleased(KeyEvent event) 
+				{
+					if ( event.getKeyCode() == KeyEvent.VK_DELETE ) 
+					{
+						final int[] selectedRows = breakpointTable.getSelectedRows();
+						if ( selectedRows != null ) 
+						{
+							List<Breakpoint> toRemove = new ArrayList<>();
+							for ( int idx : selectedRows ) {
+								toRemove.add( bpModel.getRow(idx) );
+							}
+							toRemove.forEach( driver::removeBreakpoint );
+						}
+					}
+				}
+			});
+			breakpointTable.addMouseListener( new MouseAdapter() 
+			{
+				public void mouseClicked(MouseEvent e) 
+				{
+					if ( e.getClickCount() == 2 && e.getButton() == MouseEvent.BUTTON1 ) {
+						int row = breakpointTable.rowAtPoint( e.getPoint() );
+						if ( row != -1 ) 
+						{
+							final Breakpoint breakpoint = bpModel.getRow( row );
+							disassembly.setAddress( (short) breakpoint.address , null );
+						}
+					}
+				}
+			});
+			
+		}
+
+		@Override
+		public void setLocationPeer(Component frame) {
+			this.peer = frame;
+		}
+
+		@Override
+		public Component getLocationPeer() {
+			return peer;
+		}
+	}
+
+	protected final class BreakpointModel extends AbstractTableModel implements IBreakpointLister
+	{
+		private volatile boolean breakpointsChanged = true;
+		private List<Breakpoint> cachedBreakpoints; 
+		
+		private List<Breakpoint> getBreakpoints() 
+		{
+			if ( breakpointsChanged || cachedBreakpoints == null ) 
+			{
+				synchronized( emulator ) {
+					cachedBreakpoints = driver.getBreakpoints();
+					cachedBreakpoints.sort( (bp1,bp2 ) -> Integer.compare(bp1.address, bp2.address ));
+					breakpointsChanged = false;
+				}
+			}
+			return new ArrayList<>( cachedBreakpoints );
+		}
+		
+		public Breakpoint getRow(int idx) {
+			return getBreakpoints().get(idx);
+		}
+		
+		@Override
+		public String getColumnName(int column) {
+			switch(column) {
+				case 0: return "Address";
+				case 1: return "Required CPU flags";
+				default:
+					return "unknown";
+			}
+		}
+
+		@Override
+		public int getRowCount() {
+			return getBreakpoints().size();
+		}
+
+		@Override
+		public int getColumnCount() {
+			return 2;
+		}
+		
+		@Override
+		public boolean isCellEditable(int rowIndex, int columnIndex) 
+		{
+			return columnIndex == 1;
+		}
+		
+		@Override
+		public void setValueAt(Object aValue, int rowIndex, int columnIndex) 
+		{
+			if ( !(aValue instanceof String) ) {
+				throw new IllegalArgumentException("No valid processor flags: "+aValue);
+			}
+			final String flagString = ((String) aValue).trim();
+			final Set<CPU.Flag> flags = new HashSet<>();
+			for ( char c : flagString.toCharArray() ) 
+			{
+				Optional<Flag> flagToSet = Arrays.stream( CPU.Flag.values() ).filter( flag -> flag.symbol == c ).findFirst();
+				if ( ! flagToSet.isPresent() ) {
+					throw new IllegalArgumentException("No valid processor flags: '"+c+"'");
+				}
+				flags.add( flagToSet.get() );
+			}
+			final Breakpoint currentBP = getBreakpoints().get(rowIndex);
+			final Breakpoint newBP = new Breakpoint( currentBP.address , false , CPU.Flag.toBitMask( flags ) );
+			driver.addBreakpoint( newBP );
+		}
+		
+		@Override
+		public Object getValueAt(int rowIndex, int columnIndex) 
+		{
+			Breakpoint bp = getBreakpoints().get(rowIndex);
+			switch( columnIndex ) {
+				case 0:
+					return HexDump.toAdr( bp.address );
+				case 1:
+					if ( bp.checkCPUFlags ) {
+						return CPU.Flag.toFlagString( bp.cpuFlagsMask );
+					}
+					return "<unconditional breakpoint>";
+				default:
+					throw new RuntimeException("Unreachable code reached");
+			}
+		}
+
+		@Override
+		public void breakpointAdded(Breakpoint bp) {
+			breakpointsChanged = true;
+			fireTableDataChanged();			
+		}
+
+		@Override
+		public void breakpointRemoved(Breakpoint bp) {
+			breakpointsChanged = true;
+			fireTableDataChanged();			
+		}
+
+		@Override
+		public void breakpointReplaced(Breakpoint old, Breakpoint newBp) {
+			breakpointsChanged = true;
+			fireTableDataChanged();			
+		}
+	};	
 }
