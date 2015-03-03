@@ -433,28 +433,28 @@ ende     rts             ; back to BASIC
 				break;
 			case CIA1_TALO:
 				timerALatch = ( timerALatch & 0xff00) | (value & 0xff);
-				 System.out.println("CIA1_TALO = "+HexDump.toHex( value ) );
+				 System.out.println("CIA1_TALO = "+HexDump.toHex( (byte) value ) );
 				if ( ! timerARunning ) {
 					timerAValue = ( timerAValue & 0xff00) | (value & 0xff);
 				}
 				break;
 			case CIA1_TAHI:
 				timerALatch = ( timerALatch & 0x00ff) | (( value & 0xff) <<8);
-				 System.out.println("CIA1_TAHI = "+HexDump.toHex( value ) );
+				 System.out.println("CIA1_TAHI = "+HexDump.toHex( (byte) value ) );
 				if ( ! timerARunning ) {
 					timerAValue = ( timerAValue & 0x00ff) | (( value & 0xff) <<8);
 				}
 				break;
 			case CIA1_TBLO:
 				timerBLatch = ( timerBLatch & 0xff00) | (value & 0xff);
-				 System.out.println("CIA1_TBLO = "+HexDump.toHex( value ) );
+				 System.out.println("CIA1_TBLO = "+HexDump.toHex( (byte) value ) );
 				if ( ! timerBRunning ) {
 					timerBValue = ( timerBValue & 0xff00) | (value & 0xff);
 				}
 				break;
 			case CIA1_TBHI:
 				timerBLatch = ( timerBLatch & 0x00ff) | (( value & 0xff) <<8);
-				 System.out.println("CIA1_TBHI = "+HexDump.toHex( value ) );
+				 System.out.println("CIA1_TBHI = "+HexDump.toHex( (byte) value ) );
 				if ( ! timerBRunning ) {
 					timerBValue = ( timerBValue & 0x00ff) | (( value & 0xff) <<8);
 				}

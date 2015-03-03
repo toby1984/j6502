@@ -19,7 +19,7 @@ public abstract class EmulatorDriver extends Thread
 	public volatile Throwable lastException;
 
 	public static final boolean DELAY_LOOP_ENABLED = true;
-	public static final boolean PRINT_SPEED = true;
+	public static final boolean PRINT_SPEED = false;
 
 	public static enum Mode { SINGLE_STEP , CONTINOUS; }
 

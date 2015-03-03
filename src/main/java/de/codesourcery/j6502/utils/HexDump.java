@@ -174,6 +174,13 @@ public class HexDump {
 		final String loNibble = StringUtils.leftPad( Integer.toString( low , 16) , 2 , '0' );
 		return loNibble+hiNibble;
 	}
+	
+	public static String toHex(byte value)
+	{
+		final int low = value & 0xff;
+		final String loNibble = StringUtils.leftPad( Integer.toString( low , 16) , 2 , '0' );
+		return loNibble;
+	}	
 
 	public void setBytesPerLine(int i) {
 		this.bytesPerLine = i;

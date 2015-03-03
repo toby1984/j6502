@@ -21,8 +21,6 @@ public class Emulator
 
 	private final MemorySubsystem memory = new MemorySubsystem();
 
-	private final VIC vic =new VIC(memory);
-
 	private final CPU cpu = new CPU( this.memory );
 
 	private IMemoryProvider memoryProvider;
@@ -39,14 +37,14 @@ public class Emulator
 	}
 
 	public VIC getVIC() {
-		return vic;
+		return memory.getIOArea().getVIC();
 	}
 
 	public CPU getCPU() {
 		return cpu;
 	}
 
-	public IMemoryRegion getMemory() {
+	public MemorySubsystem getMemory() {
 		return memory;
 	}
 
@@ -64,8 +62,6 @@ public class Emulator
 
 		// reset CPU, will initialize PC from RESET_VECTOR_LOCATION
 		cpu.reset();
-
-		vic.reset();
 
 		MemorySubsystem.mayWriteToStack = false;
 	}

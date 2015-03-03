@@ -9,8 +9,6 @@ import de.codesourcery.j6502.emulator.Keyboard.Key;
  */
 public class IOArea extends Memory
 {
-	public static final boolean VIC_PAL_MODE = true;
-
 	private final VIC vic;
 	private final CIA cia1 = new CIA("CIA #1" , AddressRange.range( 0xdc00, 0xdd00 ) ); // actually only 16 byte registers but mirrored in range $DC10-$DCFF
 	private final CIA cia2 = new CIA("CIA #2" , AddressRange.range( 0xdd00, 0xde00 ) ); // actually only 16 byte registers but mirrored in range $DD10-$DDFF
@@ -21,21 +19,20 @@ public class IOArea extends Memory
 	{
 		super(identifier, range);
 		this.mainMemory = mainMemory;
-		this.vic = new VIC(mainMemory);
+		this.vic = new VIC("VIC", AddressRange.range( 0xd000, 0xd02f));
 	}
 
 	@Override
 	public void writeByte(int set, byte value)
 	{
 		/*
-// actually only 16 byte registers but mirrored in range $DC10-$DCFF
-// actually only 16 byte registers but mirrored in range $DD10-$DDFF
+// CIA #1: actually only 16 byte registers but mirrored in range $DC10-$DCFF
+// CIA #2: actually only 16 byte registers but mirrored in range $DD10-$DDFF
 		 */
 		final int offset = set & 0xffff;
 
 		// I/O area starts at 0xd000
 		// but input to writeByte is already translated by -d000
-
 		if ( offset >= 0xc00 && offset <= 0xcff) { // $DC00-$DCFF
 			cia1.writeByte( set , value );
 			return;
@@ -44,20 +41,10 @@ public class IOArea extends Memory
 			cia2.writeByte( set , value );
 			return;
 		}
-
-		if ( offset == VIC.VIC_SCANLINE )
+		if ( offset < 0x002f)  // $D000 - $D02F ... VIC
 		{
-			// current scan line, lo-byte
-			vic.irqOnRaster = (short) (vic.irqOnRaster | (value & 0xff) );
-		}
-		else if ( offset == VIC.VIC_CNTRL1 )
-		{
-			// current scan line, hi-byte
-			if ( ( value & 0b1000_0000 ) != 0 ) {
-				vic.irqOnRaster = (short) ( 0b0100 | (vic.irqOnRaster & 0xff) ); // set hi-bit
-			} else {
-				vic.irqOnRaster = (short) (vic.irqOnRaster & 0xff); // clear hi-bit
-			}
+			vic.writeByte( set , value );
+			return;
 		}
 		super.writeByte(offset, value);
 	}
@@ -68,11 +55,14 @@ public class IOArea extends Memory
 		// I/O area starts at 0xd000
 		// but input to writeByte is already translated by -d000
 		final int offset = adr & 0xffff;
-		if ( offset >= 0xc00 && offset <= 0xcff) { // $DC00-$DCFF
+		if ( offset >= 0xc00 && offset <= 0xcff) { // CIA #1 $DC00-$DCFF
 			return cia1.readByte( offset );
 		}
-		if ( offset >= 0xd00 && offset <= 0xdff ) { // $DD10-$DDFF
+		if ( offset >= 0xd00 && offset <= 0xdff ) { // CIA #2 $DD10-$DDFF
 			return cia2.readByte( offset );
+		}
+		if ( offset < 0x002f ) { // $D000 - $D02F ... VIC 
+			return vic.readByte( adr );
 		}
 		return super.readByte(adr);
 	}
@@ -94,5 +84,9 @@ public class IOArea extends Memory
 
 	public CIA getCIA1() {
 		return cia1;
+	}
+	
+	public VIC getVIC() {
+		return vic;
 	}
 }

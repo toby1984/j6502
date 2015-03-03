@@ -4,7 +4,7 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 
-public class VIC
+public class VIC extends Memory
 {
 	public  static final Color Black 	     = color( 0, 0, 0); // 0
 	public  static final Color White        = color( 255, 255, 255); // 1
@@ -155,78 +155,78 @@ public class VIC
 	public static final boolean VIC_PAL_MODE = true;
 
 	// VIC registers
-	public  static final int VIC_SPRITE0_X_COORD = 0xd000 + 0;
-	public  static final int VIC_SPRITE0_Y_COORD = 0xd000 + 1;
+	public  static final int VIC_SPRITE0_X_COORD = 0;
+	public  static final int VIC_SPRITE0_Y_COORD = 1;
 
-	public  static final int VIC_SPRITE1_X_COORD = 0xd000 + 2;
-	public  static final int VIC_SPRITE1_Y_COORD = 0xd000 + 3;
+	public  static final int VIC_SPRITE1_X_COORD = 2;
+	public  static final int VIC_SPRITE1_Y_COORD = 3;
 
-	public  static final int VIC_SPRITE2_X_COORD = 0xd000 + 4;
-	public  static final int VIC_SPRITE2_Y_COORD = 0xd000 + 5;
+	public  static final int VIC_SPRITE2_X_COORD = 4;
+	public  static final int VIC_SPRITE2_Y_COORD = 5;
 
-	public  static final int VIC_SPRITE3_X_COORD = 0xd000 + 6;
-	public  static final int VIC_SPRITE3_Y_COORD = 0xd000 + 7;
+	public  static final int VIC_SPRITE3_X_COORD = 6;
+	public  static final int VIC_SPRITE3_Y_COORD = 7;
 
-	public  static final int VIC_SPRITE4_X_COORD = 0xd000 + 8;
-	public  static final int VIC_SPRITE4_Y_COORD = 0xd000 + 9;
+	public  static final int VIC_SPRITE4_X_COORD = 8;
+	public  static final int VIC_SPRITE4_Y_COORD = 9;
 
-	public  static final int VIC_SPRITE5_X_COORD = 0xd000 + 10;
-	public  static final int VIC_SPRITE5_Y_COORD = 0xd000 + 11;
+	public  static final int VIC_SPRITE5_X_COORD = 10;
+	public  static final int VIC_SPRITE5_Y_COORD = 11;
 
-	public  static final int VIC_SPRITE6_X_COORD = 0xd000 + 12;
-	public  static final int VIC_SPRITE6_Y_COORD = 0xd000 + 13;
+	public  static final int VIC_SPRITE6_X_COORD = 12;
+	public  static final int VIC_SPRITE6_Y_COORD = 13;
 
-	public  static final int VIC_SPRITE7_X_COORD = 0xd000 + 14;
-	public  static final int VIC_SPRITE7_Y_COORD = 0xd000 + 15;
+	public  static final int VIC_SPRITE7_X_COORD = 14;
+	public  static final int VIC_SPRITE7_Y_COORD = 15;
 
-	public  static final int VIC_SPRITE_X_COORDS_HI_BIT = 0xd000 + 15;
+	public  static final int VIC_SPRITE_X_COORDS_HI_BIT = 15;
 
-	public  static final int VIC_CNTRL1 = 0xd000 + 17;
+	public  static final int VIC_CNTRL1 = 17;
 
-	public  static final int VIC_SCANLINE = 0xd000 + 18;
+	public  static final int VIC_SCANLINE = 18;
 
-	public  static final int VIC_LIGHTPEN_X_COORDS = 0xd000 + 19;
-	public  static final int VIC_LIGHTPEN_Y_COORDS = 0xd000 + 20;
+	public  static final int VIC_LIGHTPEN_X_COORDS = 19;
+	public  static final int VIC_LIGHTPEN_Y_COORDS = 20;
 
-	public  static final int VIC_SPRITE_ENABLE = 0xd000 + 21;
+	public  static final int VIC_SPRITE_ENABLE = 21;
 
-	public  static final int VIC_CTRL2 = 0xd000 + 22;
+	public  static final int VIC_CTRL2 = 22;
 
-	public  static final int VIC_SPRITE_DOUBLE_HEIGHT = 0xd000 + 23;
+	public  static final int VIC_SPRITE_DOUBLE_HEIGHT = 23;
 
-	public  static final int VIC_MEMORY_MAPPING = 0xd000 + 24;
+	public  static final int VIC_MEMORY_MAPPING = 24;
 
-	public  static final int VIC_IRQ_ACTIVE_BITS = 0xd000 + 25;
+	public  static final int VIC_IRQ_ACTIVE_BITS = 25;
 
-	public  static final int VIC_IRQ_ENABLE_BITS = 0xd000 + 26;
+	public  static final int VIC_IRQ_ENABLE_BITS = 26;
 
-	public  static final int VIC_SPRITE_PRIORITY = 0xd000 + 27;
+	public  static final int VIC_SPRITE_PRIORITY = 27;
 
-	public  static final int VIC_SPRITE_MULTICOLOR_MODE = 0xd000 + 28;
+	public  static final int VIC_SPRITE_MULTICOLOR_MODE = 28;
 
-	public  static final int VIC_SPRITE_DOUBLE_WIDTH = 0xd000 + 29;
+	public  static final int VIC_SPRITE_DOUBLE_WIDTH = 29;
 
-	public  static final int VIC_SPRITE_SPRITE_COLLISIONS = 0xd000 + 30;
-	public  static final int VIC_SPRITE_BACKGROUND_COLLISIONS = 0xd000 + 31;
+	public  static final int VIC_SPRITE_SPRITE_COLLISIONS = 30;
+	public  static final int VIC_SPRITE_BACKGROUND_COLLISIONS = 31;
 
-	public  static final int VIC_BORDER_COLOR = 0xd000 + 32;
-	public  static final int VIC_BACKGROUND_COLOR = 0xd000 + 33;
+	public  static final int VIC_BORDER_COLOR = 32;
+	public  static final int VIC_BACKGROUND_COLOR = 33;
 
-	public  static final int VIC_BACKGROUND0_EXT_COLOR = 0xd000 + 34;
-	public  static final int VIC_BACKGROUND1_EXT_COLOR = 0xd000 + 35;
-	public  static final int VIC_BACKGROUND2_EXT_COLOR = 0xd000 + 36;
+	public  static final int VIC_BACKGROUND0_EXT_COLOR = 34;
+	public  static final int VIC_BACKGROUND1_EXT_COLOR = 35;
+	public  static final int VIC_BACKGROUND2_EXT_COLOR = 36;
 
-	public  static final int VIC_SPRITE_COLOR10_MULTICOLOR_MODE = 0xd000 + 37;
-	public  static final int VIC_SPRITE_COLOR11_MULTICOLOR_MODE = 0xd000 + 38;
+	public  static final int VIC_SPRITE_COLOR10_MULTICOLOR_MODE = 37;
+	public  static final int VIC_SPRITE_COLOR11_MULTICOLOR_MODE = 38;
 
-	public  static final int VIC_SPRITE0_COLOR10 = 0xd000 + 39;
-	public  static final int VIC_SPRITE1_COLOR10 = 0xd000 + 40;
-	public  static final int VIC_SPRITE2_COLOR10 = 0xd000 + 41;
-	public  static final int VIC_SPRITE3_COLOR10 = 0xd000 + 42;
-	public  static final int VIC_SPRITE4_COLOR10 = 0xd000 + 43;
-	public  static final int VIC_SPRITE5_COLOR10 = 0xd000 + 44;
-	public  static final int VIC_SPRITE6_COLOR10 = 0xd000 + 45;
-	public  static final int VIC_SPRITE7_COLOR10 = 0xd000 + 46;
+	public  static final int VIC_SPRITE0_COLOR10 = 39;
+	public  static final int VIC_SPRITE1_COLOR10 = 40;
+	public  static final int VIC_SPRITE2_COLOR10 = 41;
+	public  static final int VIC_SPRITE3_COLOR10 = 42;
+	public  static final int VIC_SPRITE4_COLOR10 = 43;
+	public  static final int VIC_SPRITE5_COLOR10 = 44;
+	public  static final int VIC_SPRITE6_COLOR10 = 45;
+	public  static final int VIC_SPRITE7_COLOR10 = 46;
 
 	public static final int BORDER_HEIGHT_PIXELS = 15;
 	public static final int BORDER_WIDTH_PIXELS = 15;
@@ -241,14 +241,13 @@ public class VIC
 
 	public static final int BG_BUFFER_HEIGHT = 2*BORDER_HEIGHT_PIXELS + VIEWPORT_HEIGHT;
 
-	private final IMemoryRegion memory;
 	private BufferedImage buffer;
 	private Graphics2D graphics;
 
 	private WriteOnceMemory characterROM;
 
-	public VIC(IMemoryRegion memory) {
-		this.memory = memory;
+	public VIC(String identifier,AddressRange adr) {
+		super(identifier,adr);
 	}
 
 	private BufferedImage getBuffer(Graphics2D g) {
@@ -270,28 +269,26 @@ public class VIC
 
 	public void reset()
 	{
+		super.reset();
+		
 		this.cycleCount = 0;
 		this.rasterLine = 0;
 		this.irqOnRaster = -1;
-
-		// CIA2 $dd00: Set bit 0+bit 1 so that VIC bank #0 is selected by default
-		int value = memory.readByte( 0xdd00 ) | 0b11;
-		memory.writeByte( 0xdd00 , (byte) value );
 
 		characterROM = MemorySubsystem.loadCharacterROM();
 	}
 
 	private Color getBorderColor() {
-		int borderColor = memory.readByte( VIC_BORDER_COLOR ) & 0b1111;
+		int borderColor = readByte( VIC_BORDER_COLOR ) & 0b1111;
 		return AWT_COLORS[ borderColor ];
 	}
 
 	private Color getBackgroundColor() {
-		int bgColor = memory.readByte( VIC_BACKGROUND_COLOR ) & 0b1111;
+		int bgColor = readByte( VIC_BACKGROUND_COLOR ) & 0b1111;
 		return AWT_COLORS[ bgColor ];
 	}
 
-	public void render(Graphics2D g,int width,int height)
+	public void render(MemorySubsystem mainMemory,Graphics2D g,int width,int height)
 	{
 		// video RAM location
 		/*
@@ -306,7 +303,7 @@ public class VIC
          * The four most significant bits form a 4-bit number in the range 0 thru 15: Multiplied with 1024 this gives the start address for the screen character RAM.
          * Bits 1 thru 3 (weights 2 thru 8) form a 3-bit number in the range 0 thru 7: Multiplied with 2048 this gives the start address for the character set.
 		 */
-		int value = memory.readByte(VIC_MEMORY_MAPPING);
+		int value = readByte(VIC_MEMORY_MAPPING);
 		int videoRAMOffset = 1024 * ( ( value & 0b1111_0000) >>4 );
 		int glyphRAMOffset = 2048 * ( ( value & 0b0000_1110) >> 1);
 
@@ -323,7 +320,7 @@ public class VIC
          * 1	xxxxxx01	32768–49151	$8000–$BFFF	  Yes, at 36864–40959 $9000–$9FFF
          * 0	xxxxxx00	49152–65535	$C000–$FFFF	  No
 		 */
-		final int bankNo = memory.readByte( 0xdd00 ) & 0b11;
+		final int bankNo = mainMemory.readByte( 0xdd00 ) & 0b11;
 //		System.out.println("Selected VIC bank: "+bankNo);
 
 		int bankAdr;
@@ -365,8 +362,8 @@ public class VIC
 			for ( int x =0 ; x < SCREEN_COLS ; x++ )
 			{
 				final int offset = y * SCREEN_COLS + x;
-				final int color = memory.readByte( colorRAM + offset ) % 0b1111;
-				final int character = memory.readByte( videoRAM + offset );
+				final int color = mainMemory.readByte( colorRAM + offset ) % 0b1111;
+				final int character = mainMemory.readByte( videoRAM + offset );
 
 				int xPixel = BORDER_WIDTH_PIXELS  + (x << 3); // *8
 				int yPixel = BORDER_HEIGHT_PIXELS + (y << 3); // *8
@@ -425,13 +422,33 @@ public class VIC
 		final byte lo = (byte) rasterLine;
 		final byte hi = (byte) (rasterLine>>8);
 
-		int hiBit = memory.readByte( VIC.VIC_CNTRL1 );
+		int hiBit = readByte( VIC.VIC_CNTRL1 );
 		if ( hi != 0 ) {
 			hiBit |= 0b1000_0000;
 		} else {
 			hiBit &= 0b0111_1111;
 		}
-		memory.writeByte( VIC.VIC_CNTRL1 , (byte) hiBit );
-		memory.writeWord( VIC.VIC_SCANLINE , lo );
+		writeByte( VIC.VIC_CNTRL1 , (byte) hiBit );
+		writeWord( VIC.VIC_SCANLINE , lo );
+	}
+	
+	@Override
+	public void writeByte(int offset, byte value) 
+	{
+		if ( offset == VIC.VIC_SCANLINE )
+		{
+			// current scan line, lo-byte
+			irqOnRaster = (short) (irqOnRaster | (value & 0xff) );
+		}
+		else if ( offset == VIC.VIC_CNTRL1 )
+		{
+			// current scan line, hi-byte
+			if ( ( value & 0b1000_0000 ) != 0 ) {
+				irqOnRaster = (short) ( 0b0100 | (irqOnRaster & 0xff) ); // set hi-bit
+			} else {
+				irqOnRaster = (short) (irqOnRaster & 0xff); // clear hi-bit
+			}
+		}		
+		super.writeByte(offset, value);
 	}
 }
