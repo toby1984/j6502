@@ -240,7 +240,6 @@ public class Debugger
 		private void prepareTest()
 		{
 			driver.setMode( Mode.SINGLE_STEP );
-			emulator.reset();
 
 			final String source = loadTestProgram();
 
@@ -265,8 +264,13 @@ public class Debugger
 					region.bulkWrite( origin , binary , 0 , binary.length );
 				}
 			};
-			emulator.setMemoryProvider( provider );
-			emulator.getCPU().pc( origin );
+			
+			synchronized(emulator) 
+			{
+				emulator.reset();			
+				emulator.setMemoryProvider( provider );
+				emulator.getCPU().pc( origin );
+			}
 			driver.removeAllBreakpoints();
 			driver.addBreakpoint( new Breakpoint( (short) 0x45bf , false ) );
 			driver.addBreakpoint( new Breakpoint( (short) 0x40cb , false ) );
@@ -296,9 +300,7 @@ public class Debugger
 
 			loadButton.addActionListener( event ->
 			{
-				synchronized(emulator) {
-					prepareTest();
-				}
+				prepareTest();
 			});
 
 			singleStepButton.addActionListener( event ->
