@@ -18,7 +18,8 @@ public abstract class EmulatorDriver extends Thread
 
 	public volatile Throwable lastException;
 
-	public static final boolean PRINT_SPEED = false;
+	public static final boolean DELAY_LOOP_ENABLED = true;
+	public static final boolean PRINT_SPEED = true;
 
 	public static enum Mode { SINGLE_STEP , CONTINOUS; }
 
@@ -235,9 +236,11 @@ public abstract class EmulatorDriver extends Thread
 				onStart();
 			}
 			
-//			for ( int i = 130 ; i > 0 ; i-- ) {
-//				dummy += Math.sqrt( i );
-//			}
+			if ( DELAY_LOOP_ENABLED ) {
+				for ( int i = 139 ; i > 0 ; i-- ) {
+					dummy += Math.sqrt( i );
+				}
+			}
 
 			synchronized( emulator )
 			{

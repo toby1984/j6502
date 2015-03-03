@@ -432,43 +432,43 @@ ende     rts             ; back to BASIC
 				}
 				break;
 			case CIA1_TALO:
-				timerALatch = ( timerALatch & 0xff) | (value & 0xff);
-				// System.out.println("CIA1_TALO = "+HexDump.toHex( value ) );
+				timerALatch = ( timerALatch & 0xff00) | (value & 0xff);
+				 System.out.println("CIA1_TALO = "+HexDump.toHex( value ) );
 				if ( ! timerARunning ) {
-					timerAValue = ( timerAValue & 0xff) | (value & 0xff);
+					timerAValue = ( timerAValue & 0xff00) | (value & 0xff);
 				}
 				break;
 			case CIA1_TAHI:
-				timerALatch = ( timerALatch & 0xff00) | (( value & 0xff) <<8);
-				// System.out.println("CIA1_TAHI = "+HexDump.toHex( value ) );
+				timerALatch = ( timerALatch & 0x00ff) | (( value & 0xff) <<8);
+				 System.out.println("CIA1_TAHI = "+HexDump.toHex( value ) );
 				if ( ! timerARunning ) {
-					timerAValue = ( timerAValue & 0xff00) | (( value & 0xff) <<8);
+					timerAValue = ( timerAValue & 0x00ff) | (( value & 0xff) <<8);
 				}
 				break;
 			case CIA1_TBLO:
-				timerBLatch = ( timerBLatch & 0xff) | (value & 0xff);
-				// System.out.println("CIA1_TBLO = "+HexDump.toHex( value ) );
+				timerBLatch = ( timerBLatch & 0xff00) | (value & 0xff);
+				 System.out.println("CIA1_TBLO = "+HexDump.toHex( value ) );
 				if ( ! timerBRunning ) {
-					timerBValue = ( timerBValue & 0xff) | (value & 0xff);
+					timerBValue = ( timerBValue & 0xff00) | (value & 0xff);
 				}
 				break;
 			case CIA1_TBHI:
-				timerBLatch = ( timerBLatch & 0xff00) | (( value & 0xff) <<8);
-				// System.out.println("CIA1_TBHI = "+HexDump.toHex( value ) );
+				timerBLatch = ( timerBLatch & 0x00ff) | (( value & 0xff) <<8);
+				 System.out.println("CIA1_TBHI = "+HexDump.toHex( value ) );
 				if ( ! timerBRunning ) {
-					timerBValue = ( timerBValue & 0xff00) | (( value & 0xff) <<8);
+					timerBValue = ( timerBValue & 0x00ff) | (( value & 0xff) <<8);
 				}
 				break;
 			case CIA1_CRA:
 				timerARunning = ( value & 1) != 0;
-				// System.out.println("CIA1_CRA = timer_A_running = "+timerARunning);
+				System.out.println("CIA1_CRA = timer_A_running = "+timerARunning+" = "+HexDump.toBinaryString( (byte) value ));
 				if ( ( value & 1 << 4) != 0 ) {
 					timerAValue = timerALatch;
 				}
 				break;
 			case CIA1_CRB:
 				timerBRunning = ( value & 1) != 0;
-				// System.out.println("CIA1_CRA = timer_B_running = "+timerARunning);
+				System.out.println("CIA1_CRB = timer_B_running = "+timerBRunning+" = "+HexDump.toBinaryString( (byte) value ));
 				if ( ( value & 1 << 4) != 0 ) {
 					timerBValue = timerBLatch;
 				}
@@ -541,12 +541,13 @@ ende     rts             ; back to BASIC
 	private void handleTimerBUnderflow(int crb,CPU cpu)
 	{
 		// System.out.println("CIA #1 timer b underflow");
-		if ( (irqMask & 1<<1 ) != 0 ) { // trigger interrupt on timer B underflow ?
-			icr_read |= 1;
+		if ( (irqMask & 2 ) != 0 ) { // trigger interrupt on timer B underflow ?
+			icr_read |= 2; // timerB triggered underflow
 			cpu.queueInterrupt();
 		}
 		if ( (crb & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
 			timerBRunning = false;
+			timerAValue = 0xffff;
 		} else { // // bit 3 = 0 => Timer-restart after underflow (latch will be reloaded)
 			timerBValue = timerBLatch;
 		}
@@ -555,12 +556,17 @@ ende     rts             ; back to BASIC
 	private void handleTimerAUnderflow(int cra,CPU cpu)
 	{
 		// System.out.println("CIA #1 timer A underflow");
+		/*
+        Bit 0: 1 = Interrupt release through timer A underflow
+        Bit 1: 1 = Interrupt release through timer B underflow		 
+		 */
 		if ( (irqMask & 1) != 0 ) { // trigger interrupt on timer A underflow ?
-			icr_read |= 1;
+			icr_read |= 1; // timerA underflow triggered IRQ
 			cpu.queueInterrupt();
 		}
 		if ( (cra & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
 			timerARunning = false;
+			timerAValue = 0xffff;
 		} else { // // bit 3 = 0 => Timer-restart after underflow (latch will be reloaded)
 			timerAValue = timerALatch;
 		}

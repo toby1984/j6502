@@ -337,7 +337,7 @@ public final class MemorySubsystem extends IMemoryRegion
 	{
 		// kernel ROM
 		kernelROM = new WriteOnceMemory("Kernel ROM" , Bank.BANK6.range );
-		loadROM("kernel_v3.rom" , kernelROM );
+		loadROM("kernel_v2.rom" , kernelROM );
 
 		// char ROM
 		charROM = loadCharacterROM();

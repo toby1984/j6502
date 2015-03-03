@@ -183,21 +183,18 @@ public class Parser
 		startOffset = lexer.currentOffset();
 		if ( lexer.peek(TokenType.CHARACTERS ) )  { // label or opcode
 			final Token tok = lexer.next(); // consume token so we can peek at the next one
-			if ( ! gotLocalLabel )
+			if ( ! gotLocalLabel && lexer.peek(TokenType.COLON ) )
 			{
-				if ( lexer.peek(TokenType.COLON ) ) { // global label
-					lexer.next(); // consume colon
-					if ( ! Identifier.isValidIdentifier( tok.text ) ) {
-						fail("Not a valid label identifier: "+tok.text);
-					}
-					final TextRegion region = new TextRegion( startOffset , lexer.currentOffset() - startOffset );
-					previousGlobalLabel = new LabelNode( new Identifier( tok.text ) , region );
-					currentNode.addChild( previousGlobalLabel );
-				} else {
-					// push back token, most likely an opcode
-					lexer.push( tok );
+				lexer.next(); // consume colon
+				if ( ! Identifier.isValidIdentifier( tok.text ) ) {
+					fail("Not a valid label identifier: "+tok.text);
 				}
-			} else {
+				final TextRegion region = new TextRegion( startOffset , lexer.currentOffset() - startOffset );
+				previousGlobalLabel = new LabelNode( new Identifier( tok.text ) , region );
+				currentNode.addChild( previousGlobalLabel );
+			} 
+			else 
+			{
 				// push back token, most likely an opcode
 				lexer.push( tok );
 			}
@@ -210,7 +207,10 @@ public class Parser
 			final IASTNode instruction = parseInstruction();
 			if ( instruction != null ) {
 				currentNode.addChild(instruction);
-			} else {
+			} 
+			else 
+			{
+				// not a valid opcode
 				fail("Expected an instruction, got "+tok);
 			}
 		}
