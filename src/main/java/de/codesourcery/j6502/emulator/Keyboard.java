@@ -1,6 +1,7 @@
 package de.codesourcery.j6502.emulator;
 
 import java.awt.event.KeyEvent;
+import java.util.Set;
 
 public class Keyboard
 {
@@ -38,11 +39,23 @@ public class Keyboard
 	{
 		// row #0 (idx , rowBit / PRB , columnBit / PRA )
 		KEY_DOWN  (0,7,  0),
+		KEY_UP (0,7,  0) { // not represented on keyboard matrix, actually a combination of SHIFT + KEY_DOWN
+			@Override
+			public boolean fakeLeftShift() {
+				return true;
+			}
+		},
 		KEY_F5    (1,6,  0),
 		KEY_F3    (2,5,  0),
 		KEY_F1    (3,4,  0),
 		KEY_F7    (4,3,  0),
 		KEY_RIGHT (5,2,  0),
+		KEY_LEFT  (5,2,  0) { // not represented on keyboard matrix, actually a combination of SHIFT + KEY_RIGHT
+			@Override
+			public boolean fakeLeftShift() {
+				return true;
+			}
+		},		
 		KEY_RETURN(6,1,  0),
 		KEY_DELETE(7,0,  0),	
 		// row #1 (idx , rowBit / PRB , columnBit / PRA )
@@ -96,7 +109,12 @@ public class Keyboard
 		KEY_EQUALS      (50, 5,6),
 		KEY_RIGHT_SHIFT (51, 4,6),
 		KEY_HOME        (52, 3,6),
-		KEY_SEMICOLON   (53, 2,6),
+		KEY_SEMICOLON   (53, 2,6) {
+			@Override
+			public boolean clearShift() {
+				return true;
+			}
+		},
 		KEY_MULTIPLY    (54, 1,6),
 		KEY_BACK_SLASH  (55, 0,6),
 		// row #7 (idx , rowBit / PRB , columnBit / PRA )
@@ -118,23 +136,47 @@ public class Keyboard
 			this.rowBitNo = rowBitNo;
 			this.colBitNo = colBitNo;
 		}
+		
+		public boolean clearShift() {
+			return false;
+		}
+		
+		public boolean fakeLeftShift() {
+			return false;
+		}
+	}
+	
+	public static enum KeyLocation {
+		LEFT,RIGHT,STANDARD;
+	}
+	
+	public static enum Modifier {
+		SHIFT,CONTROL,NONE;
 	}
 
-	public static Key keyCodeToKey(int keyCode) 
+	public static Key keyCodeToKey(int keyCode,KeyLocation location,Set<Modifier> modifiers) 
 	{
+		System.out.println("Modifiers: "+modifiers);
 		switch( keyCode ) 
 		{
 			// row #0
 			case KeyEvent.VK_DOWN:   return Key.KEY_DOWN;
+			case KeyEvent.VK_UP:   return Key.KEY_UP;
 			case KeyEvent.VK_F5:     return Key.KEY_F5;
 			case KeyEvent.VK_F3:     return Key.KEY_F3;
 			case KeyEvent.VK_F1:     return Key.KEY_F1;
 			case KeyEvent.VK_F7:     return Key.KEY_F7;
 			case KeyEvent.VK_RIGHT:  return Key.KEY_RIGHT;
+			case KeyEvent.VK_LEFT:  return Key.KEY_LEFT;			
 			case KeyEvent.VK_ENTER:  return Key.KEY_RETURN;
+			case KeyEvent.VK_BACK_SPACE: return Key.KEY_DELETE;
 			case KeyEvent.VK_DELETE: return Key.KEY_DELETE;
 			// row #1
-			case KeyEvent.VK_SHIFT: return Key.KEY_LEFT_SHIFT; // FIXME: Differentiate left/right shift keys
+			case KeyEvent.VK_SHIFT:
+				if ( location == KeyLocation.LEFT ) {
+					return Key.KEY_LEFT_SHIFT; 
+				}
+				return Key.KEY_RIGHT_SHIFT;
 			case KeyEvent.VK_E:     return Key.KEY_E;
 			case KeyEvent.VK_S:     return Key.KEY_S;
 			case KeyEvent.VK_Z:     return Key.KEY_Z;
@@ -165,12 +207,20 @@ public class Keyboard
 			case KeyEvent.VK_O:     return Key.KEY_O;
 			case KeyEvent.VK_K:     return Key.KEY_K;
 			case KeyEvent.VK_M:     return Key.KEY_M;
-			case KeyEvent.VK_0:     return Key.KEY_0;
+			case KeyEvent.VK_0:     
+				if ( modifiers.contains( Modifier.SHIFT ) ) {
+					return Key.KEY_EQUALS;
+				}
+				return Key.KEY_0;
 			case KeyEvent.VK_J:     return Key.KEY_J;
 			case KeyEvent.VK_I:     return Key.KEY_I;
 			case KeyEvent.VK_9:     return Key.KEY_9;	
 			// row #5
-			case KeyEvent.VK_COMMA: return Key.KEY_COMMA;
+			case KeyEvent.VK_COMMA:
+				if ( modifiers.contains( Modifier.SHIFT ) ) {
+					return Key.KEY_SEMICOLON;
+				}
+				return Key.KEY_COMMA;
 			case KeyEvent.VK_AT:    return Key.KEY_AT;
 			case KeyEvent.VK_COLON: return Key.KEY_COLON;
 			case KeyEvent.VK_PERIOD:return Key.KEY_PERIOD;
@@ -182,7 +232,6 @@ public class Keyboard
 			case KeyEvent.VK_SLASH: return Key.KEY_SLASH;
 			case KeyEvent.VK_CIRCUMFLEX:    return Key.KEY_CIRCUMFLEX;
 			case KeyEvent.VK_EQUALS: return Key.KEY_EQUALS;
-			// case KeyEvent.VK_SHIFT:return Key.KEY_RIGHT_SHIFT; // FIXME: Right shift
 			case KeyEvent.VK_HOME: return Key.KEY_HOME;
 			case KeyEvent.VK_SEMICOLON:     return Key.KEY_SEMICOLON;
 			case KeyEvent.VK_MULTIPLY:     return Key.KEY_MULTIPLY;

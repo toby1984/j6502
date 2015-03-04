@@ -284,12 +284,21 @@ CRB 	Control Timer B 	see CIA 1
 	{
 		System.out.println("PRESSED: "+key);
 		keyboardColumns[ key.colBitNo ] &= ~(1 << key.rowBitNo); // bits are low-active so clear bit if key is pressed
+		if ( key.clearShift() ) {
+			keyReleased(Key.KEY_LEFT_SHIFT);
+			keyReleased(Key.KEY_RIGHT_SHIFT);
+		} else if ( key.fakeLeftShift() ) {
+			keyPressed(Key.KEY_LEFT_SHIFT);
+		}
 	}
 
 	public void keyReleased(Key key)
 	{
 		System.out.println("RELEASED: "+key);
 		keyboardColumns[ key.colBitNo ] |= (1 << key.rowBitNo);	 // bits are low-active so set bit if key is released
+		if ( key.fakeLeftShift() ) {
+			keyReleased(Key.KEY_LEFT_SHIFT);
+		}
 	}	
 
 	@Override

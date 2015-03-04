@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -57,6 +58,8 @@ import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.emulator.Keyboard;
 import de.codesourcery.j6502.emulator.Keyboard.Key;
+import de.codesourcery.j6502.emulator.Keyboard.KeyLocation;
+import de.codesourcery.j6502.emulator.Keyboard.Modifier;
 import de.codesourcery.j6502.ui.EmulatorDriver.IBreakpointLister;
 import de.codesourcery.j6502.ui.EmulatorDriver.Mode;
 import de.codesourcery.j6502.ui.WindowLocationHelper.ILocationAware;
@@ -380,16 +383,61 @@ public class Debugger
 				@Override
 				public void keyPressed(java.awt.event.KeyEvent e)
 				{
-					Key pressed = Keyboard.keyCodeToKey( e.getKeyCode() );
+					KeyLocation location = getLocation(e);
+					Set<Modifier> modifiers = getModifiers( e );
+					System.out.println("PRESSED: loc="+location+" , mods="+modifiers);
+					Key pressed = Keyboard.keyCodeToKey( e.getKeyCode() , location , modifiers);
 					if ( pressed != null ) {
 						emulator.keyPressed( pressed );
 					}
 				}
+				
+				private Set<Keyboard.Modifier> getModifiers(KeyEvent e) 
+				{
+					int mask = e.getModifiersEx();
+					boolean shiftPressed = false;
+					boolean controlPressed = false;
+					if ( ( (mask & KeyEvent.SHIFT_DOWN_MASK) != 0 ) ||
+						 ( ( mask & KeyEvent.SHIFT_MASK ) != 0 ) 
+					)
+					{
+						shiftPressed = true;
+					}
+					
+					if ( ( (mask & KeyEvent.CTRL_DOWN_MASK) != 0 ) ||
+							 ( ( mask & KeyEvent.CTRL_MASK ) != 0 ) 
+						)
+						{
+							controlPressed = true;
+						}
+					if ( ! controlPressed && ! shiftPressed ) {
+						return Collections.emptySet();
+					}
+					Set<Keyboard.Modifier> result = new HashSet<>();
+					if ( controlPressed ) {
+						result.add( Keyboard.Modifier.CONTROL );
+					}
+					if ( shiftPressed ) {
+						result.add( Keyboard.Modifier.SHIFT );
+					}
+					return result;
+				}
 
+				private KeyLocation getLocation(KeyEvent e) 
+				{
+					final int keyLocation = e.getKeyLocation();
+					if (keyLocation == KeyEvent.KEY_LOCATION_LEFT) {
+						return KeyLocation.LEFT;
+					} 
+					if (keyLocation == KeyEvent.KEY_LOCATION_RIGHT) {
+						return KeyLocation.RIGHT;
+					}
+					return KeyLocation.STANDARD;
+				}
 				@Override
 				public void keyReleased(java.awt.event.KeyEvent e)
 				{
-					Key released = Keyboard.keyCodeToKey( e.getKeyCode() );
+					Key released = Keyboard.keyCodeToKey( e.getKeyCode() , getLocation(e) , getModifiers(e) );
 					if ( released != null ) {
 						emulator.keyReleased( released );
 					}
