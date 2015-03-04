@@ -1041,10 +1041,11 @@ BIT sets the Z flag as though the value in the address tested were ANDed with th
 				default:
 					throw new RuntimeException("Unreachable code reached");
 			}
-			final byte result = (byte) (cpu.getAccumulator() & memory.readByte( address ));
-			cpu.setFlag( CPU.Flag.ZERO , result == 0);
-			cpu.setFlag( CPU.Flag.NEGATIVE , (result & 0b10000000) != 0);
-			cpu.setFlag( CPU.Flag.OVERFLOW , (result & 0b01000000) != 0);
+			final int value = memory.readByte( address );
+			final int result = (cpu.getAccumulator() & value);
+			cpu.setFlag( CPU.Flag.ZERO , (result & 0xff) == 0);
+			cpu.setFlag( CPU.Flag.NEGATIVE , (value & 0b1000_0000) != 0);
+			cpu.setFlag( CPU.Flag.OVERFLOW , (value & 0b0100_0000) != 0);
 		}
 	},
 	JMP("JMP")

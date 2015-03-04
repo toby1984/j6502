@@ -181,7 +181,7 @@ public class VIC extends Memory
 
 	public  static final int VIC_SPRITE_X_COORDS_HI_BIT = 15;
 
-	public  static final int VIC_CNTRL1 = 17;
+	public  static final int VIC_CTRL1 = 17;
 
 	public  static final int VIC_SCANLINE = 18;
 
@@ -422,13 +422,13 @@ public class VIC extends Memory
 		final byte lo = (byte) rasterLine;
 		final byte hi = (byte) (rasterLine>>8);
 
-		int hiBit = readByte( VIC.VIC_CNTRL1 );
+		int hiBit = readByte( VIC.VIC_CTRL1 );
 		if ( hi != 0 ) {
 			hiBit |= 0b1000_0000;
 		} else {
 			hiBit &= 0b0111_1111;
 		}
-		writeByte( VIC.VIC_CNTRL1 , (byte) hiBit );
+		writeByte( VIC.VIC_CTRL1 , (byte) hiBit );
 		writeWord( VIC.VIC_SCANLINE , lo );
 	}
 	
@@ -440,7 +440,7 @@ public class VIC extends Memory
 			// current scan line, lo-byte
 			irqOnRaster = (short) (irqOnRaster | (value & 0xff) );
 		}
-		else if ( offset == VIC.VIC_CNTRL1 )
+		else if ( offset == VIC.VIC_CTRL1 )
 		{
 			// current scan line, hi-byte
 			if ( ( value & 0b1000_0000 ) != 0 ) {
@@ -451,4 +451,32 @@ public class VIC extends Memory
 		}		
 		super.writeByte(offset, value);
 	}
+	
+	/*
+	 *    $D011 	53265 	17 	Steuerregister, Einzelbedeutung der Bits (1 = an):
+	 *                          Bit 7: Bit 8 von $D012
+	 *                          Bit 6: Extended Color Modus
+	 *                          Bit 5: Bitmapmodus
+	 *                          Bit 4: Bildausgabe eingeschaltet (Effekt erst beim nächsten Einzelbild)
+	 *                          Bit 3: 25 Zeilen (sonst 24)
+	 *                          Bit 2..0: Offset in Rasterzeilen vom oberen Bildschirmrand	 
+	 */
+	
+	private int getRowCount() {
+		int result = readByte( VIC_CTRL1 );
+		return ( result & 1<<3) == 0 ? 24: 25; 
+	}
+	
+	/*
+	 *    $D016 	53270 	22 	Steuerregister, Einzelbedeutung der Bits (1 = an):
+	 *                          Bit 7..5: unbenutzt
+	 *                          Bit 4: Multicolor-Modus
+	 *                          Bit 3: 40 Spalten (an)/38 Spalten (aus)
+	 *                          Bit 2..0: Offset in Pixeln vom linken Bildschirmrand	 
+	 */
+	
+	private int getColumnCount() {
+		int result = readByte( VIC_CTRL2 );
+		return ( result & 1<<3) == 0 ? 38 : 40; 
+	}	
 }
