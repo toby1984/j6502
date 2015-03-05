@@ -2,6 +2,8 @@ package de.codesourcery.j6502.emulator;
 
 import org.apache.commons.lang.StringUtils;
 
+import de.codesourcery.j6502.utils.HexDump;
+
 public class IECBus 
 {
 	protected boolean atn;
@@ -28,8 +30,11 @@ public class IECBus
 		@Override public String toString() { return name; }
 	}
 
+	protected int bitsReceived = 0;
 	protected byte data;
-	
+
+	private final BusState WAIT_TO_ACK;	
+	private final BusState ACKNOWLEDGE;
 	private final BusState UNDEFINED;	
 	private final BusState RECEIVING2;
 	private final BusState RECEIVING1;
@@ -39,17 +44,20 @@ public class IECBus
 
 	public void writeBus(byte b) 
 	{
-		atn = (b & 1<<3) != 0;
-		clockOut = (b & 1 << 4) != 0;
-		dataOut = (b & 1<<5) != 0;
-		System.out.println("--------");
-		System.out.println("["+StringUtils.rightPad( this.busState.toString(),15)+"] : "+this);
+		// all lines are low-active, 0 = LOGICAL TRUE , 1 = LOGICAL FALSE
+		// but I invert the sense of matching here since
+		// it's easier to follow the program code along...
+		atn = (b & 1<<3) == 0;
+		clockOut = (b & 1 << 4) == 0;
+		dataOut = (b & 1<<5) == 0;
+		final String s1 = StringUtils.rightPad( this.busState.toString(),15);
 		BusState newState = busState.afterWrite();
 		if ( newState != busState ) {
 			newState.onEnter();
 		}
+		final String s2 = StringUtils.rightPad( newState.toString(),15);
+		System.out.println( "["+s1+" -> "+s2+" ] : "+this);			
 		busState = newState;
-		System.out.println("["+StringUtils.rightPad( this.busState.toString(),15)+"] : "+this);
 	}
 	
 	public IECBus() 
@@ -61,6 +69,30 @@ public class IECBus
 				if ( atn && clockOut ) {
 					dataIn = true;
 					return LISTENING;
+				}
+				return this;
+			}
+		};
+		
+		ACKNOWLEDGE = new BusState("ACK") {
+			@Override
+			public BusState afterWrite() 
+			{
+				return LISTENING;
+			}
+			
+			@Override
+			public void onEnter() {
+				dataIn = true;
+			}
+		};
+		
+		WAIT_TO_ACK = new BusState("WAIT_TO_ACK") {
+			@Override
+			public BusState afterWrite() 
+			{
+				if ( clockOut && ! dataOut ) {
+					return ACKNOWLEDGE;
 				}
 				return this;
 			}
@@ -78,7 +110,7 @@ public class IECBus
 				return this;
 			}
 			
-			public void onEnter() { data = 0; };
+			public void onEnter() { };
 		};	
 
 		RECEIVING1 = new BusState("RECEIVING_1")  
@@ -90,7 +122,15 @@ public class IECBus
 				{
 					// data is received with the LSB first
 					data = (byte) (data >> 1);
-					data |= dataOut ? 1<<7 : 0;
+					System.out.println("BIT "+bitsReceived+": "+dataOut);
+					data &= dataOut ? 1<<7 : 0; // logical 1 = 
+					bitsReceived++;
+					if ( bitsReceived == 8 ) {
+						byteReceived(data);
+						data = 0;
+						bitsReceived = 0;
+						return WAIT_TO_ACK;
+					}
 					return RECEIVING2;
 				}
 				return this;
@@ -110,13 +150,16 @@ public class IECBus
 				return this;
 			}
 		};		
-		
 		this.busState = UNDEFINED;
 	}
 
 	@Override
 	public String toString() {
-		return "ATN: "+atn+" , CLK_OUT: "+clockOut+" , DATA_OUT: "+dataOut+", CLK_IN: "+clockIn+", DATA_IN: "+dataIn;
+		return "ATN: "+atn+" , CLK_OUT: "+clockOut+" , DATA_OUT: "+dataOut+"  ||   CLK_IN: "+clockIn+", DATA_IN: "+dataIn;
+	}
+	
+	private void byteReceived(byte data) {
+		System.out.println("BYTE RECEIVED: "+HexDump.toBinaryString( data ) );
 	}
 
 	public byte readBus() 
@@ -141,10 +184,9 @@ public class IECBus
 		    Bit 6: CLOCK IN
 		    Bit 7: DATA IN					 
 		 */
-		return (byte) ( (clockIn ? 1<<6 : 0 ) | ( dataIn ? 1<<7 : 0) );
+		return (byte) ( (clockIn ? 0 : 1<<6 ) | ( dataIn ? 0 : 1<<7 ) );
 	}
 
 	public void tick() {
-
 	}
 }
