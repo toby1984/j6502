@@ -261,11 +261,11 @@ public class Emulator
 
 	public void keyPressed(Key key) {
 		System.out.println("Pressed: "+key);
-		memory.getIOArea().getCIA1().keyPressed( key );
+		memory.getIOArea().keyPressed( key );
 	}
 
 	public void keyReleased(Key key) {
 		System.out.println("Released: "+key);
-		memory.getIOArea().getCIA1().keyReleased( key );
+		memory.getIOArea().keyReleased( key );
 	}
 }

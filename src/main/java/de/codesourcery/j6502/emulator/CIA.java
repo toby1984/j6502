@@ -1,9 +1,17 @@
 package de.codesourcery.j6502.emulator;
 
-import de.codesourcery.j6502.emulator.Keyboard.Key;
-import de.codesourcery.j6502.utils.HexDump;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoField;
 
+import de.codesourcery.j6502.utils.Misc;
 
+/**
+ * Very inaccurate CIA6526 implementation.
+ *
+ * TODO: Have a look at http://ist.uwaterloo.ca/~schepers/MJK/cia6526.html to do it better.
+ *
+ * @author tobias.gierke@voipfuture.com
+ */
 public class CIA extends Memory
 {
 	public static final int CIA1_PRA        = 0x00;
@@ -171,7 +179,9 @@ Adress
 Hex 	Adress
 Dec 	Register 	Function 	Remark
 $DD00 	56576 	0
-PRA 	Data Port A 	Bit 0..1: Select the position of the VIC-memory
+PRA 	Data Port A
+
+Bit 0..1: Select the position of the VIC-memory
 
      %00, 0: Bank 3: $C000-$FFFF, 49152-65535
      %01, 1: Bank 2: $8000-$BFFF, 32768-49151
@@ -261,6 +271,30 @@ $DD0F 	56591 	15
 CRB 	Control Timer B 	see CIA 1
 	 */
 
+	private long tickCounter = 0;
+	private boolean todRunning;
+
+	// real-time clock
+	private TimeOfDay timeOfDay = TimeOfDay.AM;
+	private int tod10s = 0; // 10ths of seconds
+	private int todSeconds = 0; // seconds
+	private int todMinutes = 0; // minutes
+	private int todHours= 0; // hours
+
+	// RTC alarm time
+	private boolean rtcAlarmIRQEnabled;
+	private TimeOfDay todAlarmTimeOfDay;
+	private int todAlarm10s = 0; // 10ths of seconds
+	private int todAlarmSeconds = 0; // seconds
+	private int todAlarmMinutes = 0; // minutes
+	private int todAlarmHours= 0; // hours
+
+	protected static enum TimeOfDay
+	{
+		AM,PM;
+		public TimeOfDay flip() { return this == AM ? PM : AM; }
+	}
+
 	private int irqMask;
 	private int icr_read;
 
@@ -272,43 +306,46 @@ CRB 	Control Timer B 	see CIA 1
 
 	private int timerBValue;
 	private int timerBLatch;
-	
-	private final int[] keyboardColumns = new int[] {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff}; // 8 keyboard columns, bits are low-active
 
 	public CIA(String identifier, AddressRange range)
 	{
 		super(identifier, range);
 	}
-	
-	public void keyPressed(Key key)
-	{
-		System.out.println("PRESSED: "+key);
-		keyboardColumns[ key.colBitNo ] &= ~(1 << key.rowBitNo); // bits are low-active so clear bit if key is pressed
-		if ( key.clearShift() ) {
-			keyReleased(Key.KEY_LEFT_SHIFT);
-			keyReleased(Key.KEY_RIGHT_SHIFT);
-		} else if ( key.fakeLeftShift() ) {
-			keyPressed(Key.KEY_LEFT_SHIFT);
-		}
+
+	private void initTOD() {
+
+		LocalDateTime now = LocalDateTime.now();
+
+		int minute = now.get(ChronoField.MINUTE_OF_HOUR);
+		int hour = now.get(ChronoField.HOUR_OF_DAY);
+		int second = now.get(ChronoField.SECOND_OF_MINUTE);
+		int tenths= now.get(ChronoField.MILLI_OF_SECOND)/100;
+
+		this.tickCounter = 0;
+
+		this.rtcAlarmIRQEnabled = false;
+
+		this.timeOfDay = hour >= 12 ? TimeOfDay.PM : TimeOfDay.AM;
+
+		this.tod10s = tenths;
+		this.todSeconds = second;
+		this.todMinutes = minute;
+		this.todHours = hour >=12 ? hour-12 : hour;
+
+		this.todRunning = true;
 	}
 
-	public void keyReleased(Key key)
-	{
-		System.out.println("RELEASED: "+key);
-		keyboardColumns[ key.colBitNo ] |= (1 << key.rowBitNo);	 // bits are low-active so set bit if key is released
-		if ( key.fakeLeftShift() ) {
-			keyReleased(Key.KEY_LEFT_SHIFT);
-		}
-	}	
-
 	@Override
-	public void reset() {
+	public void reset()
+	{
 		super.reset();
+
+		tickCounter = 0;
+		initTOD();
+
 		irqMask = 0;
 		icr_read = 0;
-		for ( int i = 0 ; i < keyboardColumns.length ; i++ ) {
-			keyboardColumns[i] = 0xff;
-		}
+
 		timerARunning = false;
 		timerBRunning = false;
 		timerAValue = 0xffff;
@@ -328,12 +365,12 @@ start    sei             ; interrupts deactivated
 
          lda #%11111111  ; CIA#1 port A = outputs  ==> Bits in PRA can be read and written
          sta DDRA
-         
+
          lda #%11111101  ; select keyboard matrix column 1 (COL1)
          sta PRA
-         
+
          lda #%00000000  ; CIA#1 port B = inputs
-         sta DDRB        ; Bits in PRB can only be read         
+         sta DDRB        ; Bits in PRB can only be read
 
 loop     lda PRB
          and #%00100000  ; masking row 5 (ROW5) , row is LOW active
@@ -343,35 +380,13 @@ loop     lda PRB
 
 ende     rts             ; back to BASIC
 	 */
-	
+
 	@Override
 	public int readByte(int adr)
 	{
 		final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
 		switch(offset)
 		{
-			// rowBit / PRB , columnBit / PRA )
-			case CIA1_PRB: // $DC01
-				int ddrb = super.readByte( CIA1_DDRB );
-				if ( ddrb != 0 ) {
-					System.out.println("Rejecting read from CIA1_PRB , DDRB is "+HexDump.toBinaryString( (byte) ddrb ) );
-					return 0;
-				}
-				int pra = super.readByte( CIA1_PRA );
-				// figure out which keyboard column to read
-				int col = 0;
-				int result2 = 0xff;
-				for ( ; col < 8 ; col++ ) {
-					if ( ( pra & (1<< col ) ) == 0 ) { // got column (bit is low-active)
-						int tmp = keyboardColumns[col];
-						if ( tmp != 0xff ) // there's a bit set on this column 
-						{
-							result2 &= tmp;
-//							System.out.println("Read: keyboard column "+col+" on "+this+" = "+HexDump.toBinaryString( (byte) result2 ));
-						}
-					}
-				}
-				return result2;
 			case CIA1_ICR:
 				int result = icr_read & 0xff;
 				icr_read = 0;
@@ -398,7 +413,6 @@ ende     rts             ; back to BASIC
         Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.
         Bit 5..6: unused
         Bit 7: Source bit. 0 = set bits 0..4 are clearing the according mask bit. 1 = set bits 0..4 are setting the according mask bit. If all bits 0..4 are cleared, there will be no change to the mask.
-
 				 */
 			case CIA1_TALO:
 				return timerAValue & 0xff;
@@ -408,6 +422,22 @@ ende     rts             ; back to BASIC
 				return timerBValue & 0xff;
 			case CIA1_TBHI:
 				return (timerBValue >> 8 ) & 0xff;
+			// ======== return ToD ====
+			case CIA1_TOD_10THS: //  = 0x08;
+				this.todRunning = false; //  Writing CIA1_TOD_10TS register stops TOD, until register 8 (TOD 10THS) is read.
+				todRunning = true;
+				return Misc.binaryToBCD( tod10s );
+			case CIA1_TOD_SECOND: // = 0x09;
+				return Misc.binaryToBCD( todSeconds );
+			case CIA1_TOD_MIN: //    = 0x0a;
+				return Misc.binaryToBCD( todMinutes );
+			case CIA1_TOD_HOUR: //   = 0x0b;
+				int result3 = Misc.binaryToBCD( todHours );
+				// Bit 7: Differentiation AM/PM, 0=AM, 1=PM
+				if ( timeOfDay == TimeOfDay.PM ) {
+					result3 |= 1<<7;
+				}
+				return result3;
 			default:
 		}
 		return super.readByte(offset);
@@ -420,6 +450,40 @@ ende     rts             ; back to BASIC
 		// System.out.println("Write to "+this+" @ "+HexDump.toAdr( offset ) );
 		switch (offset)
 		{
+			// ============= Real time clock ==============
+			case CIA1_TOD_10THS:
+				if ( isSetRTCAlarmTime() ) {
+					this.todAlarm10s = Misc.bcdToBinary( value & 0xff );
+				} else {
+					this.tod10s = Misc.bcdToBinary( value & 0xff );
+				}
+				return;
+			case CIA1_TOD_SECOND:
+				if ( isSetRTCAlarmTime() ) {
+					this.todAlarmSeconds =  Misc.bcdToBinary( value & 0xff );
+				} else {
+					this.todSeconds =  Misc.bcdToBinary( value & 0xff );
+				}
+				return;
+			case CIA1_TOD_MIN:
+				if ( isSetRTCAlarmTime() ) {
+					this.todAlarmMinutes = Misc.bcdToBinary( value & 0xff );
+				} else {
+					this.todMinutes = Misc.bcdToBinary( value & 0xff );
+				}
+				return;
+			case CIA1_TOD_HOUR:
+				if ( isSetRTCAlarmTime() ) {
+					this.todAlarmTimeOfDay = (value & 1<<7) != 0 ? TimeOfDay.AM : TimeOfDay.PM;
+					this.todAlarmHours = Misc.bcdToBinary( value & 0b0111_1111 );
+				} else {
+					this.timeOfDay = (value & 1<<7) != 0 ? TimeOfDay.AM : TimeOfDay.PM;
+					this.todHours = Misc.bcdToBinary( value & 0b0111_1111 );
+				}
+				//  Writing into this register stops TOD, until register 8 (TOD 10THS) will be read.
+				this.todRunning = false;
+				return;
+			// ===============================
 			case CIA1_ICR:
 				/*
 		        Bit 0: 1 = Interrupt release through timer A underflow
@@ -432,6 +496,7 @@ ende     rts             ; back to BASIC
 		                           1 = set bits 0..4 are setting the according mask bit.
 		                           If all bits 0..4 are cleared, there will be no change to the mask.
 							 */
+				this.rtcAlarmIRQEnabled = (value & 1<<2 ) != 0;
 				if ( (value & 1<<7) == 0 ) { // clear corresponding bits 0-4 in IRQ mask
  					int mask = ~(value & 0b11111);
  					irqMask &= mask;
@@ -442,42 +507,30 @@ ende     rts             ; back to BASIC
 				break;
 			case CIA1_TALO:
 				timerALatch = ( timerALatch & 0xff00) | (value & 0xff);
-				 System.out.println("CIA1_TALO = "+HexDump.toHex( (byte) value ) );
-				if ( ! timerARunning ) {
-					timerAValue = ( timerAValue & 0xff00) | (value & 0xff);
-				}
 				break;
 			case CIA1_TAHI:
 				timerALatch = ( timerALatch & 0x00ff) | (( value & 0xff) <<8);
-				 System.out.println("CIA1_TAHI = "+HexDump.toHex( (byte) value ) );
 				if ( ! timerARunning ) {
 					timerAValue = ( timerAValue & 0x00ff) | (( value & 0xff) <<8);
 				}
 				break;
 			case CIA1_TBLO:
 				timerBLatch = ( timerBLatch & 0xff00) | (value & 0xff);
-				 System.out.println("CIA1_TBLO = "+HexDump.toHex( (byte) value ) );
-				if ( ! timerBRunning ) {
-					timerBValue = ( timerBValue & 0xff00) | (value & 0xff);
-				}
 				break;
 			case CIA1_TBHI:
 				timerBLatch = ( timerBLatch & 0x00ff) | (( value & 0xff) <<8);
-				 System.out.println("CIA1_TBHI = "+HexDump.toHex( (byte) value ) );
 				if ( ! timerBRunning ) {
 					timerBValue = ( timerBValue & 0x00ff) | (( value & 0xff) <<8);
 				}
 				break;
 			case CIA1_CRA:
 				timerARunning = ( value & 1) != 0;
-				System.out.println("CIA1_CRA = timer_A_running = "+timerARunning+" = "+HexDump.toBinaryString( (byte) value ));
 				if ( ( value & 1 << 4) != 0 ) {
 					timerAValue = timerALatch;
 				}
 				break;
 			case CIA1_CRB:
 				timerBRunning = ( value & 1) != 0;
-				System.out.println("CIA1_CRB = timer_B_running = "+timerBRunning+" = "+HexDump.toBinaryString( (byte) value ));
 				if ( ( value & 1 << 4) != 0 ) {
 					timerBValue = timerBLatch;
 				}
@@ -486,8 +539,45 @@ ende     rts             ; back to BASIC
 		super.writeByte(offset, value);
 	}
 
+	private void increaseRTC(CPU cpu)
+	{
+		this.tod10s++;
+		if ( this.tod10s > 9 ) {
+			this.tod10s=0;
+			this.todSeconds++;
+			if ( this.todSeconds > 59 ) {
+				this.todSeconds = 0;
+				this.todMinutes++;
+				if ( this.todMinutes > 59 ) {
+					this.todMinutes = 0;
+					this.todHours++;
+					if ( this.todHours > 11 ) {
+						this.todHours = 0;
+						this.timeOfDay = this.timeOfDay.flip();
+					}
+				}
+			}
+		}
+		if ( this.rtcAlarmIRQEnabled &&
+		     this.tod10s == this.todAlarm10s &&
+		     this.todSeconds == this.todAlarmSeconds &&
+		     this.todMinutes == this.todAlarmMinutes &&
+		     this.todHours == this.todAlarmHours &&
+		     this.timeOfDay == this.todAlarmTimeOfDay )
+		{
+			icr_read |= 2; // tod == tod alarm time
+			cpu.queueInterrupt();
+		}
+	}
+
 	public void tick(CPU cpu)
 	{
+		tickCounter++;
+		if ( todRunning & ( tickCounter % 100000) == 0 ) // RTC increases in 1/10 of a second intervals = every 100 milliseconds = every 100.000 microseconds
+		{
+			increaseRTC( cpu );
+		}
+
 		/* $DC0E   CRA
         Bit 0: 0 = Stop timer; 1 = Start timer
         Bit 1: 1 = Indicates a timer underflow at port B in bit 6.
@@ -567,7 +657,7 @@ ende     rts             ; back to BASIC
 		// System.out.println("CIA #1 timer A underflow");
 		/*
         Bit 0: 1 = Interrupt release through timer A underflow
-        Bit 1: 1 = Interrupt release through timer B underflow		 
+        Bit 1: 1 = Interrupt release through timer B underflow
 		 */
 		if ( (irqMask & 1) != 0 ) { // trigger interrupt on timer A underflow ?
 			icr_read |= 1; // timerA underflow triggered IRQ
@@ -579,5 +669,10 @@ ende     rts             ; back to BASIC
 		} else { // // bit 3 = 0 => Timer-restart after underflow (latch will be reloaded)
 			timerAValue = timerALatch;
 		}
+	}
+
+	private boolean isSetRTCAlarmTime()
+	{
+		return (readByte( CIA1_CRB ) & 1<<7) != 0;
 	}
 }

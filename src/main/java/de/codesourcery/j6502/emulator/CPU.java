@@ -24,7 +24,7 @@ public class CPU
 	private int y;
 	public short sp;
 
-	private byte flags = CPU.Flag.EXTENSION.set((byte)0); // bit is always set
+	private byte flags = CPU.Flag.EXTENSION.set((byte)0); // extension bit is always 1
 
 	public static enum Flag
 	{
@@ -45,8 +45,8 @@ public class CPU
 		public boolean isNotSet(byte flags) { return (flags&value) == 0; }
 		public byte clear(byte flags) { return (byte) (flags&~value); }
 		public byte set(byte flags) { return (byte) (flags | value); }
-		
-		public static String toFlagString(byte bitMask) 
+
+		public static String toFlagString(byte bitMask)
 		{
 			StringBuilder result = new StringBuilder();
 			for ( Flag f : values() ) {
@@ -54,8 +54,8 @@ public class CPU
 			}
 			return result.toString();
 		}
-		
-		public static byte toBitMask(Collection<CPU.Flag> flags) 
+
+		public static byte toBitMask(Collection<CPU.Flag> flags)
 		{
 			int result = 0;
 			for ( CPU.Flag f : flags ) {
@@ -70,7 +70,7 @@ public class CPU
 	}
 
 	public void setFlagBits(byte bits) {
-		this.flags = CPU.Flag.EXTENSION.set( bits ); // extension bit is always set
+		this.flags = CPU.Flag.EXTENSION.set( bits ); // extension bit is always 1
 	}
 
 	public void pc(int value) {
@@ -109,7 +109,6 @@ public class CPU
 			flags = CPU.Flag.IRQ_DISABLE.set( this.flags );
 			pc = (short) memory.readWord( (short) CPU.IRQ_VECTOR_LOCATION );
 			clearInterruptQueued();
-//			System.out.println("Jumping to interrupt handler @ "+HexDump.toAdr( pc ) );
 		}
 	}
 
@@ -173,7 +172,6 @@ public class CPU
 	}
 
 	public void queueInterrupt() {
-//		System.out.println("*** IRQ queued ***");
 		if ( ! isSet(CPU.Flag.IRQ_DISABLE ) ) {
 			this.interruptQueued = true;
 		}
