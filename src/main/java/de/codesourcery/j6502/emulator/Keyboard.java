@@ -156,7 +156,6 @@ public class Keyboard
 
 	public static Key keyCodeToKey(int keyCode,KeyLocation location,Set<Modifier> modifiers) 
 	{
-		System.out.println("Modifiers: "+modifiers);
 		switch( keyCode ) 
 		{
 			// row #0

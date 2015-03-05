@@ -81,7 +81,7 @@ public abstract class EmulatorDriver extends Thread
 		public void enqueue()
 		{
 			try {
-				System.out.println("ENQUEUE: "+this);
+//				System.out.println("ENQUEUE: "+this);
 				requestQueue.put( this );
 			} catch (final InterruptedException e) {
 				throw new RuntimeException(e);
@@ -92,7 +92,7 @@ public abstract class EmulatorDriver extends Thread
 		{
 			if ( ackRequired ) {
 				try {
-					System.out.println("ENQUEUE ACK: "+this);
+//					System.out.println("ENQUEUE ACK: "+this);
 					ackQueue.put( this );
 				} catch (final InterruptedException e) {
 					throw new RuntimeException(e);
@@ -132,7 +132,7 @@ public abstract class EmulatorDriver extends Thread
 		final Cmd cmd;
 		if ( Mode.CONTINOUS.equals( newMode ) )
 		{
-			System.out.println("Breakpoints: "+getBreakpoints());
+//			System.out.println("Breakpoints: "+getBreakpoints());
 			cmd = startCommand(true);
 		} else {
 			cmd = stopCommand(true);
@@ -146,10 +146,10 @@ public abstract class EmulatorDriver extends Thread
 
 		while ( cmd.isAckRequired() )
 		{
-			System.out.println("Waiting for ack of "+this);
+//			System.out.println("Waiting for ack of "+this);
 			try {
 				final Cmd acked = ackQueue.take();
-				System.out.println("Got ack for "+acked);
+//				System.out.println("Got ack for "+acked);
 				if ( acked.id == cmd.id ) {
 					break;
 				}
@@ -162,7 +162,6 @@ public abstract class EmulatorDriver extends Thread
 
 	protected final void onStart()
 	{
-		System.out.println("*** onStart()");
 		this.currentMode.set( Mode.CONTINOUS );
 		onStartHook();
 	}
@@ -171,7 +170,6 @@ public abstract class EmulatorDriver extends Thread
 
 	protected final void onStop(Throwable t)
 	{
-		System.out.println("*** onStop()");
 		this.currentMode.set( Mode.SINGLE_STEP );
 		onStopHook( t );
 	}
@@ -198,7 +196,6 @@ public abstract class EmulatorDriver extends Thread
 				final Cmd cmd = requestQueue.poll();
 				if ( cmd != null )
 				{
-					System.out.println("Thread received request: "+cmd);
 					cmd.ack();
 					if ( cmd.isStopCmd() ) {
 						isRunnable = false;
@@ -214,10 +211,8 @@ public abstract class EmulatorDriver extends Thread
 				justStarted = false;
 				while ( ! isRunnable )
 				{
-					System.out.println("Thread stopped,waiting for cmd");
 					try {
 						final Cmd cmd = requestQueue.take();
-						System.out.println("Thread received request: "+cmd);
 						cmd.ack();
 
 						if ( cmd.isStartCmd() )

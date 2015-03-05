@@ -385,7 +385,6 @@ public class Debugger
 				{
 					KeyLocation location = getLocation(e);
 					Set<Modifier> modifiers = getModifiers( e );
-					System.out.println("PRESSED: loc="+location+" , mods="+modifiers);
 					Key pressed = Keyboard.keyCodeToKey( e.getKeyCode() , location , modifiers);
 					if ( pressed != null ) {
 						emulator.keyPressed( pressed );

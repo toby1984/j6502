@@ -10,6 +10,8 @@ import de.codesourcery.j6502.emulator.Keyboard.Key;
 public class IOArea extends Memory
 {
 	private final VIC vic;
+	private final IECBus bus = new IECBus();
+	
 	private final CIA cia1 = new CIA("CIA #1" , AddressRange.range( 0xdc00, 0xdd00 ) ) {
 
 		@Override
@@ -37,8 +39,52 @@ public class IOArea extends Memory
 		}
 	};
 
-	private final CIA cia2 = new CIA("CIA #2" , AddressRange.range( 0xdd00, 0xde00 ) ) {
+	private final CIA cia2 = new CIA("CIA #2" , AddressRange.range( 0xdd00, 0xde00 ) ) 
+	{
+		public void writeByte(int adr, byte value) 
+		{
+			super.writeByte(adr, value);
+			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
+			if (offset == 00 )
+			{
+				bus.writeBus( value );
+			}
+		}
+		
+		public int readByte(int adr) 
+		{
+			int value = super.readByte(adr);
+			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
+			if ( offset == 0 ) {
+				/*
+				 Bit 0..1: Select the position of the VIC-memory
+				
+				     %00, 0: Bank 3: $C000-$FFFF, 49152-65535
+				     %01, 1: Bank 2: $8000-$BFFF, 32768-49151
+				     %10, 2: Bank 1: $4000-$7FFF, 16384-32767
+				     %11, 3: Bank 0: $0000-$3FFF, 0-16383 (standard)
+				
+				Bit 2: RS-232: TXD Output, userport: Data PA 2 (pin M)
+				Bit 3..5: serial bus Output (0=High/Inactive, 1=Low/Active)
+				
+				    Bit 3: ATN OUT
+				    Bit 4: CLOCK OUT
+				    Bit 5: DATA OUT
+				
+				Bit 6..7: serial bus Input (0=Low/Active, 1=High/Inactive)
+				
+				    Bit 6: CLOCK IN
+				    Bit 7: DATA IN					 
+				 */	
+				value = (value & 0b00111111 ) | bus.readBus(); // merge CLOCK IN/DATA IN bits
+			}
+			return value;
+		};
 	};
+	
+	protected void writePortA(byte value) {
+		
+	}
 
 	private final IMemoryRegion mainMemory;
 
@@ -53,7 +99,6 @@ public class IOArea extends Memory
 
 	public void keyPressed(Key key)
 	{
-		System.out.println("PRESSED: "+key);
 		keyboardColumns[ key.colBitNo ] &= ~(1 << key.rowBitNo); // bits are low-active so clear bit if key is pressed
 		if ( key.clearShift() ) {
 			keyReleased(Key.KEY_LEFT_SHIFT);
@@ -65,7 +110,6 @@ public class IOArea extends Memory
 
 	public void keyReleased(Key key)
 	{
-		System.out.println("RELEASED: "+key);
 		keyboardColumns[ key.colBitNo ] |= (1 << key.rowBitNo);	 // bits are low-active so set bit if key is released
 		if ( key.fakeLeftShift() ) {
 			keyReleased(Key.KEY_LEFT_SHIFT);
@@ -135,6 +179,7 @@ public class IOArea extends Memory
 		cia1.tick( cpu );
 		cia2.tick(cpu );
 		vic.tick( cpu );
+		bus.tick();
 	}
 
 	public CIA getCIA1() {

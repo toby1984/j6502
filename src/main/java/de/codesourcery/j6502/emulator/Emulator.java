@@ -260,12 +260,10 @@ public class Emulator
 	}
 
 	public void keyPressed(Key key) {
-		System.out.println("Pressed: "+key);
 		memory.getIOArea().keyPressed( key );
 	}
 
 	public void keyReleased(Key key) {
-		System.out.println("Released: "+key);
 		memory.getIOArea().keyReleased( key );
 	}
 }

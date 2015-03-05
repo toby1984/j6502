@@ -181,45 +181,45 @@ Dec 	Register 	Function 	Remark
 $DD00 	56576 	0
 PRA 	Data Port A
 
-Bit 0..1: Select the position of the VIC-memory
-
-     %00, 0: Bank 3: $C000-$FFFF, 49152-65535
-     %01, 1: Bank 2: $8000-$BFFF, 32768-49151
-     %10, 2: Bank 1: $4000-$7FFF, 16384-32767
-     %11, 3: Bank 0: $0000-$3FFF, 0-16383 (standard)
-
-Bit 2: RS-232: TXD Output, userport: Data PA 2 (pin M)
-Bit 3..5: serial bus Output (0=High/Inactive, 1=Low/Active)
-
-    Bit 3: ATN OUT
-    Bit 4: CLOCK OUT
-    Bit 5: DATA OUT
-
-Bit 6..7: serial bus Input (0=Low/Active, 1=High/Inactive)
-
-    Bit 6: CLOCK IN
-    Bit 7: DATA IN
+		Bit 0..1: Select the position of the VIC-memory
+		
+		     %00, 0: Bank 3: $C000-$FFFF, 49152-65535
+		     %01, 1: Bank 2: $8000-$BFFF, 32768-49151
+		     %10, 2: Bank 1: $4000-$7FFF, 16384-32767
+		     %11, 3: Bank 0: $0000-$3FFF, 0-16383 (standard)
+		
+		Bit 2: RS-232: TXD Output, userport: Data PA 2 (pin M)
+		Bit 3..5: serial bus Output (0=High/Inactive, 1=Low/Active)
+		
+		    Bit 3: ATN OUT
+		    Bit 4: CLOCK OUT
+		    Bit 5: DATA OUT
+		
+		Bit 6..7: serial bus Input (0=Low/Active, 1=High/Inactive)
+		
+		    Bit 6: CLOCK IN
+		    Bit 7: DATA IN
 
 $DD01 	56577 	1
 PRB 	Data Port B 	Bit 0..7: userport Data PB 0-7 (Pins C,D,E,F,H,J,K,L)
 
-The KERNAL offers several RS232-Routines, which use the pins as followed:
-Bit 0, 3..7: RS-232: reading
-
-    Bit 0: RXD
-    Bit 3: RI
-    Bit 4: DCD
-    Bit 5: User port pin J
-    Bit 6: CTS
-    Bit 7: DSR
-
-Bit 1..5: RS-232: writing
-
-    Bit 1: RTS
-    Bit 2: DTR
-    Bit 3: RI
-    Bit 4: DCD
-    Bit 5: User port pin J
+		The KERNAL offers several RS232-Routines, which use the pins as followed:
+		Bit 0, 3..7: RS-232: reading
+		
+		    Bit 0: RXD
+		    Bit 3: RI
+		    Bit 4: DCD
+		    Bit 5: User port pin J
+		    Bit 6: CTS
+		    Bit 7: DSR
+		
+		Bit 1..5: RS-232: writing
+		
+		    Bit 1: RTS
+		    Bit 2: DTR
+		    Bit 3: RI
+		    Bit 4: DCD
+		    Bit 5: User port pin J
 
 $DD02 	56578 	2
 DDRA 	Data direction

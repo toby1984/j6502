@@ -47,7 +47,6 @@ public class WindowLocationHelper
 
 		public void apply(ILocationAware loc)
 		{
-			System.out.println("Setting "+loc.getClass().getName()+" to "+this);
 			loc.getLocationPeer().setLocation( new Point( location ) );
 			loc.getLocationPeer().setPreferredSize( new Dimension( this.size ) );
 		}
@@ -146,7 +145,6 @@ public class WindowLocationHelper
 		final SizeAndLocation loc = locations.get( window.getClass().getName() );
 		if ( loc != null )
 		{
-			System.out.println("Apply: "+loc+" to "+window);
 			loc.apply( window );
 		}
 	}
@@ -155,7 +153,6 @@ public class WindowLocationHelper
 	{
 		loadLocations();
 		SizeAndLocation valueOf = SizeAndLocation.valueOf(window);
-		System.out.println("UPDATE: "+window.getClass().getName()+" -> "+valueOf);
 		locations.put( window.getClass().getName() , valueOf );
 	}
 
