@@ -15,12 +15,14 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.font.LineMetrics;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1086,7 +1088,7 @@ public class Debugger
 			g.setStroke(oldStroke);
 		}
 
-		public void render(int x,int y,int laneHeight,int cycleWidthInPixels,StateSnapshot previousState,StateSnapshot state,Graphics2D g)
+		public void render(int x,int y,int laneHeight,double cycleWidthInPixels,StateSnapshot previousState,StateSnapshot state,Graphics2D g)
 		{
 			int third = laneHeight / 3;
 			int hiLevelY = y + third;
@@ -1098,39 +1100,210 @@ public class Debugger
 			final int yNow = stateNow ? hiLevelY : loLevelY;
 
 			final Color oldColor = g.getColor();
-			// Stroke oldStroke = g.getStroke();
 
-			// g.setStroke( DASHED_SLIM );
 			g.setColor(Color.RED);
-			g.drawLine(x,yNow,x+cycleWidthInPixels,yNow);
+			g.drawLine(x,yNow,(int) (x+cycleWidthInPixels),yNow);
 
-			if ( previousState != null && stateNow != stateBefore )
+			if ( previousState != null )
 			{
-				final int previousY = stateBefore ? hiLevelY : loLevelY;
-				g.drawLine( x , previousY , x , yNow );
+				if (  stateNow != stateBefore  ) {
+					final int previousY = stateBefore ? hiLevelY : loLevelY;
+					g.drawLine( x , previousY , x , yNow );
+				} 
+				final int yPrevious = stateBefore ? hiLevelY : loLevelY;
+				long cycleDelta = Math.abs( state.cycle - previousState.cycle );
+				g.drawLine( (int) (x - cycleDelta*cycleWidthInPixels) , yPrevious , x , yPrevious );
 			}
 			g.setColor( oldColor );
-			// g.setStroke( oldStroke );
 		}
+	}
+	
+	protected static enum SelectionMode {
+		MIN,MAX,NONE;
 	}
 
 	protected final class BusPanel extends JPanel implements ILocationAware
 	{
-		private final int MAX_CYCLES_TO_KEEP = 30;
-		private final int RESERVED_WIDTH = 100;
+		private final int RIGHT_BORDER = 20; // right border in pixels
+		private final int RESERVED_WIDTH = 100; // reserved width left of chart in pixels
 
 		private final List<Lane> lanes = new ArrayList<>();
 
 		private Component peer;
+		
+		private DisplayRange displayRange = null;
+		
+		private List<StateSnapshot> states = new ArrayList<>();
+		private int firstSelectionX;
+		private int currentSelectionX=RESERVED_WIDTH;
+		private SelectionMode selectionMode = SelectionMode.NONE;
 
+		protected final class DisplayRange 
+		{
+			public long minCycle;
+			public long maxCycle;
+			
+			public DisplayRange(long minCycle, long maxCycle) {
+				if ( minCycle > maxCycle ) {
+					throw new IllegalArgumentException("Invalid range: "+minCycle+" > "+maxCycle);
+				}
+				this.minCycle = minCycle;
+				this.maxCycle = maxCycle;
+			}
+			
+			public void zoomOut() {
+				long range = (long) ((maxCycle-minCycle)*0.2d);
+				if ( (minCycle + range) < getMax() ) {
+					minCycle += range;
+				}
+			}
+			
+			public void zoomIn() {
+				long range = (long) ( (maxCycle-minCycle)*0.2d );
+				if ( (minCycle - range) > getMin() ) {
+					minCycle -= range;
+				} else {
+					minCycle = getMin();
+				}
+			}
+			
+			private long getMin() {
+				return states.stream().mapToLong( s->s.cycle ).min().orElse(0);
+			}
+			
+			private long getMax() {
+				return states.stream().mapToLong( s->s.cycle ).max().orElse(0);
+			}
+			
+			public void rollLeft() 
+			{
+				long range = (long) ((maxCycle - minCycle)*0.15d);
+				if ( ( minCycle - range ) < getMin() ) {
+					range = minCycle-getMin();
+				}
+				minCycle -= range;
+				maxCycle -= range;
+			}
+			
+			public void rollRight() {
+				long range = (long) ( (maxCycle-minCycle)*0.1d );
+				if ( maxCycle + range > getMax() ) {
+					range = getMax() - maxCycle;
+				}
+				minCycle += range;
+				maxCycle += range;
+			}		
+		}
+		
 		public BusPanel()
 		{
+			lanes.add( new Lane("EOI") { @Override protected boolean getState(StateSnapshot state) { return state.eoi; } });			
 			lanes.add( new Lane("ATN") { @Override protected boolean getState(StateSnapshot state) { return state.atn; } });
 			lanes.add( new Lane("CLK_IN") { @Override protected boolean getState(StateSnapshot state) { return state.clkIn; } });
 			lanes.add( new Lane("DATA_IN") { @Override protected boolean getState(StateSnapshot state) { return state.dataIn; } });
 			lanes.add( new Lane("CLOCK_OUT") { @Override protected boolean getState(StateSnapshot state) { return state.clkOut; } });
 			lanes.add( new Lane("DATA_OUT") { @Override protected boolean getState(StateSnapshot state) { return state.dataOut; } });
-			setMinimumSize( new Dimension(RESERVED_WIDTH+MAX_CYCLES_TO_KEEP*5 , 6*30 ) );
+			setMinimumSize( new Dimension(RESERVED_WIDTH+100*3 , 6*30 ) );
+			setFocusable(true);
+			setRequestFocusEnabled( true );
+			addKeyListener( new KeyAdapter() 
+			{
+				@Override
+				public void keyReleased(KeyEvent e) 
+				{
+					if ( e.getKeyCode() == KeyEvent.VK_ESCAPE ) 
+					{
+						displayRange = null;
+					} else if ( displayRange != null && e.getKeyCode() == KeyEvent.VK_PLUS ) {
+						displayRange.zoomOut();
+						repaint();						
+					} else if ( displayRange != null && e.getKeyCode() == KeyEvent.VK_MINUS) {
+						displayRange.zoomIn();
+						repaint();
+					} else if ( displayRange != null && e.getKeyCode() == KeyEvent.VK_LEFT ) {
+						displayRange.rollLeft();
+						repaint();
+					} else if ( displayRange != null && e.getKeyCode() == KeyEvent.VK_RIGHT ) {
+						displayRange.rollRight();
+						repaint();
+					}
+				}
+			});
+			addMouseListener( new MouseAdapter() 
+			{
+				@Override
+				public void mouseClicked(MouseEvent e) 
+				{
+					if ( e.getButton() == MouseEvent.BUTTON3 ) {
+						if ( selectionMode == SelectionMode.NONE ) {
+							return;
+						}
+						selectionMode = SelectionMode.NONE;
+						repaint();
+					}
+					
+					if ( e.getButton() == MouseEvent.BUTTON1 ) 
+					{
+					 if ( selectionMode == SelectionMode.NONE) {
+						selectionMode = SelectionMode.MIN;
+					 } else if ( selectionMode == SelectionMode.MIN ) {
+						 firstSelectionX = currentSelectionX;
+						 selectionMode = SelectionMode.MAX;
+						 currentSelectionX = e.getX();
+						 repaint();
+					 } 
+					 else if ( selectionMode == SelectionMode.MAX ) 
+					 {
+						 selectionMode = SelectionMode.NONE;
+						 int first = firstSelectionX-RESERVED_WIDTH;
+						 int second = currentSelectionX-RESERVED_WIDTH;
+						 int min = Math.min(first,second);
+						 int max = Math.max(first,second);
+						 double percentageOne = min / (double) ( getWidth() - RESERVED_WIDTH - RIGHT_BORDER); // 0...1
+						 double percentageTwo = max / (double) ( getWidth() - RESERVED_WIDTH - RIGHT_BORDER); // 0...1
+						 System.out.println("Selected percentage: "+percentageOne+" - "+percentageTwo);
+						 // set new view port
+						 long minCycle,maxCycle;
+						 if ( displayRange == null ) {
+							 minCycle = states.stream().mapToLong( s -> s.cycle ).min().orElse( 0 );
+							 maxCycle = states.stream().mapToLong( s -> s.cycle ).max().orElse( 0 );
+						 } else {
+							 minCycle = displayRange.minCycle;
+							 maxCycle = displayRange.maxCycle;
+						 }
+						 long currentRange = maxCycle-minCycle;
+						 long newMinCycles = minCycle + (long) (percentageOne*currentRange);
+						 long newMaxCycles = minCycle + (long) (percentageTwo*currentRange);
+						 if ( displayRange == null ) {
+							 displayRange = new DisplayRange(newMinCycles , newMaxCycles );
+						 } else {
+							 displayRange.minCycle = newMinCycles;
+							 displayRange.maxCycle = newMaxCycles;
+						 }
+						 repaint();
+					 }
+					}
+				}
+			});
+			addMouseMotionListener( new MouseMotionListener() {
+				
+				@Override
+				public void mouseMoved(MouseEvent e) 
+				{
+					if ( selectionMode != SelectionMode.NONE ) 
+					{
+						final int mouseX = e.getX();
+						if ( mouseX >= RESERVED_WIDTH && mouseX <= (getWidth()-RIGHT_BORDER ) ) 
+						{
+							currentSelectionX = mouseX;
+						}
+						repaint();
+					}
+				}
+				
+				@Override
+				public void mouseDragged(MouseEvent e) { }
+			});
 		}
 
 		@Override
@@ -1146,15 +1319,63 @@ public class Debugger
 		@Override
 		protected void paintComponent(Graphics graphics)
 		{
+			// clear screen
 			final Graphics2D g = (Graphics2D) graphics;
 			super.paintComponent(g);
-			int w = getWidth();
-			int h = getHeight();
-			int remainingWidth = w - RESERVED_WIDTH;
-			List<StateSnapshot> states = emulator.getBus().getSnapshot( MAX_CYCLES_TO_KEEP );
+			
+			final int w = getWidth();
+			final int h = getHeight();
+			
+			// calculate width of display area 
+			final int remainingWidth = w - RESERVED_WIDTH - RIGHT_BORDER;
+			
+			// get state snapshots from bus
+			states = emulator.getBus().getSnapshot();
 
-			final int cycleWidth = remainingWidth/ ( states.size() < 2 ? 2 : states.size() );
-			int laneHeight = h/6; // 5 lanes , 1 lane for Y-axis comments
+			// calculate the actual number of cycles that will be displayed
+			final long availFirstCycle = states.stream().mapToLong( s -> s.cycle ).min().orElse(0);
+			final long availLastCycle  = states.stream().mapToLong( s -> s.cycle ).max().orElse(0);
+			
+			long firstCycle,lastCycle;
+			if ( displayRange == null ) {
+				firstCycle = availFirstCycle;
+				lastCycle  = availLastCycle;
+			} else {
+				firstCycle = displayRange.minCycle;
+				lastCycle  = displayRange.maxCycle;
+			}
+			final long cycleDelta = Math.max( lastCycle - firstCycle , 1 );
+			
+			// calculate width/length in pixels for an individual cycle 
+			double cycleWidth = remainingWidth/ (double) cycleDelta;
+			
+			// trim down the list of bus state objects to those that fall within the 
+			// firstCycle/lastCycle range
+
+			final List<StateSnapshot> statesInRange = new ArrayList<>( states.size() );			
+			for ( StateSnapshot s : states ) 
+			{
+				if ( s.cycle >= firstCycle && s.cycle <= lastCycle ) {
+					statesInRange.add( s );
+				} else if ( s.cycle > lastCycle ) {
+					statesInRange.add(s); // add one more state change so we get continous lines to the right if there are more state
+					// changes coming
+					break;
+				}
+			}
+			
+			// render title
+			final double timeInSeconds = cycleDelta*1/1000000f;
+			g.setColor(Color.RED);
+			final DecimalFormat DF = new DecimalFormat("##0.0######");
+			final String title = "View: "+DF.format(timeInSeconds)+"s ("+cycleDelta+" cycles ("+statesInRange.size()+" out of "+states.size()+" states) , first: "+firstCycle+" , last: "+lastCycle+")";
+			Rectangle2D stringBounds = g.getFontMetrics().getStringBounds( title , g );
+			g.drawString( title , (int) ( w/2- stringBounds.getWidth()/2) , 10 );			
+
+			// render lanes plus some free space below the last one
+			// so we can output the state names there
+			
+			final int laneHeight = h/(lanes.size()+1); // +1 lane for state labels
 
 			int y = 0;
 			for ( Lane l : lanes ) {
@@ -1162,16 +1383,21 @@ public class Debugger
 				y += laneHeight;
 			}
 
-			final int stateLineY = 6*laneHeight-26;
+			final int stateLineY = (lanes.size()+1) * laneHeight-26;
 
+			// we'll stagger the state names so they don't overlap
+			// too easily
 			int stateLineIdx = 0;
 			final int[] stateLineOffset = new int[] { stateLineY , stateLineY + 13 , stateLineY + 26 };
 
 			StateSnapshot previousState = null;
-			int x = RESERVED_WIDTH;
 
-			for ( StateSnapshot currentState : states )
+			firstCycle = statesInRange.isEmpty() ? 0 : statesInRange.get(0).cycle;
+			for ( StateSnapshot currentState : statesInRange )
 			{
+				long offset = currentState.cycle - firstCycle;
+				final int x = (int) (RESERVED_WIDTH + (offset * cycleWidth));
+				// mark state changes with vertical, dashed line
 				if ( previousState == null || previousState.busState != currentState.busState )
 				{
 					Color oldColor = g.getColor();
@@ -1179,7 +1405,7 @@ public class Debugger
 					g.setColor( Color.GREEN);
 					g.drawString( currentState.busState.toString() , x , stateLineOffset[ stateLineIdx++] );
 					g.setStroke( DASHED_SLIM );
-					g.drawLine( x , y , x , 0 );
+					g.drawLine( x , getHeight() , x , 0 );
 					stateLineIdx = stateLineIdx % stateLineOffset.length;
 					g.setColor(oldColor);
 					g.setStroke( oldStroke );
@@ -1190,9 +1416,27 @@ public class Debugger
 					l.render( x , y , laneHeight , cycleWidth, previousState, currentState , g );
 					y += laneHeight;
 				}
-
 				previousState=currentState;
-				x += cycleWidth;
+			}
+			
+			switch( selectionMode ) 
+			{
+				case MIN:
+					g.setColor(Color.RED);
+					g.drawLine( currentSelectionX , 0 , currentSelectionX , getHeight() );
+					break;
+				case MAX:
+					g.setColor(Color.RED);
+					g.setXORMode( Color.BLACK );
+					int min = Math.min(firstSelectionX,currentSelectionX);
+					int max = Math.max(firstSelectionX,currentSelectionX);
+					g.fillRect( min , 0 , max-min, getHeight() );
+					g.setPaintMode();
+
+					g.drawLine( firstSelectionX , 0 , firstSelectionX , getHeight() );
+					g.drawLine( currentSelectionX , 0 , currentSelectionX , getHeight() );
+					break;
+				default:
 			}
 		}
 	}

@@ -9,7 +9,9 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class IECBus
 {
-	private final int MAX_CYCLES_TO_KEEP = 50;
+	private final int MAX_CYCLES_TO_KEEP = 120;
+	
+	private static final boolean DEBUG_VERBOSE = false;
 
 	protected boolean atn;
 	protected boolean clockOut;
@@ -17,22 +19,59 @@ public class IECBus
 
 	protected boolean clockIn;
 	protected boolean dataIn;
+	
+	protected long cycle;
 
 	private final List<StateSnapshot> states = new ArrayList<>();
+	
+	protected int bitsReceived = 0;
+	protected byte data;
+	
+	// EOI handling
+	protected long lastReadyForDataAtCycle = 0;
+	protected boolean eoi;
+
+	private final BusState ACKNOWLEDGE;
+	private final BusState UNDEFINED;
+	private final BusState RECEIVING2;
+	private final BusState WAIT_FOR_FIRST_BIT;
+	private final BusState RECEIVING1;
+	private final BusState LISTENING;
+
+	private BusState busState;
+	
+	public void reset() {
+		busState = UNDEFINED;
+		eoi = false;
+		bitsReceived = 0;
+		states.clear();
+		cycle = 0;
+		atn = false;
+		clockOut = false;
+		dataOut = false;
+		clockIn = false;
+		dataIn = false;
+	}
 
 	public static final class StateSnapshot
 	{
+		public final boolean eoi;
+		
 		public final boolean atn;
 		public final boolean clkOut;
 		public final boolean dataOut;
 
 		public final boolean clkIn;
 		public final boolean dataIn;
+		
+		public final long cycle;
 
 		public final BusState busState;
 
-		public StateSnapshot(boolean atn, boolean clkOut, boolean dataOut, boolean clkIn, boolean dataIn,BusState busState)
+		public StateSnapshot(boolean atn, boolean clkOut, boolean dataOut, boolean clkIn, boolean dataIn,BusState busState,long cycle,boolean eoi)
 		{
+			this.cycle = cycle;
+			this.eoi = eoi;
 			this.atn = atn;
 			this.clkOut = clkOut;
 			this.dataOut = dataOut;
@@ -45,24 +84,28 @@ public class IECBus
 	private void takeSnapshot()
 	{
 		synchronized(states) {
-			states.add( new StateSnapshot( atn , clockOut , dataOut, clockIn , dataIn , busState ) );
+			states.add( new StateSnapshot( atn , clockOut , dataOut, clockIn , dataIn , busState , cycle , eoi ) );
 			if ( states.size() > MAX_CYCLES_TO_KEEP ) {
 				states.remove(0);
 			}
 		}
 	}
 
-	public List<StateSnapshot> getSnapshot(int size)
+	public List<StateSnapshot> getSnapshot()
 	{
 		synchronized(states) {
-			final List<StateSnapshot>  result = new ArrayList<>(size);
-			int start = states.size()-1 - size;
-			if ( start < 0 ) {
-				start = 0;
-			}
-			for ( int len = states.size() , i = start ; i < len ; i++ )
+			final List<StateSnapshot> result = new ArrayList<>( this.states.size() );
+			if ( ! this.states.isEmpty() ) 
 			{
-				result.add( states.get(i) );
+				long lastCycle = states.get(states.size()-1).cycle;
+				long cyclesToCover = 2*1000000; // 2 seconds = 2 mio. cycles
+				for ( int i = states.size()-1 ; i >= 0 ; i-- ) {
+					if ( lastCycle - states.get(i).cycle > cyclesToCover ) {
+						break;
+					}
+					result.add(0,states.get(i) );
+				}
+				return result;
 			}
 			return result;
 		}
@@ -85,32 +128,25 @@ public class IECBus
 		@Override public String toString() { return name; }
 	}
 
-	protected int bitsReceived = 0;
-	protected byte data;
-
-	private final BusState ACKNOWLEDGE;
-	private final BusState UNDEFINED;
-	private final BusState RECEIVING2;
-	private final BusState RECEIVING1;
-	private final BusState LISTENING;
-
-	private BusState busState;
-
 	public void writeBus(byte b)
 	{
 		// all lines are low-active, 0 = LOGICAL TRUE , 1 = LOGICAL FALSE
 		// but I invert the sense of matching here since
 		// it's easier to follow the program code along...
-		atn = (b & 1<<3) == 0;
-		clockOut = (b & 1 << 4) == 0;
+		atn = (b & 1<<3) != 0;
+		clockOut = (b & 1 << 4) != 0;
 		dataOut = (b & 1<<5) == 0;
-		final String s1 = StringUtils.rightPad( this.busState.toString(),15);
+		
 		BusState newState = busState.afterWrite();
 		if ( newState != busState ) {
 			newState.onEnter();
 		}
-		final String s2 = StringUtils.rightPad( newState.toString(),15);
-		System.out.println( "["+s1+" -> "+s2+" ] : "+this);
+		
+		if ( DEBUG_VERBOSE ) {
+			final String s1 = StringUtils.rightPad( this.busState.toString(),15);		
+			final String s2 = StringUtils.rightPad( newState.toString(),15);
+			System.out.println( "["+s1+" -> "+s2+" ] : "+this);
+		}
 		busState = newState;
 		takeSnapshot();
 	}
@@ -121,8 +157,9 @@ public class IECBus
 		{
 			@Override
 			public BusState afterWrite() {
-				if ( atn && clockOut ) {
+				if ( atn ) {
 					dataIn = true;
+					eoi = false;
 					return LISTENING;
 				}
 				return this;
@@ -142,12 +179,12 @@ public class IECBus
 			}
 		};
 
-		RECEIVING2 = new BusState("RECEIVING_2")
+		RECEIVING2 = new BusState("BIT")
 		{
 			@Override
 			public BusState afterWrite()
 			{
-				if ( clockOut == false )
+				if ( clockOut == true )
 				{
 					return RECEIVING1;
 				}
@@ -163,19 +200,22 @@ public class IECBus
 			@Override
 			public BusState afterWrite()
 			{
-				if ( clockOut == true )
+				if ( clockOut == false )
 				{
 					// data is received with the LSB first
-					data = (byte) (data >> 1);
-					System.out.println("BIT "+bitsReceived+": "+dataOut);
+					data = (byte) (data >>> 1);
+					if ( DEBUG_VERBOSE ) {
+						System.out.println("BIT "+bitsReceived+": "+dataOut);
+					}
 					if ( dataOut ) {
 						data |= 1<<7;
 					} else {
-						data &= ~(1<<7);
+						data &= 0b01111111;
 					}
 
 					bitsReceived++;
-					if ( bitsReceived == 8 ) {
+					if ( bitsReceived == 8 ) 
+					{
 						byteReceived(data);
 						bitsReceived = 0;
 						return ACKNOWLEDGE;
@@ -189,13 +229,30 @@ public class IECBus
 			public void onEnter() { };
 		};
 
+		WAIT_FOR_FIRST_BIT = new BusState("WAIT") {
+
+			@Override
+			public BusState afterWrite() 
+			{
+				if ( clockOut ) 
+				{
+					System.out.println("WAIT_FOR_FIRST_BIT : "+(cycle-lastReadyForDataAtCycle)+" cycles waited");
+					eoi = (cycle - lastReadyForDataAtCycle ) > 200;
+					return RECEIVING1;
+				}
+				return this;
+			}
+			
+		};
 		LISTENING = new BusState("LISTENING")
 		{
 			@Override
 			public BusState afterWrite() {
-				if ( ! clockOut ) {
-					dataIn = false;
-					return RECEIVING1;
+				if ( ! clockOut ) // talker is ready to sent
+				{
+					dataIn = false; // signal "ready for data"
+					lastReadyForDataAtCycle = cycle;
+					return WAIT_FOR_FIRST_BIT;
 				}
 				return this;
 			}
@@ -238,5 +295,6 @@ public class IECBus
 	}
 
 	public void tick() {
+		cycle++;
 	}
 }

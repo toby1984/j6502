@@ -84,10 +84,6 @@ public class IOArea extends Memory
 		};
 	};
 
-	protected void writePortA(byte value) {
-
-	}
-
 	private final IMemoryRegion mainMemory;
 
 	public IOArea(String identifier, AddressRange range, IMemoryRegion mainMemory)
@@ -174,6 +170,7 @@ public class IOArea extends Memory
 		vic.reset();
 		cia1.reset();
 		cia2.reset();
+		iecBus.reset();
 	}
 
 	public void tick(CPU cpu)
