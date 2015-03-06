@@ -266,4 +266,8 @@ public class Emulator
 	public void keyReleased(Key key) {
 		memory.getIOArea().keyReleased( key );
 	}
+
+	public IECBus getBus() {
+		return memory.getIOArea().getIECBus();
+	}
 }

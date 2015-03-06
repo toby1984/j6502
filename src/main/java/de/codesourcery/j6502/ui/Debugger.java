@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.ui;
 
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -9,6 +10,7 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.Stroke;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -54,6 +56,7 @@ import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.EmulatorTest;
+import de.codesourcery.j6502.emulator.IECBus.StateSnapshot;
 import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.emulator.Keyboard;
@@ -114,6 +117,7 @@ public class Debugger
 	private final CPUStatusPanel cpuPanel = new CPUStatusPanel();
 	private final BreakpointsWindow breakpointsWindow = new BreakpointsWindow();
 	private final ScreenPanel screenPanel = new ScreenPanel();
+	private final BusPanel busPanel = new BusPanel();
 
 	public static void main(String[] args)
 	{
@@ -141,12 +145,15 @@ public class Debugger
 
 		final JInternalFrame hexPanelFrame = wrap( "Memory" , hexPanel );
 		desktop.add( hexPanelFrame  );
-		
+
 		final JInternalFrame breakpointsFrame = wrap( "Breakpoints" , breakpointsWindow );
-		desktop.add( breakpointsFrame  );		
+		desktop.add( breakpointsFrame  );
 
 		final JInternalFrame screenPanelFrame = wrap( "Screen" , screenPanel );
 		desktop.add( screenPanelFrame  );
+
+		final JInternalFrame busPanelFrame = wrap( "IEC" , busPanel );
+		desktop.add( busPanelFrame  );
 
 		final JFrame frame = new JFrame("");
 		frame.addWindowListener( new WindowAdapter() {
@@ -267,10 +274,10 @@ public class Debugger
 					region.bulkWrite( origin , binary , 0 , binary.length );
 				}
 			};
-			
-			synchronized(emulator) 
+
+			synchronized(emulator)
 			{
-				emulator.reset();			
+				emulator.reset();
 				emulator.setMemoryProvider( provider );
 				emulator.getCPU().pc( origin );
 			}
@@ -368,6 +375,7 @@ public class Debugger
 		screenPanel.repaint();
 		cpuPanel.repaint();
 		hexPanel.repaint();
+		busPanel.repaint();
 	}
 
 	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.ILocationAware {
@@ -390,21 +398,21 @@ public class Debugger
 						emulator.keyPressed( pressed );
 					}
 				}
-				
-				private Set<Keyboard.Modifier> getModifiers(KeyEvent e) 
+
+				private Set<Keyboard.Modifier> getModifiers(KeyEvent e)
 				{
 					int mask = e.getModifiersEx();
 					boolean shiftPressed = false;
 					boolean controlPressed = false;
 					if ( ( (mask & KeyEvent.SHIFT_DOWN_MASK) != 0 ) ||
-						 ( ( mask & KeyEvent.SHIFT_MASK ) != 0 ) 
+						 ( ( mask & KeyEvent.SHIFT_MASK ) != 0 )
 					)
 					{
 						shiftPressed = true;
 					}
-					
+
 					if ( ( (mask & KeyEvent.CTRL_DOWN_MASK) != 0 ) ||
-							 ( ( mask & KeyEvent.CTRL_MASK ) != 0 ) 
+							 ( ( mask & KeyEvent.CTRL_MASK ) != 0 )
 						)
 						{
 							controlPressed = true;
@@ -422,12 +430,12 @@ public class Debugger
 					return result;
 				}
 
-				private KeyLocation getLocation(KeyEvent e) 
+				private KeyLocation getLocation(KeyEvent e)
 				{
 					final int keyLocation = e.getKeyLocation();
 					if (keyLocation == KeyEvent.KEY_LOCATION_LEFT) {
 						return KeyLocation.LEFT;
-					} 
+					}
 					if (keyLocation == KeyEvent.KEY_LOCATION_RIGHT) {
 						return KeyLocation.RIGHT;
 					}
@@ -827,7 +835,7 @@ public class Debugger
 
 		@Override
 		public void breakpointAdded(Breakpoint bp) {
-			SwingUtilities.invokeLater( () -> repaint() );			
+			SwingUtilities.invokeLater( () -> repaint() );
 		}
 
 		@Override
@@ -837,7 +845,7 @@ public class Debugger
 
 		@Override
 		public void breakpointReplaced(Breakpoint old, Breakpoint newBp) {
-			SwingUtilities.invokeLater( () -> repaint() );			
+			SwingUtilities.invokeLater( () -> repaint() );
 		}
 	}
 
@@ -855,25 +863,26 @@ public class Debugger
 
 		private Component peer;
 
-		public BreakpointsWindow() 
+		public BreakpointsWindow()
 		{
 			final JTable breakpointTable = new JTable( bpModel );
 			setup( breakpointTable );
 			final JScrollPane scrollPane = new JScrollPane( breakpointTable );
 			setup( scrollPane );
-			
+
 			breakpointTable.setMinimumSize( new Dimension(50,50 ) );
 			setLayout( new BorderLayout() );
 			add( scrollPane , BorderLayout.CENTER );
-			
-			breakpointTable.addKeyListener( new KeyAdapter() 
+
+			breakpointTable.addKeyListener( new KeyAdapter()
 			{
-				public void keyReleased(KeyEvent event) 
+				@Override
+				public void keyReleased(KeyEvent event)
 				{
-					if ( event.getKeyCode() == KeyEvent.VK_DELETE ) 
+					if ( event.getKeyCode() == KeyEvent.VK_DELETE )
 					{
 						final int[] selectedRows = breakpointTable.getSelectedRows();
-						if ( selectedRows != null ) 
+						if ( selectedRows != null )
 						{
 							List<Breakpoint> toRemove = new ArrayList<>();
 							for ( int idx : selectedRows ) {
@@ -884,13 +893,14 @@ public class Debugger
 					}
 				}
 			});
-			breakpointTable.addMouseListener( new MouseAdapter() 
+			breakpointTable.addMouseListener( new MouseAdapter()
 			{
-				public void mouseClicked(MouseEvent e) 
+				@Override
+				public void mouseClicked(MouseEvent e)
 				{
 					if ( e.getClickCount() == 2 && e.getButton() == MouseEvent.BUTTON1 ) {
 						int row = breakpointTable.rowAtPoint( e.getPoint() );
-						if ( row != -1 ) 
+						if ( row != -1 )
 						{
 							final Breakpoint breakpoint = bpModel.getRow( row );
 							disassembly.setAddress( (short) breakpoint.address , null );
@@ -898,7 +908,7 @@ public class Debugger
 					}
 				}
 			});
-			
+
 		}
 
 		@Override
@@ -915,11 +925,11 @@ public class Debugger
 	protected final class BreakpointModel extends AbstractTableModel implements IBreakpointLister
 	{
 		private volatile boolean breakpointsChanged = true;
-		private List<Breakpoint> cachedBreakpoints; 
-		
-		private List<Breakpoint> getBreakpoints() 
+		private List<Breakpoint> cachedBreakpoints;
+
+		private List<Breakpoint> getBreakpoints()
 		{
-			if ( breakpointsChanged || cachedBreakpoints == null ) 
+			if ( breakpointsChanged || cachedBreakpoints == null )
 			{
 				synchronized( emulator ) {
 					cachedBreakpoints = driver.getBreakpoints();
@@ -929,11 +939,11 @@ public class Debugger
 			}
 			return new ArrayList<>( cachedBreakpoints );
 		}
-		
+
 		public Breakpoint getRow(int idx) {
 			return getBreakpoints().get(idx);
 		}
-		
+
 		@Override
 		public String getColumnName(int column) {
 			switch(column) {
@@ -953,22 +963,22 @@ public class Debugger
 		public int getColumnCount() {
 			return 2;
 		}
-		
+
 		@Override
-		public boolean isCellEditable(int rowIndex, int columnIndex) 
+		public boolean isCellEditable(int rowIndex, int columnIndex)
 		{
 			return columnIndex == 1;
 		}
-		
+
 		@Override
-		public void setValueAt(Object aValue, int rowIndex, int columnIndex) 
+		public void setValueAt(Object aValue, int rowIndex, int columnIndex)
 		{
 			if ( !(aValue instanceof String) ) {
 				throw new IllegalArgumentException("No valid processor flags: "+aValue);
 			}
 			final String flagString = ((String) aValue).trim();
 			final Set<CPU.Flag> flags = new HashSet<>();
-			for ( char c : flagString.toCharArray() ) 
+			for ( char c : flagString.toCharArray() )
 			{
 				Optional<Flag> flagToSet = Arrays.stream( CPU.Flag.values() ).filter( flag -> flag.symbol == c ).findFirst();
 				if ( ! flagToSet.isPresent() ) {
@@ -980,9 +990,9 @@ public class Debugger
 			final Breakpoint newBP = new Breakpoint( currentBP.address , false , CPU.Flag.toBitMask( flags ) );
 			driver.addBreakpoint( newBP );
 		}
-		
+
 		@Override
-		public Object getValueAt(int rowIndex, int columnIndex) 
+		public Object getValueAt(int rowIndex, int columnIndex)
 		{
 			Breakpoint bp = getBreakpoints().get(rowIndex);
 			switch( columnIndex ) {
@@ -1001,19 +1011,189 @@ public class Debugger
 		@Override
 		public void breakpointAdded(Breakpoint bp) {
 			breakpointsChanged = true;
-			fireTableDataChanged();			
+			fireTableDataChanged();
 		}
 
 		@Override
 		public void breakpointRemoved(Breakpoint bp) {
 			breakpointsChanged = true;
-			fireTableDataChanged();			
+			fireTableDataChanged();
 		}
 
 		@Override
 		public void breakpointReplaced(Breakpoint old, Breakpoint newBp) {
 			breakpointsChanged = true;
-			fireTableDataChanged();			
+			fireTableDataChanged();
 		}
-	};	
+	};
+
+	protected static final Stroke DASHED_FAT = new BasicStroke(3, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{9}, 0);
+	protected static final Stroke DASHED_SLIM = new BasicStroke(1, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{9}, 0);
+
+	protected static abstract class Lane
+	{
+		private final String title;
+
+		public Lane(String title) {
+			this.title = title;
+		}
+
+		protected abstract boolean getState(StateSnapshot state);
+
+		public void renderTitle(int x,int y,int laneHeight,Graphics2D g,int maxX)
+		{
+			LineMetrics metrics = g.getFontMetrics().getLineMetrics( title , g );
+			Rectangle2D bounds = g.getFontMetrics().getStringBounds( title , g );
+
+			/*
+			 * +---------------------------
+			 *
+			 *        1  --------------
+			 * TITLE
+			 *        0  --------------
+			 *
+			 * +---------------------------
+			 */
+			int third = laneHeight / 3;
+
+			int cy = y + laneHeight/2;
+			int fontCenterY = (int) (cy - bounds.getHeight()/2 + metrics.getAscent());
+			g.drawString( title , x , fontCenterY );
+
+			int hiLevelY = y + third;
+			int loLevelY = y + 2*third;
+
+			final int offset =  10 + (int) (x+bounds.getWidth());
+
+			metrics = g.getFontMetrics().getLineMetrics( "1" , g );
+			bounds = g.getFontMetrics().getStringBounds( "1" , g );
+			fontCenterY = (int) (hiLevelY - bounds.getHeight()/2 + metrics.getAscent());
+			g.drawString( "1" , offset , (int) (hiLevelY+metrics.getDescent()) );
+
+			metrics = g.getFontMetrics().getLineMetrics( "0" , g );
+			bounds = g.getFontMetrics().getStringBounds( "0" , g );
+			fontCenterY = (int) (loLevelY - bounds.getHeight()/2 + metrics.getAscent());
+			g.drawString( "0" , offset , fontCenterY );
+
+			final Stroke oldStroke = g.getStroke();
+			g.setStroke( DASHED_SLIM );
+			Color oldColor = g.getColor();
+			g.setColor(Color.BLUE);
+			g.drawLine( offset+15,hiLevelY , maxX , hiLevelY );
+			g.drawLine( offset+15,loLevelY , maxX , loLevelY );
+
+			g.setColor(oldColor);
+			g.setStroke(oldStroke);
+		}
+
+		public void render(int x,int y,int laneHeight,int cycleWidthInPixels,StateSnapshot previousState,StateSnapshot state,Graphics2D g)
+		{
+			int third = laneHeight / 3;
+			int hiLevelY = y + third;
+			int loLevelY = y + 2*third;
+
+			final boolean stateNow = getState( state );
+			final boolean stateBefore = previousState == null ? false : getState(previousState);
+
+			final int yNow = stateNow ? hiLevelY : loLevelY;
+
+			final Color oldColor = g.getColor();
+			// Stroke oldStroke = g.getStroke();
+
+			// g.setStroke( DASHED_SLIM );
+			g.setColor(Color.RED);
+			g.drawLine(x,yNow,x+cycleWidthInPixels,yNow);
+
+			if ( previousState != null && stateNow != stateBefore )
+			{
+				final int previousY = stateBefore ? hiLevelY : loLevelY;
+				g.drawLine( x , previousY , x , yNow );
+			}
+			g.setColor( oldColor );
+			// g.setStroke( oldStroke );
+		}
+	}
+
+	protected final class BusPanel extends JPanel implements ILocationAware
+	{
+		private final int MAX_CYCLES_TO_KEEP = 30;
+		private final int RESERVED_WIDTH = 100;
+
+		private final List<Lane> lanes = new ArrayList<>();
+
+		private Component peer;
+
+		public BusPanel()
+		{
+			lanes.add( new Lane("ATN") { @Override protected boolean getState(StateSnapshot state) { return state.atn; } });
+			lanes.add( new Lane("CLK_IN") { @Override protected boolean getState(StateSnapshot state) { return state.clkIn; } });
+			lanes.add( new Lane("DATA_IN") { @Override protected boolean getState(StateSnapshot state) { return state.dataIn; } });
+			lanes.add( new Lane("CLOCK_OUT") { @Override protected boolean getState(StateSnapshot state) { return state.clkOut; } });
+			lanes.add( new Lane("DATA_OUT") { @Override protected boolean getState(StateSnapshot state) { return state.dataOut; } });
+			setMinimumSize( new Dimension(RESERVED_WIDTH+MAX_CYCLES_TO_KEEP*5 , 6*30 ) );
+		}
+
+		@Override
+		public void setLocationPeer(Component frame) {
+			this.peer = frame;
+		}
+
+		@Override
+		public Component getLocationPeer() {
+			return peer;
+		}
+
+		@Override
+		protected void paintComponent(Graphics graphics)
+		{
+			final Graphics2D g = (Graphics2D) graphics;
+			super.paintComponent(g);
+			int w = getWidth();
+			int h = getHeight();
+			int remainingWidth = w - RESERVED_WIDTH;
+			List<StateSnapshot> states = emulator.getBus().getSnapshot( MAX_CYCLES_TO_KEEP );
+
+			final int cycleWidth = remainingWidth/ ( states.size() < 2 ? 2 : states.size() );
+			int laneHeight = h/6; // 5 lanes , 1 lane for Y-axis comments
+
+			int y = 0;
+			for ( Lane l : lanes ) {
+				l.renderTitle( 3 , y , laneHeight , g, w );
+				y += laneHeight;
+			}
+
+			final int stateLineY = 6*laneHeight-26;
+
+			int stateLineIdx = 0;
+			final int[] stateLineOffset = new int[] { stateLineY , stateLineY + 13 , stateLineY + 26 };
+
+			StateSnapshot previousState = null;
+			int x = RESERVED_WIDTH;
+
+			for ( StateSnapshot currentState : states )
+			{
+				if ( previousState == null || previousState.busState != currentState.busState )
+				{
+					Color oldColor = g.getColor();
+					Stroke oldStroke = g.getStroke();
+					g.setColor( Color.GREEN);
+					g.drawString( currentState.busState.toString() , x , stateLineOffset[ stateLineIdx++] );
+					g.setStroke( DASHED_SLIM );
+					g.drawLine( x , y , x , 0 );
+					stateLineIdx = stateLineIdx % stateLineOffset.length;
+					g.setColor(oldColor);
+					g.setStroke( oldStroke );
+				}
+				y = 0;
+				for ( Lane l : lanes )
+				{
+					l.render( x , y , laneHeight , cycleWidth, previousState, currentState , g );
+					y += laneHeight;
+				}
+
+				previousState=currentState;
+				x += cycleWidth;
+			}
+		}
+	}
 }
