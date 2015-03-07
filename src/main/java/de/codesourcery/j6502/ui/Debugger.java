@@ -1383,12 +1383,18 @@ public class Debugger
 				y += laneHeight;
 			}
 
-			final int stateLineY = (lanes.size()+1) * laneHeight-26;
+			final int stateLineY = (lanes.size() * laneHeight);
 
 			// we'll stagger the state names so they don't overlap
 			// too easily
 			int stateLineIdx = 0;
-			final int[] stateLineOffset = new int[] { stateLineY , stateLineY + 13 , stateLineY + 26 };
+			final int[] stateLineOffset = new int[] { 
+					stateLineY , 
+					stateLineY + 13 , 
+					stateLineY + 26 ,
+					stateLineY + 39 ,
+					stateLineY + 52 					
+			};
 
 			StateSnapshot previousState = null;
 

@@ -9,7 +9,7 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class IECBus
 {
-	private final int MAX_CYCLES_TO_KEEP = 120;
+	private final int MAX_CYCLES_TO_KEEP = 200;
 	
 	private static final boolean DEBUG_VERBOSE = true;
 
@@ -162,12 +162,75 @@ public class IECBus
 		}
 	}
 	
+	protected abstract class WaitForRisingEdge extends BusState {
+
+		private boolean startWatching = false;
+		
+		public WaitForRisingEdge(String name) {
+			super(name);
+		}
+		
+		@Override
+		protected final void tickHook() 
+		{
+			if ( clockOut == false ) {
+				startWatching = true;
+			} else if ( startWatching && clockOut == true ) {
+				onRisingEdge();
+			}
+		}
+		
+		protected abstract void onRisingEdge();			
+	
+		@Override
+		public final void onEnter() {
+			startWatching = false;
+			onEnterHook();
+		}
+		
+		public void onEnterHook() {
+		}
+	}
+	
+	protected abstract class WaitForFallingEdge extends BusState {
+
+		private boolean startWatching = false;
+		
+		public WaitForFallingEdge(String name) {
+			super(name);
+		}
+		
+		@Override
+		protected void tickHook() {
+			if ( clockOut == true ) {
+				startWatching = true;
+				tickHook2();
+			} else if ( startWatching && clockOut == false ) {
+				onFallingEdge();
+			} else {
+				tickHook2();
+			}
+		}
+		
+		protected void tickHook2() {
+		}
+		
+		protected abstract void onFallingEdge();			
+	
+		@Override
+		public final void onEnter() {
+			startWatching = false;
+			onEnterHook();
+		}
+		
+		protected void onEnterHook() {
+		}
+	}	
+	
 	protected final BusState ACK_BYTE;	
-	protected final BusState RECEIVE_BIT1;
-	protected final BusState RECEIVE_BIT0;
-	protected final BusState PREPARE_FOR_BYTE;
-	protected final BusState LISTENING2;	
-	protected final BusState LISTENING1;
+	protected final BusState READ_BIT;
+	protected final BusState WAIT_FOR_VALID_DATA;
+	protected final BusState LISTENING;	
 	protected final BusState ACK_ATN;
 	protected final BusState READY_FOR_DATA;
 	protected final BusState WAIT_FOR_ATN;
@@ -179,39 +242,32 @@ public class IECBus
 	
 	public IECBus()
 	{
-		ACK_BYTE = new BusState("ACK_BYTE")
+		ACK_BYTE = new BusState("ACK")
 		{
 			@Override
 			protected void tickHook() {
 				if ( cyclesWaited >= 60 ) 
 				{
-					dataIn = true; 
-					setBusState( LISTENING2 );
+					dataIn = false; 
+					setBusState( LISTENING );
 				}	
 			}
 			
 			@Override
 			public void onEnter() {
-				dataIn = false;
+				dataIn = true;
 				startWaiting();
 			}
 		};
 		
-		RECEIVE_BIT1 = new BusState("RECEIVE_BIT1")
+		READ_BIT = new WaitForRisingEdge("BIT")
 		{
 			@Override
-			protected void tickHook() {
-				if ( ! clockOut ) { // wait for falling clock
-					setBusState( RECEIVE_BIT0 );
-				}
-			}
-			
-			@Override
-			public void onEnter() 
+			protected void onRisingEdge() 
 			{
 				data = (byte) (data >>> 1);
 				if ( DEBUG_VERBOSE ) {
-					System.out.println("GOT BIT: "+(dataOut ? "1" : "0" ) );
+					System.out.println("GOT BIT no "+bitsReceived+": "+(dataOut ? "1" : "0" ) );
 				}
 				if ( dataOut ) {
 					data |= 1<<7; // bit was 1
@@ -222,44 +278,29 @@ public class IECBus
 				if ( bitsReceived == 8 ) {
 					byteReceived( data );
 					setBusState( ACK_BYTE );
+				} else {
+					setBusState( WAIT_FOR_VALID_DATA );
 				}
 			}
 		};
 		
-		RECEIVE_BIT0 = new BusState("RECEIVE_BIT0")
+		WAIT_FOR_VALID_DATA = new WaitForFallingEdge("WAIT_VALID")
 		{
 			@Override
-			public void tickHook() 
-			{
-				if ( clockOut ) { // wait for rising clock
-					setBusState( RECEIVE_BIT1 );
-				}
+			protected void onFallingEdge() {
+				setBusState( READ_BIT );
 			}		
-		};
-		
-		PREPARE_FOR_BYTE = new BusState("PREPARE_FOR_BYTE")
-		{
-			@Override
-			public void tickHook() 
-			{
-				if ( ! clockOut ) {
-					setBusState( RECEIVE_BIT0 );
-				}
-			}
-			
-			public void onEnter() {
-				bitsReceived = 0;				
-				dataIn = false;
-			}
 		};
 		
 		ACK_EOI = new BusState("ACK_EOI")
 		{
 			@Override
 			protected void tickHook() {
-				if ( cyclesWaited > 500 ) {
-					setBusState( PREPARE_FOR_BYTE );
-				}				
+				if ( cyclesWaited > 60 ) {
+					bitsReceived = 0;
+					dataIn = false;
+					setBusState( READ_BIT );
+				} 
 			}
 			
 			@Override
@@ -270,32 +311,32 @@ public class IECBus
 			}
 		};
 		
-		WAIT_FOR_TRANSMISSION = new BusState("WAIT_FOR_TRANSMISSION")
+		WAIT_FOR_TRANSMISSION = new WaitForFallingEdge("WAIT_FOR_TRANSMISSION")
 		{
 			@Override
-			public void tickHook() 
+			protected void onFallingEdge() 
 			{
-				if ( clockOut ) // wait for clkin == low
+				if ( DEBUG_VERBOSE ) {
+					System.out.println(cycle+": Talker starting to send after "+cyclesWaited+" cycles.");
+				}									
+				bitsReceived = 0;
+				setBusState( READ_BIT );
+			}
+			
+			@Override
+			protected void tickHook2() {
+				if ( cyclesWaited > 200 ) 
 				{
 					if ( DEBUG_VERBOSE ) {
-						System.out.println(cycle+": Talker starting to send after "+cyclesWaited+" cycles.");
-					}				
-					if ( cyclesWaited < 200 ) 
-					{
-						if ( DEBUG_VERBOSE ) {
-							System.out.println(cycle+": Waited "+cyclesWaited+" cycles => EOI");
-						}					
-						eoi = true;
-						setBusState( ACK_EOI );
-					} else {					
-						setBusState( PREPARE_FOR_BYTE );
-					}
+						System.out.println(cycle+": Waited "+cyclesWaited+" cycles => EOI");
+					}					
+					eoi = true;
+					setBusState( ACK_EOI );
 				}
 			}
 			
 			@Override
-			public void onEnter() {
-				dataIn = true; // signal "ready for data"
+			public void onEnterHook() {
 				eoi = false;
 				if ( DEBUG_VERBOSE ) {
 					System.out.println(cycle+": Starting to wait at");
@@ -304,7 +345,7 @@ public class IECBus
 			}
 		};	
 		
-		READY_FOR_DATA = new BusState("READY_FOR_DATA")
+		READY_FOR_DATA = new BusState("READY")
 		{
 			@Override
 			public void tickHook() {
@@ -313,48 +354,41 @@ public class IECBus
 			
 			@Override
 			public void onEnter() {
-				dataIn = false; 
+				dataIn = false; // tell talker we're ready for ata by releasing the data line then wait for rising clock
 			}
 		};		
 		
-		LISTENING2 = new BusState("LISTENING_2")
+		LISTENING = new WaitForRisingEdge("LISTENING")// wait for clock going false -> true
 		{
 			@Override
-			public void tickHook() 
-			{
-				if ( ! clockOut ) // wait for clockOut == false
-				{
-					setBusState( READY_FOR_DATA );
-				}
+			protected void onRisingEdge() {
+				setBusState( READY_FOR_DATA );				
+			}
+			@Override
+			public void onEnterHook() {
+				dataIn = true;
 			}
 		};		
 		
 		ACK_ATN = new BusState("ACK_ATN") {
 
 			@Override
-			protected void tickHook() {
-				setBusState(LISTENING2);
+			protected void tickHook() 
+			{
+				if ( cyclesWaited > 20 ) { // hold DataIn == true for 20us
+					dataIn = false;
+					setBusState(LISTENING);
+				}
 			}
 			
 			@Override
 			public void onEnter() {
 				dataIn = true;
+				startWaiting();
 			}
 		};		
 
-		LISTENING1 = new BusState("LISTENING_1")
-		{
-			@Override
-			public void tickHook() 
-			{
-				if ( ! clockOut ) // wait for clock out true -> false
-				{
-					setBusState( LISTENING2 );
-				}
-			}
-		};
-		
-		WAIT_FOR_ATN = new BusState("WAIT_FOR_ATN")
+		WAIT_FOR_ATN = new BusState("WAIT_ATN")
 		{
 			@Override
 			public void tickHook() 
