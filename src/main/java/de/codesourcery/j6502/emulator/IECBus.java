@@ -1,11 +1,14 @@
 package de.codesourcery.j6502.emulator;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.utils.HexDump;
+import de.codesourcery.j6502.utils.RingBuffer;
 
 public class IECBus
 {
@@ -22,8 +25,13 @@ public class IECBus
 	
 	protected boolean eoi;
 	protected long cycle;
+	
+	private final Map<Integer,SerialDevice> devices = new HashMap<>();
 
 	private final List<StateSnapshot> states = new ArrayList<>();
+	
+	protected final RingBuffer inputBuffer  = new RingBuffer();
+	protected final RingBuffer outputBuffer  = new RingBuffer();
 	
 	protected int bitsReceived = 0;
 	protected byte data;
@@ -31,9 +39,37 @@ public class IECBus
 	private BusState previousBusState;	
 	private BusState busState;
 	
+	public static enum CommandType {
+		LISTEN,TALK,UNLISTEN,UNTALK,OPEN_CHANNEL,OPEN,CLOSE;
+	}
+	
+	public static class Command 
+	{
+		public final CommandType type;
+		public final byte[] payload;
+		
+		public Command(CommandType type,byte[] payload) {
+			this.type = type;
+			this.payload = payload;
+		}
+		
+		public boolean hasType(CommandType t) {
+			return t.equals( this.type );
+		}
+	}
+	
 	public void reset() 
 	{
 		this.previousBusState = this.busState = WAIT_FOR_ATN;
+		
+		devices.clear();
+		
+		final Floppy f = new Floppy(8);
+		devices.put( f.getPrimaryAddress() , f );
+		
+		inputBuffer.reset();
+		outputBuffer.reset();
+		
 		bitsReceived = 0;
 		states.clear();
 		cycle = 0;
@@ -132,8 +168,6 @@ public class IECBus
 	public void writeBus(byte b)
 	{
 		// all lines are low-active, 0 = LOGICAL TRUE , 1 = LOGICAL FALSE
-		// but I invert the sense of matching here since
-		// it's easier to follow the program code along...
 		atn = (b & 1<<3) != 0;
 		clockOut = (b & 1 << 4) == 0;
 		dataOut = (b & 1<<5) == 0;
@@ -162,6 +196,7 @@ public class IECBus
 		}
 	}
 	
+	// waits for rising clock edge
 	protected abstract class WaitForRisingEdge extends BusState {
 
 		private boolean startWatching = false;
@@ -192,6 +227,7 @@ public class IECBus
 		}
 	}
 	
+	// waits for falling clock edge
 	protected abstract class WaitForFallingEdge extends BusState {
 
 		private boolean startWatching = false;
@@ -227,6 +263,7 @@ public class IECBus
 		}
 	}	
 	
+	// states used when reading the bus
 	protected final BusState ACK_BYTE;	
 	protected final BusState READ_BIT;
 	protected final BusState WAIT_FOR_VALID_DATA;
@@ -237,6 +274,7 @@ public class IECBus
 	protected final BusState WAIT_FOR_TRANSMISSION;	
 	protected final BusState ACK_EOI;	
 
+	// helper vars used when timing bus cycles
 	protected long waitingStartedAtCycle;
 	protected long cyclesWaited;
 	
@@ -246,7 +284,7 @@ public class IECBus
 		{
 			@Override
 			protected void tickHook() {
-				if ( cyclesWaited >= 60 ) 
+				if ( cyclesWaited >= 60 ) // hold line for 60us
 				{
 					dataIn = false; 
 					setBusState( LISTENING );
@@ -260,6 +298,7 @@ public class IECBus
 			}
 		};
 		
+		// reads on bit on the rising (0->1) edge of the clock signal
 		READ_BIT = new WaitForRisingEdge("BIT")
 		{
 			@Override
@@ -284,6 +323,7 @@ public class IECBus
 			}
 		};
 		
+		// wait for falling edge of the clock signal
 		WAIT_FOR_VALID_DATA = new WaitForFallingEdge("WAIT_VALID")
 		{
 			@Override
@@ -292,11 +332,12 @@ public class IECBus
 			}		
 		};
 		
+		// acknowdlege EOI
 		ACK_EOI = new BusState("ACK_EOI")
 		{
 			@Override
 			protected void tickHook() {
-				if ( cyclesWaited > 60 ) {
+				if ( cyclesWaited > 60 ) { // pull dataIn to low for 32 cycles
 					bitsReceived = 0;
 					dataIn = false;
 					setBusState( READ_BIT );
@@ -305,12 +346,14 @@ public class IECBus
 			
 			@Override
 			public void onEnter() {
-				// pull dataIn to low for 32 cycles
 				dataIn = true;
 				startWaiting();
 			}
 		};
 		
+		// wait for talker to start sending, if this takes longer than
+		// 200us this is the last byte and we need to acknowledge this
+		// to the talker
 		WAIT_FOR_TRANSMISSION = new WaitForFallingEdge("WAIT_FOR_TRANSMISSION")
 		{
 			@Override
@@ -375,7 +418,7 @@ public class IECBus
 			@Override
 			protected void tickHook() 
 			{
-				if ( cyclesWaited > 20 ) { // hold DataIn == true for 20us
+				if ( cyclesWaited > 20 ) { // acknowledge by holding DataIn == true for 20us
 					dataIn = false;
 					setBusState(LISTENING);
 				}
@@ -398,7 +441,6 @@ public class IECBus
 				} 
 			}
 		};		
-		
 		this.previousBusState = this.busState = WAIT_FOR_ATN;
 	}
 
@@ -407,8 +449,10 @@ public class IECBus
 		return "ATN: "+( atn ? "1" : "0" )+" , CLK_OUT: "+( clockOut ? "1":"0") +" , DATA_OUT: "+(dataOut ? "1" : "0") +"  ||   CLK_IN: "+(clockIn?"1":"0")+", DATA_IN: "+(dataIn?"1":"0");
 	}
 
-	private void byteReceived(byte data) {
-		System.out.println("BYTE RECEIVED: "+HexDump.toBinaryString( data )+" ( $"+HexDump.toHex( data ) +" )" );
+	private void byteReceived(byte data) 
+	{
+		System.out.println("BYTE RECEIVED: "+HexDump.toBinaryString( data )+" ( $"+HexDump.toHex( data ) +" )" );		
+		inputBuffer.write( data );
 	}
 
 	public byte readBus()
