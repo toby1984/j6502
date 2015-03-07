@@ -1,5 +1,8 @@
 package de.codesourcery.j6502.emulator;
 
+import org.apache.commons.lang.StringUtils;
+
+import de.codesourcery.j6502.emulator.IECBus.Wire;
 import de.codesourcery.j6502.emulator.Keyboard.Key;
 
 /**
@@ -48,10 +51,14 @@ public class IOArea extends Memory
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
 			if (offset == 00 )
 			{
-				iecBus.writeBusRegister( value );
+				// all lines are low-active, 0 = LOGICAL TRUE , 1 = LOGICAL FALSE
+				boolean atn = (value & 1<<3) != 0;
+				boolean clockOut = (value & 1 << 4) == 0;
+				boolean dataOut = (value & 1<<5) == 0;
+				iecBus.getWire().setOutState( atn , dataOut , clockOut );
 			}
 		}
-
+		
 		@Override
 		public int readByte(int adr)
 		{
@@ -78,7 +85,12 @@ public class IOArea extends Memory
 				    Bit 6: CLOCK IN
 				    Bit 7: DATA IN
 				 */
-				value = (value & 0b00111111 ) | iecBus.readBusRegister(); // merge CLOCK IN/DATA IN bits
+				Wire wire = iecBus.getWire();
+				final boolean clockIn = wire.getClockIn(); // iecBus.clockIn;
+				final boolean dataIn = wire.getDataIn(); // iecBus.dataIn;
+				
+				final int busRegister = ( (clockIn ? 0 : 1<<6 ) | ( dataIn ? 0 : 1<<7 ) ) & 0xff;
+				value = (value & 0b00111111 ) | busRegister; // merge CLOCK IN/DATA IN bits
 			}
 			return value;
 		};

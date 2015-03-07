@@ -1330,7 +1330,7 @@ public class Debugger
 			final int remainingWidth = w - RESERVED_WIDTH - RIGHT_BORDER;
 			
 			// get state snapshots from bus
-			states = emulator.getBus().getSnapshot();
+			states = emulator.getBus().getSnapshots();
 
 			// calculate the actual number of cycles that will be displayed
 			final long availFirstCycle = states.stream().mapToLong( s -> s.cycle ).min().orElse(0);
