@@ -11,7 +11,7 @@ public class IECBus
 {
 	private final int MAX_CYCLES_TO_KEEP = 120;
 	
-	private static final boolean DEBUG_VERBOSE = false;
+	private static final boolean DEBUG_VERBOSE = true;
 
 	protected boolean atn;
 	protected boolean clockOut;
@@ -20,6 +20,7 @@ public class IECBus
 	protected boolean clockIn;
 	protected boolean dataIn;
 	
+	protected boolean eoi;
 	protected long cycle;
 
 	private final List<StateSnapshot> states = new ArrayList<>();
@@ -27,22 +28,12 @@ public class IECBus
 	protected int bitsReceived = 0;
 	protected byte data;
 	
-	// EOI handling
-	protected long lastReadyForDataAtCycle = 0;
-	protected boolean eoi;
-
-	private final BusState ACKNOWLEDGE;
-	private final BusState UNDEFINED;
-	private final BusState RECEIVING2;
-	private final BusState WAIT_FOR_FIRST_BIT;
-	private final BusState RECEIVING1;
-	private final BusState LISTENING;
-
+	private BusState previousBusState;	
 	private BusState busState;
 	
-	public void reset() {
-		busState = UNDEFINED;
-		eoi = false;
+	public void reset() 
+	{
+		this.previousBusState = this.busState = WAIT_FOR_ATN;
 		bitsReceived = 0;
 		states.clear();
 		cycle = 0;
@@ -117,11 +108,21 @@ public class IECBus
 
 		public BusState(String name) { this.name=name; }
 
-		public abstract BusState afterWrite();
-
-		public void tick() {
+		public final void tick() 
+		{
+			long delta = Math.abs( cycle - waitingStartedAtCycle );
+			waitingStartedAtCycle = cycle;
+			cyclesWaited += delta;
+			tickHook();
 		}
-
+		
+		protected abstract void tickHook();
+		
+		protected final void startWaiting() {
+			cyclesWaited = 0;
+			waitingStartedAtCycle = cycle;			
+		}
+		
 		public void onEnter() {
 		}
 
@@ -134,130 +135,237 @@ public class IECBus
 		// but I invert the sense of matching here since
 		// it's easier to follow the program code along...
 		atn = (b & 1<<3) != 0;
-		clockOut = (b & 1 << 4) != 0;
+		clockOut = (b & 1 << 4) == 0;
 		dataOut = (b & 1<<5) == 0;
 		
-		BusState newState = busState.afterWrite();
-		if ( newState != busState ) {
-			newState.onEnter();
-		}
-		
 		if ( DEBUG_VERBOSE ) {
-			final String s1 = StringUtils.rightPad( this.busState.toString(),15);		
-			final String s2 = StringUtils.rightPad( newState.toString(),15);
-			System.out.println( "["+s1+" -> "+s2+" ] : "+this);
+			final String s1 = StringUtils.rightPad( this.previousBusState.toString(),15);		
+			final String s2 = StringUtils.rightPad( this.busState.toString(),15);
+			System.out.println( cycle+": ["+s1+" -> "+s2+" ] : "+this);
 		}
-		busState = newState;
 		takeSnapshot();
 	}
+	
+	private void setBusState(BusState newState) 
+	{
+		BusState oldState = this.busState;
+		if ( newState != oldState ) 
+		{
+			previousBusState = this.busState;
+			this.busState = newState;
+			if ( DEBUG_VERBOSE ) {
+				final String s1 = StringUtils.rightPad( this.previousBusState.toString(),15);		
+				final String s2 = StringUtils.rightPad( this.busState.toString(),15);
+				System.out.println( cycle+": ["+s1+" -> "+s2+" ] : "+this);
+			}			
+			takeSnapshot();			
+		}
+	}
+	
+	protected final BusState ACK_BYTE;	
+	protected final BusState RECEIVE_BIT1;
+	protected final BusState RECEIVE_BIT0;
+	protected final BusState PREPARE_FOR_BYTE;
+	protected final BusState LISTENING2;	
+	protected final BusState LISTENING1;
+	protected final BusState ACK_ATN;
+	protected final BusState READY_FOR_DATA;
+	protected final BusState WAIT_FOR_ATN;
+	protected final BusState WAIT_FOR_TRANSMISSION;	
+	protected final BusState ACK_EOI;	
 
+	protected long waitingStartedAtCycle;
+	protected long cyclesWaited;
+	
 	public IECBus()
 	{
-		UNDEFINED = new BusState("UNDEFINED")
+		ACK_BYTE = new BusState("ACK_BYTE")
 		{
 			@Override
-			public BusState afterWrite() {
-				if ( atn ) {
-					dataIn = true;
-					eoi = false;
-					return LISTENING;
-				}
-				return this;
+			protected void tickHook() {
+				if ( cyclesWaited >= 60 ) 
+				{
+					dataIn = true; 
+					setBusState( LISTENING2 );
+				}	
+			}
+			
+			@Override
+			public void onEnter() {
+				dataIn = false;
+				startWaiting();
 			}
 		};
-
-		ACKNOWLEDGE = new BusState("ACK") {
+		
+		RECEIVE_BIT1 = new BusState("RECEIVE_BIT1")
+		{
 			@Override
-			public BusState afterWrite()
-			{
-				return LISTENING;
+			protected void tickHook() {
+				if ( ! clockOut ) { // wait for falling clock
+					setBusState( RECEIVE_BIT0 );
+				}
 			}
+			
+			@Override
+			public void onEnter() 
+			{
+				data = (byte) (data >>> 1);
+				if ( DEBUG_VERBOSE ) {
+					System.out.println("GOT BIT: "+(dataOut ? "1" : "0" ) );
+				}
+				if ( dataOut ) {
+					data |= 1<<7; // bit was 1
+				} else {
+					data &= ~(1<<7); // bit was 0
+				}
+				bitsReceived++;
+				if ( bitsReceived == 8 ) {
+					byteReceived( data );
+					setBusState( ACK_BYTE );
+				}
+			}
+		};
+		
+		RECEIVE_BIT0 = new BusState("RECEIVE_BIT0")
+		{
+			@Override
+			public void tickHook() 
+			{
+				if ( clockOut ) { // wait for rising clock
+					setBusState( RECEIVE_BIT1 );
+				}
+			}		
+		};
+		
+		PREPARE_FOR_BYTE = new BusState("PREPARE_FOR_BYTE")
+		{
+			@Override
+			public void tickHook() 
+			{
+				if ( ! clockOut ) {
+					setBusState( RECEIVE_BIT0 );
+				}
+			}
+			
+			public void onEnter() {
+				bitsReceived = 0;				
+				dataIn = false;
+			}
+		};
+		
+		ACK_EOI = new BusState("ACK_EOI")
+		{
+			@Override
+			protected void tickHook() {
+				if ( cyclesWaited > 500 ) {
+					setBusState( PREPARE_FOR_BYTE );
+				}				
+			}
+			
+			@Override
+			public void onEnter() {
+				// pull dataIn to low for 32 cycles
+				dataIn = true;
+				startWaiting();
+			}
+		};
+		
+		WAIT_FOR_TRANSMISSION = new BusState("WAIT_FOR_TRANSMISSION")
+		{
+			@Override
+			public void tickHook() 
+			{
+				if ( clockOut ) // wait for clkin == low
+				{
+					if ( DEBUG_VERBOSE ) {
+						System.out.println(cycle+": Talker starting to send after "+cyclesWaited+" cycles.");
+					}				
+					if ( cyclesWaited < 200 ) 
+					{
+						if ( DEBUG_VERBOSE ) {
+							System.out.println(cycle+": Waited "+cyclesWaited+" cycles => EOI");
+						}					
+						eoi = true;
+						setBusState( ACK_EOI );
+					} else {					
+						setBusState( PREPARE_FOR_BYTE );
+					}
+				}
+			}
+			
+			@Override
+			public void onEnter() {
+				dataIn = true; // signal "ready for data"
+				eoi = false;
+				if ( DEBUG_VERBOSE ) {
+					System.out.println(cycle+": Starting to wait at");
+				}
+				startWaiting();
+			}
+		};	
+		
+		READY_FOR_DATA = new BusState("READY_FOR_DATA")
+		{
+			@Override
+			public void tickHook() {
+				setBusState( WAIT_FOR_TRANSMISSION );
+			}
+			
+			@Override
+			public void onEnter() {
+				dataIn = false; 
+			}
+		};		
+		
+		LISTENING2 = new BusState("LISTENING_2")
+		{
+			@Override
+			public void tickHook() 
+			{
+				if ( ! clockOut ) // wait for clockOut == false
+				{
+					setBusState( READY_FOR_DATA );
+				}
+			}
+		};		
+		
+		ACK_ATN = new BusState("ACK_ATN") {
 
+			@Override
+			protected void tickHook() {
+				setBusState(LISTENING2);
+			}
+			
 			@Override
 			public void onEnter() {
 				dataIn = true;
 			}
-		};
+		};		
 
-		RECEIVING2 = new BusState("BIT")
+		LISTENING1 = new BusState("LISTENING_1")
 		{
 			@Override
-			public BusState afterWrite()
+			public void tickHook() 
 			{
-				if ( clockOut == true )
+				if ( ! clockOut ) // wait for clock out true -> false
 				{
-					return RECEIVING1;
+					setBusState( LISTENING2 );
 				}
-				return this;
 			}
-
-			@Override
-			public void onEnter() { };
 		};
-
-		RECEIVING1 = new BusState("RECEIVING_1")
+		
+		WAIT_FOR_ATN = new BusState("WAIT_FOR_ATN")
 		{
 			@Override
-			public BusState afterWrite()
+			public void tickHook() 
 			{
-				if ( clockOut == false )
-				{
-					// data is received with the LSB first
-					data = (byte) (data >>> 1);
-					if ( DEBUG_VERBOSE ) {
-						System.out.println("BIT "+bitsReceived+": "+dataOut);
-					}
-					if ( dataOut ) {
-						data |= 1<<7;
-					} else {
-						data &= 0b01111111;
-					}
-
-					bitsReceived++;
-					if ( bitsReceived == 8 ) 
-					{
-						byteReceived(data);
-						bitsReceived = 0;
-						return ACKNOWLEDGE;
-					}
-					return RECEIVING2;
-				}
-				return this;
+				if ( atn ) {
+					setBusState( ACK_ATN );
+				} 
 			}
-
-			@Override
-			public void onEnter() { };
-		};
-
-		WAIT_FOR_FIRST_BIT = new BusState("WAIT") {
-
-			@Override
-			public BusState afterWrite() 
-			{
-				if ( clockOut ) 
-				{
-					System.out.println("WAIT_FOR_FIRST_BIT : "+(cycle-lastReadyForDataAtCycle)+" cycles waited");
-					eoi = (cycle - lastReadyForDataAtCycle ) > 200;
-					return RECEIVING1;
-				}
-				return this;
-			}
-			
-		};
-		LISTENING = new BusState("LISTENING")
-		{
-			@Override
-			public BusState afterWrite() {
-				if ( ! clockOut ) // talker is ready to sent
-				{
-					dataIn = false; // signal "ready for data"
-					lastReadyForDataAtCycle = cycle;
-					return WAIT_FOR_FIRST_BIT;
-				}
-				return this;
-			}
-		};
-		this.busState = UNDEFINED;
+		};		
+		
+		this.previousBusState = this.busState = WAIT_FOR_ATN;
 	}
 
 	@Override
@@ -295,6 +403,12 @@ public class IECBus
 	}
 
 	public void tick() {
-		cycle++;
+		if ( previousBusState != busState ) 
+		{
+			previousBusState = busState;
+			busState.onEnter();
+		}
+		busState.tick();
+		cycle++;		
 	}
 }
