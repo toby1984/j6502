@@ -14,13 +14,6 @@ public class IECBus
 
 	private static final boolean DEBUG_VERBOSE = true;
 
-	public boolean atn;
-	public boolean clockOut;
-	public boolean dataOut;
-
-	public boolean clockIn;
-	public boolean dataIn;
-
 	protected boolean eoi;
 	protected long cycle;
 
@@ -60,29 +53,38 @@ public class IECBus
 	protected BusState previousBusState;	
 	protected BusState busState;
 	
-	protected final Wire wire = new SenderWire();
+	protected Wire wire = new SenderWire();
 	
-	public abstract class Wire 
+	public static abstract class Wire 
 	{
+		public boolean atn;
+		public boolean clockOut;
+		public boolean dataOut;
+
+		public boolean clockIn;
+		public boolean dataIn;
+		
+		public final void reset() {
+			atn = false;
+			clockOut = false;
+			dataOut = false;
+			clockIn = false;
+			dataIn = false;
+		}
+		
 		public abstract void setOutState(boolean atn,boolean dataOut,boolean clkOut);
 		
 		public final boolean getATN() {
 			return atn;
 		}
 		
-		public abstract void setDataOut(boolean data);		
-		
 		public abstract boolean getDataOut();
-		
-		public abstract void setClockOut(boolean clock);	
 		
 		public abstract boolean getClockOut();
 		
 		public abstract void setDataIn(boolean dataIn);
 		
 		public abstract boolean getDataIn();
-		
-		public abstract void setClockIn(boolean clkIn);		
 		
 		public abstract boolean getClockIn();
 	}
@@ -91,9 +93,9 @@ public class IECBus
 
 		@Override
 		public void setOutState(boolean atn, boolean dataOut, boolean clkOut) {
-			IECBus.this.atn = atn;
-			IECBus.this.clockOut = clkOut;
-			IECBus.this.dataOut = dataOut;
+			this.atn = atn;
+			this.clockOut = clkOut;
+			this.dataOut = dataOut;
 			busStateMayHaveChanged();			
 		}
 
@@ -108,35 +110,18 @@ public class IECBus
 		}
 
 		@Override
-		public void setDataOut(boolean data) {
-			IECBus.this.dataOut = data;		
-			busStateMayHaveChanged();	
-		}
-
-		@Override
 		public boolean getDataOut() {
-			return IECBus.this.dataOut;
+			return this.dataOut;
 		}
 		
 		@Override
-		public void setClockOut(boolean clock) {
-			IECBus.this.clockOut = clock;
-			busStateMayHaveChanged();	
-		}
-
-		@Override
 		public void setDataIn(boolean dataIn) {
-			IECBus.this.dataIn = dataIn;
-		}
-
-		@Override
-		public void setClockIn(boolean clkIn) {
-			IECBus.this.clockIn = clkIn;			
+			this.dataIn = dataIn;
 		}
 
 		@Override
 		public boolean getClockOut() {
-			return IECBus.this.clockOut;
+			return this.clockOut;
 		}
 	}
 	
@@ -147,8 +132,8 @@ public class IECBus
 		{
 			// only the CPU may control ATN
 			// IECBus.this.atn = atn;
-			IECBus.this.clockIn = clk;
-			IECBus.this.dataIn = data;		
+			this.clockIn = clk;
+			this.dataIn = data;		
 			busStateMayHaveChanged();	
 		}
 
@@ -163,37 +148,19 @@ public class IECBus
 		}
 
 		@Override
-		public void setDataOut(boolean data) {
-			IECBus.this.dataIn = data;
-			busStateMayHaveChanged();	
-		}
-		
-		@Override
 		public boolean getDataOut() {
-			return IECBus.this.dataIn;
-		}
-
-		@Override
-		public void setClockOut(boolean clock) {
-			IECBus.this.clockIn = clock;
-			busStateMayHaveChanged();	
+			return this.dataIn;
 		}
 
 		@Override
 		public void setDataIn(boolean dataIn) {
-			IECBus.this.dataOut = dataIn;
+			this.dataOut = dataIn;
 			busStateMayHaveChanged();	
 		}
 
 		@Override
-		public void setClockIn(boolean clkIn) {
-			IECBus.this.clockOut = clkIn;
-			busStateMayHaveChanged();				
-		}
-
-		@Override
 		public boolean getClockOut() {
-			return IECBus.this.clockIn;
+			return this.clockIn;
 		}
 	}
 	
@@ -216,11 +183,7 @@ public class IECBus
 		bitsTransmitted = 0;
 		states.clear();
 		cycle = 0;
-		atn = false;
-		clockOut = false;
-		dataOut = false;
-		clockIn = false;
-		dataIn = false;
+		wire.reset();
 	}
 
 	public static final class StateSnapshot
@@ -254,7 +217,12 @@ public class IECBus
 	private void takeSnapshot()
 	{
 		synchronized(states) {
-			states.add( new StateSnapshot( atn , clockOut , dataOut, clockIn , dataIn , busState , cycle , eoi ) );
+			states.add( new StateSnapshot( 
+					wire.getATN() , 
+					wire.getClockOut() , 
+					wire.getDataOut() , 
+					wire.getClockIn() , 
+					wire.getDataIn() , busState , cycle , eoi ) );
 			if ( states.size() > MAX_CYCLES_TO_KEEP ) {
 				states.remove(0);
 			}
@@ -433,10 +401,12 @@ public class IECBus
 			protected void onRisingEdge() 
 			{
 				currentByte = (byte) (currentByte >>> 1);
-				if ( DEBUG_VERBOSE ) {
+				final boolean dataOut = wire.getDataOut();
+				if ( DEBUG_VERBOSE ) 
+				{
 					System.out.println("GOT BIT no "+bitsTransmitted+": "+(dataOut ? "1" : "0" ) );
 				}
-				if ( wire.getDataOut() ) {
+				if ( dataOut ) {
 					currentByte |= 1<<7; // bit was 1
 				} else {
 					currentByte &= ~(1<<7); // bit was 0
@@ -576,7 +546,12 @@ public class IECBus
 
 	@Override
 	public String toString() {
-		return "ATN: "+( atn ? "1" : "0" )+" , CLK_OUT: "+( clockOut ? "1":"0") +" , DATA_OUT: "+(dataOut ? "1" : "0") +"  ||   CLK_IN: "+(clockIn?"1":"0")+", DATA_IN: "+(dataIn?"1":"0");
+		return "ATN: "+
+	            (wire.getATN() ? "1" : "0" )+" , CLK_OUT: "+
+				(wire.getClockOut() ? "1":"0") +" , DATA_OUT: "+
+				(wire.getDataOut() ? "1" : "0") +"  ||   CLK_IN: "+
+				(wire.getClockIn() ?"1":"0")+", DATA_IN: "+
+				(wire.getDataIn() ?"1":"0");
 	}
 
 	private void byteReceived(byte data) 
