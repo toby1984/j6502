@@ -1,9 +1,7 @@
 package de.codesourcery.j6502.emulator;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.commons.lang.StringUtils;
 
@@ -16,61 +14,65 @@ public class IECBus
 	
 	private static final boolean DEBUG_VERBOSE = true;
 
-	protected boolean atn;
-	protected boolean clockOut;
-	protected boolean dataOut;
+	public boolean atn;
+	public boolean clockOut;
+	public boolean dataOut;
 
-	protected boolean clockIn;
-	protected boolean dataIn;
+	public boolean clockIn;
+	public boolean dataIn;
 	
 	protected boolean eoi;
 	protected long cycle;
 	
-	private final Map<Integer,SerialDevice> devices = new HashMap<>();
+	protected abstract class BusMode 
+	{
+		public abstract void onEnter(); 
+	}
+	
+	protected final BusMode BUSMODE_RECEIVE = new BusMode() 
+	{
+		public void onEnter() 
+		{
+			previousBusState = busState = WAIT_FOR_ATN;
+		}
+	};
+	
+	protected final BusMode BUSMODE_SEND = new BusMode() 
+	{
+		public void onEnter() 
+		{
+			throw new RuntimeException("Sending not implemented");
+		}
+	};
+	
+	private final RingBuffer sendBuffer = new RingBuffer();
+	private final RingBuffer eoiBuffer = new RingBuffer();
+	
+	private final List<SerialDevice> devices = new ArrayList<>();
 
 	private final List<StateSnapshot> states = new ArrayList<>();
 	
-	protected final RingBuffer inputBuffer  = new RingBuffer();
-	protected final RingBuffer outputBuffer  = new RingBuffer();
+	protected BusMode busMode = BUSMODE_RECEIVE;
 	
-	protected int bitsReceived = 0;
-	protected byte data;
+	protected int bitsTransmitted = 0;
+	protected byte currentByte;
 	
 	private BusState previousBusState;	
 	private BusState busState;
 	
-	public static enum CommandType {
-		LISTEN,TALK,UNLISTEN,UNTALK,OPEN_CHANNEL,OPEN,CLOSE;
-	}
-	
-	public static class Command 
-	{
-		public final CommandType type;
-		public final byte[] payload;
-		
-		public Command(CommandType type,byte[] payload) {
-			this.type = type;
-			this.payload = payload;
-		}
-		
-		public boolean hasType(CommandType t) {
-			return t.equals( this.type );
-		}
-	}
-	
 	public void reset() 
 	{
-		this.previousBusState = this.busState = WAIT_FOR_ATN;
+		busMode = BUSMODE_RECEIVE;
+		busMode.onEnter();
+		
+		eoiBuffer.reset();
+		sendBuffer.reset();
 		
 		devices.clear();
 		
-		final Floppy f = new Floppy(8);
-		devices.put( f.getPrimaryAddress() , f );
+		devices.add( new Floppy(8) );
 		
-		inputBuffer.reset();
-		outputBuffer.reset();
-		
-		bitsReceived = 0;
+		bitsTransmitted = 0;
 		states.clear();
 		cycle = 0;
 		atn = false;
@@ -165,21 +167,6 @@ public class IECBus
 		@Override public String toString() { return name; }
 	}
 
-	public void writeBus(byte b)
-	{
-		// all lines are low-active, 0 = LOGICAL TRUE , 1 = LOGICAL FALSE
-		atn = (b & 1<<3) != 0;
-		clockOut = (b & 1 << 4) == 0;
-		dataOut = (b & 1<<5) == 0;
-		
-		if ( DEBUG_VERBOSE ) {
-			final String s1 = StringUtils.rightPad( this.previousBusState.toString(),15);		
-			final String s2 = StringUtils.rightPad( this.busState.toString(),15);
-			System.out.println( cycle+": ["+s1+" -> "+s2+" ] : "+this);
-		}
-		takeSnapshot();
-	}
-	
 	private void setBusState(BusState newState) 
 	{
 		BusState oldState = this.busState;
@@ -304,18 +291,18 @@ public class IECBus
 			@Override
 			protected void onRisingEdge() 
 			{
-				data = (byte) (data >>> 1);
+				currentByte = (byte) (currentByte >>> 1);
 				if ( DEBUG_VERBOSE ) {
-					System.out.println("GOT BIT no "+bitsReceived+": "+(dataOut ? "1" : "0" ) );
+					System.out.println("GOT BIT no "+bitsTransmitted+": "+(dataOut ? "1" : "0" ) );
 				}
 				if ( dataOut ) {
-					data |= 1<<7; // bit was 1
+					currentByte |= 1<<7; // bit was 1
 				} else {
-					data &= ~(1<<7); // bit was 0
+					currentByte &= ~(1<<7); // bit was 0
 				}
-				bitsReceived++;
-				if ( bitsReceived == 8 ) {
-					byteReceived( data );
+				bitsTransmitted++;
+				if ( bitsTransmitted == 8 ) {
+					byteReceived( currentByte );
 					setBusState( ACK_BYTE );
 				} else {
 					setBusState( WAIT_FOR_VALID_DATA );
@@ -338,7 +325,7 @@ public class IECBus
 			@Override
 			protected void tickHook() {
 				if ( cyclesWaited > 60 ) { // pull dataIn to low for 32 cycles
-					bitsReceived = 0;
+					bitsTransmitted = 0;
 					dataIn = false;
 					setBusState( READ_BIT );
 				} 
@@ -362,7 +349,7 @@ public class IECBus
 				if ( DEBUG_VERBOSE ) {
 					System.out.println(cycle+": Talker starting to send after "+cyclesWaited+" cycles.");
 				}									
-				bitsReceived = 0;
+				bitsTransmitted = 0;
 				setBusState( READ_BIT );
 			}
 			
@@ -452,35 +439,58 @@ public class IECBus
 	private void byteReceived(byte data) 
 	{
 		System.out.println("BYTE RECEIVED: "+HexDump.toBinaryString( data )+" ( $"+HexDump.toHex( data ) +" )" );		
-		inputBuffer.write( data );
+		for ( SerialDevice device : devices ) {
+			device.receive( data , this );
+		}
 	}
-
-	public byte readBus()
+	
+	public void writeBusRegister(byte b)
 	{
-		/*
-		 Bit 0..1: Select the position of the VIC-memory
+		// all lines are low-active, 0 = LOGICAL TRUE , 1 = LOGICAL FALSE
+		atn = (b & 1<<3) != 0;
+		clockOut = (b & 1 << 4) == 0;
+		dataOut = (b & 1<<5) == 0;
+		
+		if ( DEBUG_VERBOSE ) {
+			final String s1 = StringUtils.rightPad( this.previousBusState.toString(),15);		
+			final String s2 = StringUtils.rightPad( this.busState.toString(),15);
+			System.out.println( cycle+": ["+s1+" -> "+s2+" ] : "+this);
+		}
+		takeSnapshot();
+	}	
 
-		     %00, 0: Bank 3: $C000-$FFFF, 49152-65535
-		     %01, 1: Bank 2: $8000-$BFFF, 32768-49151
-		     %10, 2: Bank 1: $4000-$7FFF, 16384-32767
-		     %11, 3: Bank 0: $0000-$3FFF, 0-16383 (standard)
-
-		Bit 2: RS-232: TXD Output, userport: Data PA 2 (pin M)
-		Bit 3..5: serial bus Output (0=High/Inactive, 1=Low/Active)
-
-		    Bit 3: ATN OUT
-		    Bit 4: CLOCK OUT
-		    Bit 5: DATA OUT
-
-		Bit 6..7: serial bus Input (0=Low/Active, 1=High/Inactive)
+	public byte readBusRegister()
+	{
+         /* Bit 6..7: serial bus Input (0=Low/Active, 1=High/Inactive)
 
 		    Bit 6: CLOCK IN
 		    Bit 7: DATA IN
 		 */
 		return (byte) ( (clockIn ? 0 : 1<<6 ) | ( dataIn ? 0 : 1<<7 ) );
 	}
+	
+	public void send(byte data,boolean eoi) 
+	{
+		this.sendBuffer.write( data );
+		this.eoiBuffer.write( eoi ? (byte) 0xff : 00 ); 
+		if ( this.busMode == BUSMODE_RECEIVE ) 
+		{
+			this.busMode = BUSMODE_SEND;
+			this.busMode.onEnter();
+		}
+	}
+	
+	public void switchToReceive() 
+	{
+		if ( this.busMode == BUSMODE_SEND ) 
+		{
+			this.busMode = BUSMODE_RECEIVE;
+			this.busMode.onEnter();
+		}
+	}
 
-	public void tick() {
+	public void tick() 
+	{
 		if ( previousBusState != busState ) 
 		{
 			previousBusState = busState;

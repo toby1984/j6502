@@ -48,7 +48,7 @@ public class IOArea extends Memory
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
 			if (offset == 00 )
 			{
-				iecBus.writeBus( value );
+				iecBus.writeBusRegister( value );
 			}
 		}
 
@@ -78,7 +78,7 @@ public class IOArea extends Memory
 				    Bit 6: CLOCK IN
 				    Bit 7: DATA IN
 				 */
-				value = (value & 0b00111111 ) | iecBus.readBus(); // merge CLOCK IN/DATA IN bits
+				value = (value & 0b00111111 ) | iecBus.readBusRegister(); // merge CLOCK IN/DATA IN bits
 			}
 			return value;
 		};

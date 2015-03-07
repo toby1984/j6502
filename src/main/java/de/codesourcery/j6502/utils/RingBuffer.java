@@ -7,19 +7,22 @@ public class RingBuffer {
 	private int readPtr;
 	private int writePtr;
 	
+	private int bytesInBuffer;
+	
 	public RingBuffer() {
 	}
 	
 	public void reset() {
 		writePtr = readPtr = 0;
+		bytesInBuffer = 0;
 	}
 	
 	public boolean isEmpty() {
-		return readPtr == writePtr;
+		return bytesInBuffer == 0;
 	}
 	
 	public boolean isNotEmpty() {
-		return readPtr != writePtr;
+		return bytesInBuffer != 0;
 	}
 	
 	public boolean isFull() 
