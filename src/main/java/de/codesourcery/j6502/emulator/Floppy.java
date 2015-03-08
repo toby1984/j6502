@@ -10,14 +10,25 @@ public class Floppy extends SerialDevice
 	}
 
 	@Override
-	protected void processCommand(RingBuffer buffer) 
-	{
-		if ( isListening() ) {
-			
-		} else if ( isTalking() ) {
-			
-		} else {
-			throw new IllegalStateException("Neither listener nor talker");
-		}
+	public void onATN() {
+		// TODO: Stop sending if the device is currently sending
 	}	
+	
+	@Override
+	public void tick() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	protected void onUntalk(RingBuffer receiveBuffer) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	protected void onUnlisten(RingBuffer receiveBuffer) {
+		// TODO Auto-generated method stub
+		
+	}
 }

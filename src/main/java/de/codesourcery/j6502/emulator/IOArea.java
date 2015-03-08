@@ -1,7 +1,5 @@
 package de.codesourcery.j6502.emulator;
 
-import org.apache.commons.lang.StringUtils;
-
 import de.codesourcery.j6502.emulator.IECBus.Wire;
 import de.codesourcery.j6502.emulator.Keyboard.Key;
 
@@ -13,7 +11,7 @@ import de.codesourcery.j6502.emulator.Keyboard.Key;
 public class IOArea extends Memory
 {
 	private final VIC vic;
-	private final IECBus iecBus = new IECBus();
+	private final IECBus iecBus;
 
 	private final CIA cia1 = new CIA("CIA #1" , AddressRange.range( 0xdc00, 0xdd00 ) ) {
 
@@ -101,6 +99,9 @@ public class IOArea extends Memory
 	public IOArea(String identifier, AddressRange range, IMemoryRegion mainMemory)
 	{
 		super(identifier, range);
+		
+		this.iecBus = new IECBus();
+		iecBus.addDevice( new Floppy(8) );
 		this.mainMemory = mainMemory;
 		this.vic = new VIC("VIC", AddressRange.range( 0xd000, 0xd02f));
 	}

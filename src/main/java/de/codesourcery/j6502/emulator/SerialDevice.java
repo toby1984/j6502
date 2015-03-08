@@ -8,8 +8,10 @@ public abstract class SerialDevice
 	private boolean listening = false;
 	private boolean talking = false;
 	private final int deviceAddress;
+	
+	private IECBus bus;
 
-	private final RingBuffer buffer = new RingBuffer();
+	private final RingBuffer receiveBuffer = new RingBuffer();
 
 	public static enum CommandType {
 		LISTEN,TALK,UNLISTEN,UNTALK,OPEN_CHANNEL,OPEN,CLOSE;
@@ -29,6 +31,18 @@ public abstract class SerialDevice
 			return t.equals( this.type );
 		}
 	}
+	
+	protected final IECBus getBus() {
+		return bus;
+	}
+	
+	public final void onAttach(IECBus bus) 
+	{
+		if (bus == null) {
+			throw new IllegalArgumentException("bus must not be NULL");
+		}
+		this.bus = bus;
+	}
 
 	public SerialDevice(int deviceAddress) 
 	{
@@ -39,27 +53,27 @@ public abstract class SerialDevice
 	{
 		this.listening = false;
 		this.talking = false;
-		buffer.reset();
+		receiveBuffer.reset();
 	}
 
 	public int getPrimaryAddress() {
 		return deviceAddress;
 	}
 
-	public void receive(byte data,IECBus bus) 
+	public final void receive(byte data) 
 	{
 		if ( data == 0x3f ) // UNLISTEN
 		{
 			if ( listening ) 
 			{
-				listening = false;
+				unlisten();
 			}
 			return;
 		}
 		if ( data == 0x5f ) // UNTALK
 		{
 			if ( talking ) {
-				talking = false;
+				untalk();
 			}
 			return;
 		}		
@@ -83,12 +97,10 @@ public abstract class SerialDevice
 		
 		if ( listening || talking ) 
 		{
-			buffer.write( data );
+			receiveBuffer.write( data );
 		}
 	}
 	
-	protected abstract void processCommand(RingBuffer buffer);
-
 	private void assertListening() {
 		if ( ! listening ) {
 			throw new IllegalStateException("Not listening ?");
@@ -124,12 +136,20 @@ public abstract class SerialDevice
 		return false;
 	}
 
-	public void unlisten() {
+	public final void unlisten() {
 		assertListening();
+		
 		listening = false;
+		
+		try {
+			onUnlisten( receiveBuffer );
+		} 
+		finally {
+			receiveBuffer.reset();
+		}
 	}
 
-	public void talk(int deviceAdress) 
+	public final void talk(int deviceAdress) 
 	{
 		if ( this.deviceAddress != deviceAdress ) {
 			throw new IllegalArgumentException("Don't try talking to me as if I was device #"+deviceAdress+" , I'm #"+this.deviceAddress);
@@ -138,17 +158,32 @@ public abstract class SerialDevice
 		talking = true;
 	}
 
-	public void untalk() 
+	public final void untalk() 
 	{
 		assertTalking();
 		talking = false;
+		
+		try {
+			onUntalk( receiveBuffer );
+		} 
+		finally {
+			receiveBuffer.reset();
+		}
 	}	
 
-	public boolean isListening() {
+	public final boolean isListening() {
 		return listening;
 	}
 
-	public boolean isTalking() {
+	public final boolean isTalking() {
 		return talking;
 	}
+	
+	public abstract void onATN();
+	
+	public abstract void tick();
+	
+	protected abstract void onUntalk(RingBuffer receiveBuffer);
+	
+	protected abstract void onUnlisten(RingBuffer receiveBuffer);
 }

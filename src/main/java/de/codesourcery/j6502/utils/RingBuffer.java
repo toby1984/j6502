@@ -1,6 +1,6 @@
 package de.codesourcery.j6502.utils;
 
-public class RingBuffer {
+public final class RingBuffer {
 
 	private final byte[] data = new byte[1024];
 	
@@ -27,7 +27,7 @@ public class RingBuffer {
 	
 	public boolean isFull() 
 	{
-		return ( (writePtr+1) % data.length ) == readPtr; 
+		return bytesInBuffer == data.length;
 	}
 	
 	public byte read() {
@@ -36,6 +36,7 @@ public class RingBuffer {
 		}
 		byte result = data[readPtr];
 		readPtr = (readPtr+1) % data.length;
+		bytesInBuffer--;
 		return result;
 	}
 	
@@ -45,5 +46,6 @@ public class RingBuffer {
 		}
 		data[writePtr] = value;
 		writePtr = (writePtr+1) % data.length;
+		bytesInBuffer++;
 	}
 }
