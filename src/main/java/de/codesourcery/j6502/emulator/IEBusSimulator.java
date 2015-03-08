@@ -73,9 +73,12 @@ public class IEBusSimulator
 		sender.send( (byte) 0x3f , false , false ); // UNLISTEN
 		sender.send( (byte) 0x48 , false , false ) ; // TALK #8
 		sender.send( (byte) 0x60 , false , false ); // OPEN CHANNEL #0
-		
+
+//		sender.CAPTURE_BUS_SNAPSHOTS = false;
+//		receiver.CAPTURE_BUS_SNAPSHOTS = true;
 		int cycles = 5000;
-		while ( cycles-- > 0 ) {
+		while ( cycles-- > 0 ) 
+		{
 			sender.tick();
 			receiver.tick();
 			busPanel.repaint();
