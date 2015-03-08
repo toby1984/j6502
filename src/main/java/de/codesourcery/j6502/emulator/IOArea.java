@@ -55,7 +55,7 @@ public class IOArea extends Memory
 				boolean atn = (value & 1<<3) != 0;
 				boolean clockOut = (value & 1 << 4) == 0;
 				boolean dataOut = (value & 1<<5) == 0;
-				iecBus.getWire().setOutState( atn , dataOut , clockOut );
+				iecBus.getOutputWire().setState( atn , dataOut , clockOut );
 			}
 		}
 		
@@ -85,9 +85,9 @@ public class IOArea extends Memory
 				    Bit 6: CLOCK IN
 				    Bit 7: DATA IN
 				 */
-				Wire wire = iecBus.getWire();
-				final boolean clockIn = wire.getClockIn(); // iecBus.clockIn;
-				final boolean dataIn = wire.getDataIn(); // iecBus.dataIn;
+				Wire wire = iecBus.getInputWire();
+				final boolean clockIn = wire.getClock(); // iecBus.clockIn;
+				final boolean dataIn = wire.getData(); // iecBus.dataIn;
 				
 				final int busRegister = ( (clockIn ? 0 : 1<<6 ) | ( dataIn ? 0 : 1<<7 ) ) & 0xff;
 				value = (value & 0b00111111 ) | busRegister; // merge CLOCK IN/DATA IN bits
