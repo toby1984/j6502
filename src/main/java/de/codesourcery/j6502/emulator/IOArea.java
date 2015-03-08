@@ -100,7 +100,7 @@ public class IOArea extends Memory
 	{
 		super(identifier, range);
 		
-		this.iecBus = new IECBus();
+		this.iecBus = new IECBus("default bus");
 		iecBus.addDevice( new Floppy(8) );
 		this.mainMemory = mainMemory;
 		this.vic = new VIC("VIC", AddressRange.range( 0xd000, 0xd02f));
