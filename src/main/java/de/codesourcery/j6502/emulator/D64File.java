@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.emulator;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -7,10 +8,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.Validate;
 
 import de.codesourcery.j6502.utils.CharsetConverter;
+import de.codesourcery.j6502.utils.HexDump;
 
 /**
  * Disk file format as described on http://unusedino.de/ec64/technical/formats/d64.html
@@ -19,9 +23,16 @@ import de.codesourcery.j6502.utils.CharsetConverter;
  */
 public class D64File
 {
+	public static final boolean DEBUG_VERBOSE = true;
+
 	private static final int IMAGE_SIZE_IN_BYTES = 174848;
 
+	protected static final int MAX_DISKNAME_LEN = 16;
+	protected static final int MAX_FILENAME_LEN = 16;
+
 	private final byte[] data;
+
+	private final BAM bam = new BAM();
 
 	public static enum FileType {
 		DEL,SEQ,PRG,USR,REL,UNKNOWN;
@@ -58,6 +69,78 @@ public class D64File
 			return FileType.UNKNOWN;
 		}
 
+		public InputStream createInputStream() {
+
+			final int track = getFirstDataTrack();
+			final int sector = getFirstDataSector();
+			final int absoluteOffset = (getFirstSectorNoForTrack( track )+sector) * 256;
+
+			if ( DEBUG_VERBOSE ) {
+				System.out.println(this+": Creating input stream at "+track+"/"+sector+" for ");
+			}
+			return new InputStream()
+			{
+				private int currentSectorOffset = absoluteOffset;
+				private int currentDataByteInSector = 2; //  because 0x00 = next data track and 0x01 = next data sector in this track
+
+				private int bytesLeftInThisSector;
+
+				private boolean eof;
+
+				{ determineAvailableBytes(); }
+
+				private void advanceToNextSector()
+				{
+					final int track = data[ currentSectorOffset ] & 0xff;
+					if ( track == 0 )
+					{
+						return;
+					}
+					final int sector = data[ currentSectorOffset+1 ] & 0xff;
+
+					if ( DEBUG_VERBOSE ) {
+						System.out.println( DirectoryEntry.this+": Advancing to next sector at "+track+"/"+sector);
+					}
+
+					final int absoluteSector = getFirstSectorNoForTrack( track )+sector;
+					currentSectorOffset = absoluteSector * 256;
+					currentDataByteInSector =2;
+
+					determineAvailableBytes();
+				}
+
+				private void determineAvailableBytes() {
+					if ( data[ currentSectorOffset ] == 0 ) { // track == 0 => last data sector
+						bytesLeftInThisSector = data[ currentSectorOffset+1 ] & 0xff;
+					} else {
+						bytesLeftInThisSector = 254; // 256 - 2 bytes for track/sector index
+					}
+					if ( DEBUG_VERBOSE ) {
+						System.out.println(DirectoryEntry.this+": Current sector holds "+bytesLeftInThisSector+" bytes");
+					}
+				}
+
+				@Override
+				public int read() throws IOException
+				{
+					if ( bytesLeftInThisSector == 0 && ! eof ) {
+						advanceToNextSector();
+						eof |= ( bytesLeftInThisSector == 0 );
+					}
+					if ( eof )
+					{
+						if ( DEBUG_VERBOSE ) {
+							System.out.println(DirectoryEntry.this+": End of file reached.");
+						}
+						return -1;
+					}
+					final int result = data[ currentDataByteInSector++ ] & 0xff;
+					bytesLeftInThisSector--;
+					return result;
+				}
+			};
+		}
+
 		public boolean hasFileType(FileType ft) {
 			return ft.equals( getFileType() );
 		}
@@ -88,7 +171,7 @@ public class D64File
 		}
 
 		/**
-		 * File name is PET-ASCII , padded with $A0 and at most 16 characters long.
+		 * Returns file name as PET-ASCII , padded with $A0 and at most 16 characters long.
 		 * @param name
 		 */
 		public void getFileName(byte[] name) {
@@ -96,6 +179,40 @@ public class D64File
 			{
 				name[i] = data[offset+i+5];
 			}
+		}
+
+		/**
+		 * Returns the file name as PET-ASCII , stripped of any trailing $A0 bytes.
+		 * @param name
+		 */
+		public byte[] getTrimmedFileName()
+		{
+			final byte[] tmp = new byte[ MAX_FILENAME_LEN ];
+			getFileName( tmp );
+			int len = 0;
+			for ( ; len < MAX_FILENAME_LEN ; len++ )
+			{
+				if ( (tmp[len] & 0xa0) == 0xa0) {
+					break;
+				}
+			}
+			byte[] result = new byte[ len ];
+			System.arraycopy( tmp , 0 , result , 0 , len );
+			return result;
+		}
+
+		public boolean matches(byte[] expectedPETASCII)
+		{
+			final byte[] actualPETASCII = getTrimmedFileName();
+			if ( expectedPETASCII.length != actualPETASCII.length ) {
+				return false;
+			}
+			for ( int i = 0 ; i < actualPETASCII.length ; i++ ) {
+				if ( actualPETASCII[i] != expectedPETASCII[i] ) {
+					return false;
+				}
+			}
+			return true;
 		}
 
 		@Override
@@ -222,9 +339,38 @@ public class D64File
 
 		final List<DirectoryEntry> directory = file.getDirectory();
 		System.out.println("Disk contains "+directory.size()+" directory entries");
-		directory.forEach( dir -> {
-			System.out.println("File: "+dir);
+		directory.forEach( dir ->
+		{
+			System.out.println("==== File: "+dir+" ====");
+
+			InputStream in = dir.createInputStream();
+			int bytesRead = 0;
+			try {
+				while ( in.read() != -1 ) {
+					bytesRead++;
+				}
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			} finally {
+				IOUtils.closeQuietly( in );
+			}
+			System.out.println("Bytes read: "+bytesRead+" ( = "+bytesRead/254.0f+" sectors)");
 		});
+
+		InputStream inputStream = file.createDirectoryInputStream();
+
+		byte[] buffer = new byte[2048];
+		int bytesRead = inputStream.read(buffer);
+
+		final HexDump dump = new HexDump();
+		dump.setBytesPerLine( 32 );
+		dump.setPrintAddress( true );
+		System.out.println( dump.dump((short) 0, buffer, bytesRead, bytesRead) );
+	}
+
+	public Optional<DirectoryEntry> getDirectoryEntry(byte[] fileNameInPETSCII)
+	{
+		return getDirectory().stream().filter( entry -> entry.matches( fileNameInPETSCII ) ).findFirst();
 	}
 
 	public List<DirectoryEntry> getDirectory() {
@@ -373,4 +519,212 @@ public class D64File
 		return 35;
 	}
 
+	public InputStream createDirectoryInputStream()
+	{
+		/*
+		 * Formats the directory listing as a fake BASIC program and
+		 * sends this to the computer.
+		 *
+         * 0 "TEST DISK       " 23 2A
+         * 20   "FOO"               PRG
+         * 3    "BAR"               PRG
+         * 641 BLOCKS FREE.
+         *
+         * In this example, “TEST DISK” is the disk name, “23″ the disk ID and “2A” the filesystem format/version
+         * (always 2A on 1540/1541/1551/1570/1571 – but this was only a redundant copy of the version information
+         * which was never read and could be changed).
+		 *
+		 * Syntax:
+		 *
+		 * 0801  0E 08    - next line starts at 0x080E
+		 * 0803  0A 00    - line number 10
+		 * 0805  99       - token for PRINT
+		 * 0806  "HELLO!" - ASCII text of line
+		 * 080D  00       - end of line
+		 * 080E  00 00    - end of program
+		 *
+		 * The example directory listing from above would be encoded by the floppy like this:
+		 *
+		 * 0801  21 08    - next line starts at 0x0821
+		 * 0803  00 00    - line number 0
+		 * 0805  '"TEST DISK       " 23 2A '
+		 * 0820  00       - end of line
+		 * 0821  21 08    - next line starts at 0x0821
+		 * 0823  14 00    - line number 20
+		 * 0825  '  "FOO"               PRG '
+		 * 0840  00       - end of line
+		 * [...]
+		 */
+
+		// determine how much padding we need to add to each line so that all file names line up nicely
+		final int maxSectorCount = getDirectory().stream().mapToInt( d -> d.getFileSizeInSectors() ).max().orElse( 0 );
+		final int maxSectorCountStringLen = Integer.toString( maxSectorCount ).length();
+
+		// header line
+		final ByteArrayOutputStream out = new ByteArrayOutputStream();
+		out.write( 0x01 ); // lo , load address: 0x401
+		out.write( 0x04 ); // hi
+
+		// 0x101 => dummy ptr to next line in basic listing (will be re-calculated by BASIC interpreter anyway so actual value doesn't matter)
+		out.write( 0x01 ); // lo
+		out.write( 0x01 ); // hi
+
+		// drive (for simplicities sake I always return drive #0)
+		out.write( 0x00 ); // lo
+		out.write( 0x00 ); // hi
+
+		// quote
+		out.write( 0x22 );
+
+        // write disk name padded to 16 characters
+		final byte[] diskName = bam.getDiskName();
+		for ( int len = 0 ; len < diskName.length ; len++ ) {
+			out.write( diskName[len] );
+		}
+		// write padding bytes
+		for ( int delta = 32 - 7 - diskName.length - 8 ; delta > 0 ; delta-- )
+		{
+			out.write( 0x20 );
+		}
+		// quote
+		out.write( 0x22 );
+
+		try
+		{
+			// whitespace
+			out.write( 0x20 );
+			// two byte disk ID
+			out.write( bam.getDiskID() );
+			// whitespace
+			out.write( 0x20 );
+			// two byte DOS version
+			out.write( bam.getDOSType() );
+		}
+		catch (IOException e)
+		{
+			throw new RuntimeException("Can never happen...");
+		}
+		// terminate line
+		out.write( 0x00 );
+
+		for ( DirectoryEntry entry : getDirectory() )
+		{
+			// 0x101 => dummy ptr to next line in basic listing (will be re-calculated by BASIC interpreter anyway so value doesn't matter)
+			int lineWidth = 0;
+			out.write( 0x01 ); // lo
+			out.write( 0x01 ); // hi
+			lineWidth += 2;
+
+			final int sectors = entry.getFileSizeInSectors();
+			// number of sectors (here always zero because this is the disk name line)
+			out.write( sectors & 0xff ); // lo
+			out.write( (sectors >> 8 ) & 0xff ); // hi
+			lineWidth += 2;
+
+			// write padding whitespace to nicely line up filenames
+			byte[] fileName = entry.getTrimmedFileName();
+			for ( int delta = maxSectorCountStringLen - fileName.length ; delta > 0 ; delta-- ) {
+				out.write( 0x20 );
+				lineWidth++;
+			}
+
+			// quote
+			out.write( 0x22 );
+			lineWidth++;
+
+			// write file name
+			for ( int i = 0 ; i < fileName.length ; i++ ) {
+				out.write( fileName[i] );
+				lineWidth++;
+			}
+
+			// quote
+			out.write( 0x22 );
+			lineWidth++;
+
+			// every line in the basic listing needs to be exactly 32 bytes long. Four bytes are already spent on line ptrs + sector counts, making
+			// the 28 remaining bytes look like this:
+			// <SECTOR COUNT><ALIGNING>"FILENAME       "      PRG<zero byte>
+			// align program type
+			for ( int remaining = 32 - lineWidth - 4; remaining > 0 ; remaining--) { // "-4" , because of line ptrs + sector count, "-3" because of program type string, "-1" because of terminating zero byte
+				out.write(0x20);
+			}
+
+			// write file type
+			switch( entry.getFileType() ) {
+				case DEL:
+					out.write( (byte) 'D'); out.write( (byte) 'E'); out.write( (byte) 'L');
+					break;
+				case PRG:
+					out.write( (byte) 'P'); out.write( (byte) 'R'); out.write( (byte) 'G');
+					break;
+				case REL:
+					out.write( (byte) 'R'); out.write( (byte) 'E'); out.write( (byte) 'L');
+					break;
+				case SEQ:
+					out.write( (byte) 'S'); out.write( (byte) 'E'); out.write( (byte) 'Q');
+					break;
+				case USR:
+					out.write( (byte) 'U'); out.write( (byte) 'S'); out.write( (byte) 'R');
+					break;
+				default:
+					out.write( (byte) '?'); out.write( (byte) '?'); out.write( (byte) '?');
+			}
+
+			// terminate line
+			out.write( 0x00 );
+
+		}
+		return new ByteArrayInputStream( out.toByteArray() );
+	}
+
+	protected final class BAM
+	{
+		private final int offset = getFirstSectorNoForTrack( 18 )*256;
+
+		/*
+  Bytes:$00-01: Track/Sector location of the first directory sector (should
+                be set to 18/1 but it doesn't matter, and don't trust  what
+                is there, always go to 18/1 for first directory entry)
+            02: Disk DOS version type (see note below)
+                  $41 ("A")
+            03: Unused
+         04-8F: BAM entries for each track, in groups  of  four  bytes  per
+                track, starting on track 1 (see below for more details)
+         90-9F: Disk Name (padded with $A0)
+         A0-A1: Filled with $A0
+         A2-A3: Disk ID
+            A4: Usually $A0
+         A5-A6: DOS type, usually "2A"
+         A7-AA: Filled with $A0
+         AB-FF: Normally unused ($00), except for 40 track extended format,
+                see the following two entries:
+         AC-BF: DOLPHIN DOS track 36-40 BAM entries (only for 40 track)
+         C0-D3: SPEED DOS track 36-40 BAM entries (only for 40 track)
+		 */
+		public byte getDOSVersion() {
+			return data[ offset + 0x02 ];
+		}
+
+		public byte[] getDiskID()
+		{
+			return new byte[] { data[ offset + 0x02 ], data[ offset + 0x03 ] };
+		}
+
+		public byte[] getDOSType()
+		{
+			return new byte[] { data[ offset + 0xa5 ], data[ offset + 0xa6 ] };
+		}
+
+		public byte[] getDiskName() {
+			int len = 0;
+			int start = offset+0x90;
+			for ( ; len < 16 && ( data[ start+ len ] & 0xff) != 0xa0 ; len++ ) {
+				len++;
+			}
+			byte[] result = new byte[len];
+			System.arraycopy( data , offset+0x90 , result , 0 , len );
+			return result;
+		}
+	}
 }

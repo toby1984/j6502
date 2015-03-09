@@ -12,81 +12,88 @@ import de.codesourcery.j6502.utils.RingBuffer;
 public class IECBus
 {
 	public static final boolean CAPTURE_BUS_SNAPSHOTS = true;
-	
+
 	private final int MAX_CYCLES_TO_KEEP = 200;
 
 	public boolean DEBUG_VERBOSE = true;
 
 	protected boolean eoi;
-	
+
 	// current cycle count
 	protected long cycle;
-	
+
 	protected final String identifier;
-	
-	protected final BusMode CPU_TALKING = new BusMode("CPU_TALKING") 
+
+	protected final BusMode CPU_TALKING = new BusMode("CPU_TALKING")
 	{
-		public void onEnter() 
+		@Override
+		public void onEnter()
 		{
 			init();
 			setBusState( RECV_WAIT_FOR_ATN );
 		}
-		
+
+		@Override
 		public void onATN() {
 			// already covered by state machine
 		}
 	};
 
-	protected final BusMode DEVICE_TALKING = new BusMode("DEVICE_TALKING") 
+	protected final BusMode DEVICE_TALKING = new BusMode("DEVICE_TALKING")
 	{
-		public void onEnter() 
+		@Override
+		public void onEnter()
 		{
 			init();
 			setBusState( SEND_INIT );
 		}
-		
-		public void onATN() 
+
+		@Override
+		public void onATN()
 		{
 			// switch to listen mode
 			setBusMode( CPU_TALKING );
 		}
 	};
-	
+
 	// states used when writing to the bus
 	private BusState SEND_BETWEEN_BYTES;
-	private BusState SEND_FRAME_HANDSHAKE;		
-	private BusState SEND_DATA_VALID;	
+	private BusState SEND_FRAME_HANDSHAKE;
+	private BusState SEND_DATA_VALID;
 	private BusState SEND_SET_DATA_LINE;
 	private BusState SEND_FALLING_EDGE1;
 	private BusState SEND_RECV_EOI_ACK2;
 	private BusState SEND_RECV_EOI_ACK1;
-	private BusState SEND_TRANSMISSION_START;	
+	private BusState SEND_TRANSMISSION_START;
 	private BusState SEND_EOI;
 	private BusState SEND_INIT;
 	private BusState SEND_PREPARE_TRANSMISSION;
+
+	private BusState SEND_ACK_TALKING_DELAY;
+	private BusState SEND_ACK_TALKING;
 	
 	private BusState SEND_ATN;
-	private BusState SEND_WAIT_ATN_ACK;		
+	private BusState SEND_WAIT_ATN_ACK;
 
 	// states used when reading from the bus
-	protected final BusState RECV_ACK_FRAME;	
+	protected final BusState RECV_ACK_FRAME;
 	protected final BusState RECV_READ_BIT;
 	protected final BusState RECV_WAIT_FOR_VALID_DATA;
-	protected final BusState RECV_LISTENING;	
+	protected final BusState RECV_LISTENING;
 	protected final BusState RECV_ACK_ATN;
 	protected final BusState RECV_READY_FOR_DATA;
 	protected final BusState RECV_WAIT_FOR_ATN;
-	protected final BusState RECV_WAIT_FOR_TRANSMISSION;	
-	protected final BusState RECV_ACK_EOI;	
+	protected final BusState RECV_WAIT_FOR_TRANSMISSION;
+	protected final BusState RECV_ACK_EOI;
 
 	// helper vars used when timing bus cycles
 	protected long waitingStartedAtCycle;
-	protected long cyclesWaited;	
+	protected long cyclesWaited;
 
 	// buffer holding data to be sent
 	private final RingBuffer sendBuffer = new RingBuffer();
-	
-	// used to track whether the corresponding byte 
+
+	// used to track whether the corresponding byte
 	// in the send buffer is the next-to-last byte
 	// before an UNLISTEN or UNTALK byte
 	private final RingBuffer eoiBuffer = new RingBuffer();
@@ -97,20 +104,20 @@ public class IECBus
 	protected BusMode busMode = CPU_TALKING;
 
 	protected boolean sendATN = false;
-	
+
 	protected int bitsTransmitted = 0;
 	protected byte currentByte;
 
-	protected BusState previousBusState;	
+	protected BusState previousBusState;
 	protected BusState busState;
-	
-	/** 
+
+	/**
 	 * Bus lines going into the computer (devices -> CPU).
 	 * ATN line is ignored on this one.
 	 */
 	protected Wire inputWire;
-	
-	/** 
+
+	/**
 	 * Bus lines going out of the computer (CPU -> devices).
 	 */
 	protected Wire outputWire;
@@ -121,7 +128,7 @@ public class IECBus
 
 		public BusState(String name) { this.name=name; }
 
-		public final void tick() 
+		public final void tick()
 		{
 			long delta = Math.abs( cycle - waitingStartedAtCycle );
 			waitingStartedAtCycle = cycle;
@@ -133,7 +140,7 @@ public class IECBus
 
 		protected final void startWaiting() {
 			cyclesWaited = 0;
-			waitingStartedAtCycle = cycle;			
+			waitingStartedAtCycle = cycle;
 		}
 
 		public void onEnter() {
@@ -141,7 +148,7 @@ public class IECBus
 
 		@Override public String toString() { return name; }
 	}
-	
+
 	public static final class StateSnapshot
 	{
 		public final boolean eoi;
@@ -168,26 +175,26 @@ public class IECBus
 			this.dataIn = inputWire.getData();
 			this.busState = busState;
 		}
-	}	
+	}
 
-	protected abstract class BusMode 
+	protected abstract class BusMode
 	{
 		private final String identifier;
-		
+
 		public BusMode(String identifier) {
 			this.identifier = identifier;
 		}
 		public abstract void onEnter();
-		
-		public abstract void onATN(); 		
-		
-		protected final void init() 
+
+		public abstract void onATN();
+
+		protected final void init()
 		{
 			sendATN = false;
 			sendBuffer.reset();
 			eoiBuffer.reset();
 			bitsTransmitted = 0;
-			eoi = false;			
+			eoi = false;
 		}
 		@Override
 		public String toString() {
@@ -201,37 +208,37 @@ public class IECBus
 		protected boolean atn;
 		protected boolean clock;
 		protected boolean data;
-		
+
 		private boolean wireStateChanged;
-		
+
 		public Wire(String id) {
 			this.id = id;
 		}
-		
+
 		public void reset() {
 			atn = false;
 			clock = false;
 			data = false;
 		}
-		
-		public void setATN(boolean value) 
+
+		public void setATN(boolean value)
 		{
-			if ( CAPTURE_BUS_SNAPSHOTS ) 
+			if ( CAPTURE_BUS_SNAPSHOTS )
 			{
 				wireStateChanged |= (this.atn != value );
 			}
 			this.atn = value;
 		}
-		
+
 		public boolean wireStateChanged() {
 			boolean result = wireStateChanged;
 			wireStateChanged = false;
 			return result;
 		}
 
-		public void setState(boolean atn, boolean dataOut, boolean clkOut) 
+		public void setState(boolean atn, boolean dataOut, boolean clkOut)
 		{
-			if ( CAPTURE_BUS_SNAPSHOTS ) 
+			if ( CAPTURE_BUS_SNAPSHOTS )
 			{
 				wireStateChanged |= ( this.data != dataOut || this.clock != clkOut || this.atn != atn );
 			}
@@ -239,7 +246,7 @@ public class IECBus
 			this.data = dataOut;
 			this.clock = clkOut;
 		}
-		
+
 		public boolean getATN() {
 			return atn;
 		}
@@ -252,24 +259,24 @@ public class IECBus
 			return clock;
 		}
 
-		public void setData(boolean value) 
+		public void setData(boolean value)
 		{
-			if ( CAPTURE_BUS_SNAPSHOTS ) 
+			if ( CAPTURE_BUS_SNAPSHOTS )
 			{
 				wireStateChanged |= (this.data != value);
 			}
 			this.data = value;
 		}
 
-		public void setClock(boolean value) 
+		public void setClock(boolean value)
 		{
-			if ( CAPTURE_BUS_SNAPSHOTS ) 
+			if ( CAPTURE_BUS_SNAPSHOTS )
 			{
 				wireStateChanged |= this.clock != value;
 			}
 			this.clock = value;
 		}
-		
+
 		@Override
 		public String toString() {
 			return id+" => ATN: "+
@@ -278,7 +285,7 @@ public class IECBus
 					(getData() ? "1" : "0");
 		}
 	}
-	
+
 	/**
 	 * Returns the bus lines going from the CPU to the devices.
 	 * @return
@@ -286,46 +293,46 @@ public class IECBus
 	public Wire getOutputWire() {
 		return outputWire;
 	}
-	
-	/** 
+
+	/**
 	 * Sets the bus lines going out of the computer (CPU -> devices).
-	 */	
+	 */
 	public void setOutputWire(Wire outputWire) {
 		this.outputWire = outputWire;
 	}
-	
+
 	/**
 	 * Returns the bus lines going from devices to the CPU.
-	 * 
+	 *
 	 * @return
 	 */
 	public Wire getInputWire() {
 		return inputWire;
 	}
-	
-	/** 
+
+	/**
 	 * Sets the bus lines going into the computer (devices -> CPU).
 	 * ATN line is ignored on this one.
-	 */	
+	 */
 	public void setInputWire(Wire inputWire) {
 		this.inputWire = inputWire;
 	}
-	
+
 	public void addDevice(SerialDevice device) {
-		
+
 		if ( devices.stream().anyMatch( d -> d.getPrimaryAddress() == device.getPrimaryAddress() ) ) {
 			throw new IllegalArgumentException("A device with ID "+device.getPrimaryAddress()+" has already been registered");
 		}
 		devices.add( device );
 		device.onAttach( this );
 	}
-	
-	public Optional<SerialDevice> getDevice(int primaryAddress) 
+
+	public Optional<SerialDevice> getDevice(int primaryAddress)
 	{
 		return devices.stream().filter( d -> d.getPrimaryAddress() == primaryAddress ).findFirst();
 	}
-	
-	public void reset() 
+
+	public void reset()
 	{
 		setBusMode( CPU_TALKING );
 
@@ -354,7 +361,7 @@ public class IECBus
 	{
 		synchronized(states) {
 			final List<StateSnapshot> result = new ArrayList<>( this.states.size() );
-			if ( ! this.states.isEmpty() ) 
+			if ( ! this.states.isEmpty() )
 			{
 				long lastCycle = states.get(states.size()-1).cycle;
 				long cyclesToCover = 2*1000000; // 2 seconds = 2 mio. cycles
@@ -370,18 +377,18 @@ public class IECBus
 		}
 	}
 
-	private void setBusState(BusState newState) 
+	private void setBusState(BusState newState)
 	{
 		BusState oldState = this.busState;
-		if ( newState != oldState ) 
+		if ( newState != oldState )
 		{
 			previousBusState = this.busState;
 			this.busState = newState;
 			if ( DEBUG_VERBOSE ) {
-				final String s1 = StringUtils.rightPad( this.previousBusState.toString(),15);		
+				final String s1 = StringUtils.rightPad( this.previousBusState.toString(),15);
 				final String s2 = StringUtils.rightPad( this.busState.toString(),15);
 				System.out.println( cycle+": ["+s1+" -> "+s2+" ] : "+this);
-			}			
+			}
 		}
 	}
 
@@ -393,9 +400,9 @@ public class IECBus
 		public WaitForRisingEdge(String name) {
 			super(name);
 		}
-		
+
 		@Override
-		protected final void tickHook() 
+		protected final void tickHook()
 		{
 			if ( outputWire.getClock() == false ) {
 				startWatching = true;
@@ -404,7 +411,7 @@ public class IECBus
 			}
 		}
 
-		protected abstract void onRisingEdge();			
+		protected abstract void onRisingEdge();
 
 		@Override
 		public final void onEnter() {
@@ -440,7 +447,7 @@ public class IECBus
 		protected void tickHook2() {
 		}
 
-		protected abstract void onFallingEdge();			
+		protected abstract void onFallingEdge();
 
 		@Override
 		public final void onEnter() {
@@ -450,24 +457,24 @@ public class IECBus
 
 		protected void onEnterHook() {
 		}
-	}	
-	
+	}
+
 	public IECBus(String identifier)
 	{
 		this.identifier = identifier;
-		
+
 		/* =======================================
 		 * === Bus states used while a device  ===
 		 * === is transmitting data to the CPU ===
 		 * =======================================
 		 */
-		
+
 		SEND_BETWEEN_BYTES = new BusState("SEND_BETWEEN_BYTES") {
 
 			@Override
-			protected void tickHook() 
+			protected void tickHook()
 			{
-				if ( cyclesWaited >= 100 ) 
+				if ( cyclesWaited >= 100 )
 				{
 					if ( bitsTransmitted < 8 ) { // loop until 8 bits transmitted
 						setBusState( SEND_PREPARE_TRANSMISSION );
@@ -476,20 +483,20 @@ public class IECBus
 					}
 				}
 			}
-			
+
 			@Override
-			public void onEnter() 
+			public void onEnter()
 			{
 				inputWire.setData( false );
 				startWaiting();
 			}
 		};
-			
+
 		SEND_FRAME_HANDSHAKE = new BusState("SEND_FRAME_HANDSHAKE") {
 
-			private boolean startWatching = false; 
+			private boolean startWatching = false;
 			@Override
-			protected void tickHook() 
+			protected void tickHook()
 			{
 				if ( outputWire.getData() == false ) {
 					startWatching = true;
@@ -497,19 +504,19 @@ public class IECBus
 					setBusState( SEND_BETWEEN_BYTES );
 				}
 			}
-			
+
 			@Override
-			public void onEnter() 
+			public void onEnter()
 			{
 				inputWire.setClock( true );
 				startWatching = true;
 			}
 		};
-		
+
 		SEND_DATA_VALID = new BusState("SEND_TRANSMISSION_START") {
 
 			@Override
-			protected void tickHook() 
+			protected void tickHook()
 			{
 				if ( cyclesWaited >= 20 ) { // hold clock line true for 20us
 					if ( bitsTransmitted < 8 ) {
@@ -520,7 +527,7 @@ public class IECBus
 				}
 			}
 			@Override
-			public void onEnter() 
+			public void onEnter()
 			{
 				inputWire.setClock( false ); // rising edge signals listener that the data is now valid
 				startWaiting();
@@ -529,31 +536,31 @@ public class IECBus
 		SEND_SET_DATA_LINE = new BusState("SEND_TRANSMISSION_START") {
 
 			@Override
-			protected void tickHook() 
+			protected void tickHook()
 			{
-				if ( cyclesWaited >= 10 ) // wait 10us before raising clock (so total time clock==false is 20us)  
+				if ( cyclesWaited >= 10 ) // wait 10us before raising clock (so total time clock==false is 20us)
 				{
 					setBusState( SEND_DATA_VALID );
 				}
 			}
-			
+
 			@Override
-			public void onEnter() 
+			public void onEnter()
 			{
 				// put bit on data line
 				inputWire.setData( (currentByte & 1 ) != 0 );
-				currentByte = (byte) (currentByte >> 1);	
+				currentByte = (byte) (currentByte >> 1);
 				bitsTransmitted++;
 				startWaiting();
 			}
 		};
-		
+
 		SEND_FALLING_EDGE1 = new BusState("SEND_FALLING_EDGE1") {
 
 			@Override
-			protected void tickHook() 
+			protected void tickHook()
 			{
-				if ( cyclesWaited >= 10 ) { // wait 10us before putting bit on data line 
+				if ( cyclesWaited >= 10 ) { // wait 10us before putting bit on data line
 					setBusState( SEND_SET_DATA_LINE );
 				}
 			}
@@ -563,7 +570,7 @@ public class IECBus
 				startWaiting();
 			}
 		};
-		
+
 		SEND_TRANSMISSION_START = new BusState("SEND_TRANSMISSION_START") {
 
 			@Override
@@ -572,15 +579,15 @@ public class IECBus
 					setBusState(SEND_FALLING_EDGE1);
 				}
 			}
-			
+
 			@Override
 			public void onEnter() {
 //				inputWire.setClock( false ); // pull up clock line
 				startWaiting();
 			}
 		};
-		
-		SEND_RECV_EOI_ACK2 = new BusState("SEND_RECV_EOI_ACK2") 
+
+		SEND_RECV_EOI_ACK2 = new BusState("SEND_RECV_EOI_ACK2")
 		{
 			@Override
 			protected void tickHook() { // wait for falling edge of data line
@@ -588,12 +595,12 @@ public class IECBus
 					setBusState( SEND_TRANSMISSION_START );
 				}
 			}
-		};		
-		
+		};
+
 		SEND_RECV_EOI_ACK1 = new BusState("SEND_RECV_EOI_ACK1") {
 
 			private boolean startWatching;
-			
+
 			@Override
 			protected void tickHook() { // wait for rising edge of data line
 				if ( outputWire.getData() == true ) {
@@ -602,22 +609,23 @@ public class IECBus
 					setBusState( SEND_RECV_EOI_ACK2 );
 				}
 			}
-			
+
+			@Override
 			public void onEnter() {
 				startWatching = false;
 			}
 		};
-		
-		SEND_EOI = new BusState("SEND_EOI") 
+
+		SEND_EOI = new BusState("SEND_EOI")
 		{
 			@Override
-			protected void tickHook() 
+			protected void tickHook()
 			{
 				if ( cyclesWaited >= 250 ) { // wait more than 200us and then make sure the receiver acknowledged the EOI
 					setBusState( SEND_RECV_EOI_ACK1 );
 				}
 			}
-			
+
 			@Override
 			public void onEnter() {
 				eoi = false;
@@ -625,13 +633,13 @@ public class IECBus
 			}
 		};
 
-		
+
 		SEND_PREPARE_TRANSMISSION = new BusState("SEND_READY") {
 
 			private boolean startWatching;
-			
+
 			@Override
-			protected void tickHook() 
+			protected void tickHook()
 			{
 				if ( outputWire.getData() ) {
 					startWatching = true;
@@ -643,83 +651,112 @@ public class IECBus
 					}
 				}
 			}
-			
+
 			@Override
-			public void onEnter() 
+			public void onEnter()
 			{
 				if ( sendATN ) {
 					setBusState( SEND_ATN );
-				}				
+				}
 				// clock false -> true
 				inputWire.setClock( true ); // signal ready to send
 				startWatching = false;
 			}
 		};
-		
+
 		SEND_INIT = new BusState("SEND_INIT") {
 
 			@Override
-			protected void tickHook() 
+			protected void tickHook()
 			{
-				if ( ! sendBuffer.isEmpty() && cyclesWaited > 20 ) 
+				if ( ! sendBuffer.isEmpty() && cyclesWaited > 20 )
 				{
 					currentByte = sendBuffer.read();
-					if ( DEBUG_VERBOSE ) {
-						System.out.println("Sending byte: "+HexDump.toHex(currentByte));
-					}
 					eoi = ( eoiBuffer.read() != 0);
+					System.out.println("Sending byte: "+HexDump.toHex(currentByte)+" [EOI: "+eoi+"]");
 					bitsTransmitted = 0;
 					setBusState( SEND_PREPARE_TRANSMISSION );
 				}
 			}
-			
+
 			@Override
 			public void onEnter() {
 				inputWire.setData( false );
 				inputWire.setClock( false );
 				startWaiting();
-			}			
-		};		
+			}
+		};
 		
-		SEND_WAIT_ATN_ACK = new BusState("SEND_WAIT_ATN_ACK") {
+		SEND_ACK_TALKING_DELAY = new BusState("SEND_ACK_TALKING_DELAY") {
 
 			@Override
 			protected void tickHook() 
 			{
-				if ( cyclesWaited > 1000 ) { // waited too long => device not available
-					// TODO: Bus error
-				}
-				
-				if ( outputWire.getData() ) 
+				if ( cyclesWaited >= 60 ) 
 				{
 					setBusState( SEND_INIT );
 				}
 			}
+
+			@Override
+			public void onEnter() {
+				startWaiting();
+			}
+		};		
+		
+		SEND_ACK_TALKING = new WaitForFallingEdge("SEND_ACK_TALKING") {
+
+			@Override
+			protected void onFallingEdge() 
+			{
+				setBusState(SEND_ACK_TALKING_DELAY);
+			}
 			
+			@Override
+			public void onEnterHook() {
+				inputWire.setClock( true );
+			}
+		};
+
+		SEND_WAIT_ATN_ACK = new BusState("SEND_WAIT_ATN_ACK") {
+
+			@Override
+			protected void tickHook()
+			{
+				if ( cyclesWaited > 1000 ) { // waited too long => device not available
+					// TODO: Bus error
+				}
+
+				if ( outputWire.getData() )
+				{
+					setBusState( SEND_INIT );
+				}
+			}
+
 			@Override
 			public void onEnter() {
 				startWaiting();
 			}
 		};
-		
+
 		SEND_ATN = new BusState("SEND_ATN") {
 
 			@Override
-			protected void tickHook() 
+			protected void tickHook()
 			{
 				setBusState(SEND_WAIT_ATN_ACK);
 			}
-			
+
 			@Override
 			public void onEnter() {
 				sendATN = false;
 				inputWire.setATN(true);
 				inputWire.setData( false );
-				inputWire.setClock( false );				
+				inputWire.setClock( false );
 			}
 		};
-		
-		
+
+
 		/* =======================================
 		 * === Bus states used while receiving ===
 		 * === data transmitted by the CPU     ===
@@ -731,9 +768,9 @@ public class IECBus
 			protected void tickHook() {
 				if ( cyclesWaited >= 60 ) // hold line for 60us
 				{
-//					inputWire.setData( false ); 
+//					inputWire.setData( false );
 					setBusState( RECV_LISTENING );
-				}	
+				}
 			}
 
 			@Override
@@ -747,11 +784,11 @@ public class IECBus
 		RECV_READ_BIT = new WaitForRisingEdge("BIT")
 		{
 			@Override
-			protected void onRisingEdge() 
+			protected void onRisingEdge()
 			{
 				currentByte = (byte) (currentByte >>> 1);
 				final boolean dataOut = outputWire.getData();
-				if ( DEBUG_VERBOSE ) 
+				if ( DEBUG_VERBOSE )
 				{
 					System.out.println("GOT BIT no "+bitsTransmitted+": "+(dataOut ? "1" : "0" ) );
 				}
@@ -776,7 +813,7 @@ public class IECBus
 			@Override
 			protected void onFallingEdge() {
 				setBusState( RECV_READ_BIT );
-			}		
+			}
 		};
 
 		// acknowdlege EOI
@@ -788,7 +825,7 @@ public class IECBus
 					bitsTransmitted = 0;
 					inputWire.setData(false);
 					setBusState( RECV_READ_BIT );
-				} 
+				}
 			}
 
 			@Override
@@ -804,23 +841,23 @@ public class IECBus
 		RECV_WAIT_FOR_TRANSMISSION = new WaitForFallingEdge("WAIT_FOR_TRANSMISSION")
 		{
 			@Override
-			protected void onFallingEdge() 
+			protected void onFallingEdge()
 			{
 				if ( DEBUG_VERBOSE ) {
 					System.out.println(cycle+": Talker starting to send after "+cyclesWaited+" cycles.");
-				}									
+				}
 				bitsTransmitted = 0;
 				setBusState( RECV_READ_BIT );
 			}
 
 			@Override
-			protected void tickHook2() 
+			protected void tickHook2()
 			{
-				if ( cyclesWaited > 200 ) 
+				if ( cyclesWaited > 200 )
 				{
 					if ( DEBUG_VERBOSE ) {
 						System.out.println(cycle+": Waited "+cyclesWaited+" cycles => EOI");
-					}					
+					}
 					eoi = true;
 					setBusState( RECV_ACK_EOI );
 				}
@@ -834,7 +871,7 @@ public class IECBus
 				}
 				startWaiting();
 			}
-		};	
+		};
 
 		RECV_READY_FOR_DATA = new BusState("READY")
 		{
@@ -847,54 +884,54 @@ public class IECBus
 			public void onEnter() {
 				inputWire.setData(false); // tell talker we're ready for ata by releasing the data line then wait for rising clock
 			}
-		};		
+		};
 
 		RECV_LISTENING = new WaitForRisingEdge("LISTENING")// wait for clock going false -> true
 		{
 			@Override
 			protected void onRisingEdge() {
-				setBusState( RECV_READY_FOR_DATA );				
+				setBusState( RECV_READY_FOR_DATA );
 			}
 			@Override
 			public void onEnterHook() {
 				inputWire.setData( true );
 			}
-		};		
+		};
 
 		RECV_ACK_ATN = new BusState("ACK_ATN") {
 
 			@Override
-			protected void tickHook() 
+			protected void tickHook()
 			{
 				inputWire.setData( false );
 				setBusState(RECV_LISTENING);
 			}
 
 			@Override
-			public void onEnter() 
+			public void onEnter()
 			{
 				inputWire.setData(true);
 			}
-		};		
+		};
 
 		RECV_WAIT_FOR_ATN = new BusState("WAIT_ATN")
 		{
 			@Override
-			public void tickHook() 
+			public void tickHook()
 			{
 				if ( outputWire.getATN() ) {
 					setBusState( RECV_ACK_ATN );
-				} 
+				}
 			}
-		};		
+		};
 		this.previousBusState = this.busState = RECV_WAIT_FOR_ATN;
-		
+
 		 // Bus lines going into the computer (devices -> CPU).
 		 // ATN line is ignored on this one.
-		setInputWire( new Wire("devices->CPU") );	
-		
+		setInputWire( new Wire("devices->CPU") );
+
 		 // Bus lines going out of the computer (CPU -> devices).
-		setOutputWire( new Wire("CPU->devices") );		
+		setOutputWire( new Wire("CPU->devices") );
 	}
 
 	@Override
@@ -902,30 +939,34 @@ public class IECBus
 		return "[BUS: "+identifier+"] "+outputWire.toString()+" || "+inputWire.toString();
 	}
 
-	private void byteReceived(byte data) 
+	private void byteReceived(byte data)
 	{
-		System.out.println("BYTE RECEIVED: "+HexDump.toBinaryString( data )+" ( $"+HexDump.toHex( data ) +" )" );		
+		System.out.println("BYTE RECEIVED: "+HexDump.toBinaryString( data )+" ( $"+HexDump.toHex( data ) +" )" );
 		for ( SerialDevice device : devices ) {
-			device.receive( data );
+			device.receive( data , eoi );
 		}
 	}
 
-	public void send(byte data,boolean eoi,boolean sendATN) 
+	public void send(byte data,boolean eoi,boolean sendATN)
 	{
-		if ( this.busMode == CPU_TALKING ) 
+		if ( this.busMode == CPU_TALKING ) // switching CPU talking -> CPU listening, need to acknowledge that we're going to talk
 		{
-			setBusMode( DEVICE_TALKING );
-		}
-		// write to buffer AFTER switching bus mode since
-		// bus mode will clear all buffers
-		if ( sendATN ) {
+			setBusMode( DEVICE_TALKING ); // also does setBusMode(SEND_INIT)
+			if ( sendATN ) {
+				throw new RuntimeException("Switching CPU TALK -> LISTEN and requesting ATN not implemented yet");
+			} else {
+				setBusState( SEND_ACK_TALKING );				
+			}
+		} 
+		else if ( sendATN ) 
+		{
 			setBusState( SEND_ATN );
 		}
 		this.sendBuffer.write( data );
-		this.eoiBuffer.write( eoi ? (byte) 0xff : 00 ); 
+		this.eoiBuffer.write( eoi ? (byte) 0xff : 00 );			
 	}
 
-	protected void setBusMode(BusMode mode) 
+	protected void setBusMode(BusMode mode)
 	{
 		if ( this.busMode != mode ) {
 			if ( DEBUG_VERBOSE ) {
@@ -936,22 +977,22 @@ public class IECBus
 		}
 	}
 
-	public void tick() 
+	public void tick()
 	{
-		if ( CAPTURE_BUS_SNAPSHOTS ) 
+		if ( CAPTURE_BUS_SNAPSHOTS )
 		{
-			if ( inputWire.wireStateChanged() || outputWire.wireStateChanged() ) 
+			if ( inputWire.wireStateChanged() || outputWire.wireStateChanged() )
 			{
 				if ( DEBUG_VERBOSE ) {
-					final String s1 = StringUtils.rightPad( this.previousBusState.toString(),15);		
+					final String s1 = StringUtils.rightPad( this.previousBusState.toString(),15);
 					final String s2 = StringUtils.rightPad( this.busState.toString(),15);
 					System.out.println( cycle+": ["+s1+" -> "+s2+" ] : "+this);
 				}
 				takeSnapshot();
 			}
 		}
-		
-		if ( previousBusState != busState ) 
+
+		if ( previousBusState != busState )
 		{
 			previousBusState = busState;
 			busState.onEnter();
@@ -959,15 +1000,19 @@ public class IECBus
 			busState.tick();
 		}
 		devices.forEach( d -> d.tick() );
-		cycle++;		
+		cycle++;
 	}
-	
-	protected void onATN() // called when ATN line changes false -> true 
+
+	protected void onATN() // called when ATN line changes false -> true
 	{
 		busMode.onATN();
 	}
-	
+
 	public boolean isSendBufferEmpty() {
 		return sendBuffer.isEmpty();
+	}
+
+	public boolean isSendBufferFull() {
+		return sendBuffer.isFull();
 	}
 }

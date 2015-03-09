@@ -33,64 +33,64 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 {
 	protected static final Stroke DASHED_FAT = new BasicStroke(3, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{9}, 0);
 	protected static final Stroke DASHED_SLIM = new BasicStroke(1, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{9}, 0);
-	
+
 	private final int RIGHT_BORDER = 20; // right border in pixels
 	private final int RESERVED_WIDTH = 100; // reserved width left of chart in pixels
 
 	private final List<Lane> lanes = new ArrayList<>();
 
 	private Component peer;
-	
+
 	private DisplayRange displayRange = null;
-	
+
 	private List<StateSnapshot> states = new ArrayList<>();
 	private int firstSelectionX;
 	private int currentSelectionX=RESERVED_WIDTH;
 	private SelectionMode selectionMode = SelectionMode.NONE;
-	
+
 	protected Long cycleCountOverride;
 	protected Long firstCycleOffset;
 	private String title;
 
-	protected final class DisplayRange 
+	protected final class DisplayRange
 	{
 		public int firstState;
 		public int statesToDisplay;
-		
+
 		public DisplayRange(int firstState,int statesToDisplay) {
 			if ( firstState < 0 ) {
 				throw new IllegalArgumentException("First state must be >= 0");
 			}
 			if ( statesToDisplay < 1 ) {
 				throw new IllegalArgumentException("statesToDisplay must be >= 1");
-			}			
+			}
 			this.firstState = firstState;
 			this.statesToDisplay = statesToDisplay;
 		}
-		
+
 		public void zoomOut() {
 			statesToDisplay++;
 		}
-		
-		public void zoomIn() 
+
+		public void zoomIn()
 		{
 			if ( statesToDisplay > 1 ) {
 				statesToDisplay--;
 			}
 		}
-		
-		public void rollLeft() 
+
+		public void rollLeft()
 		{
 			if ( firstState > 0 ) {
 				firstState--;
 			}
 		}
-		
+
 		public void rollRight() {
 			firstState++;
-		}		
+		}
 	}
-	
+
 	protected static abstract class Lane
 	{
 		private final String title;
@@ -168,7 +168,7 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 				if (  stateNow != stateBefore  ) {
 					final int previousY = stateBefore ? hiLevelY : loLevelY;
 					g.drawLine( x , previousY , x , yNow );
-				} 
+				}
 				final int yPrevious = stateBefore ? hiLevelY : loLevelY;
 				long cycleDelta = Math.abs( state.cycle - previousState.cycle );
 				g.drawLine( (int) (x - cycleDelta*cycleWidthInPixels) , yPrevious , x , yPrevious );
@@ -176,16 +176,16 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 			g.setColor( oldColor );
 		}
 	}
-	
+
 	protected static enum SelectionMode {
 		MIN,MAX,NONE;
-	}	
-	
+	}
+
 	public BusPanel(String title)
 	{
 		this.title = title;
-		
-		lanes.add( new Lane("EOI") { @Override protected boolean getState(StateSnapshot state) { return state.eoi; } });			
+
+		lanes.add( new Lane("EOI") { @Override protected boolean getState(StateSnapshot state) { return state.eoi; } });
 		lanes.add( new Lane("ATN") { @Override protected boolean getState(StateSnapshot state) { return state.atn; } });
 		lanes.add( new Lane("CLK_IN") { @Override protected boolean getState(StateSnapshot state) { return state.clkIn; } });
 		lanes.add( new Lane("DATA_IN") { @Override protected boolean getState(StateSnapshot state) { return state.dataIn; } });
@@ -194,7 +194,7 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 		setMinimumSize( new Dimension(RESERVED_WIDTH+100*3 , 6*30 ) );
 		setFocusable(true);
 		setRequestFocusEnabled( true );
-		
+
 		onKey( KeyStroke.getKeyStroke( 'z') , () -> {
 			String result = JOptionPane.showInputDialog("Number of cycles to display", "0" );
 			try {
@@ -206,9 +206,9 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 			} catch(Exception ex) {
 				cycleCountOverride = null;
 			}
-			repaint();	
-		});		
-		
+			repaint();
+		});
+
 		onKey( KeyStroke.getKeyStroke( 'a') , () -> {
 			String result = JOptionPane.showInputDialog("Enter cycle", "0" );
 			try {
@@ -220,56 +220,72 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 			} catch(Exception ex) {
 				firstCycleOffset = null;
 			}
-			repaint();	
+			repaint();
 		});
-		
+
 		onKey( KeyStroke.getKeyStroke( '+') , () -> {
 			maybeCreateDisplayRange();
-			if ( displayRange != null ) { 
+			if ( displayRange != null ) {
 				displayRange.zoomOut();
 			}
-			repaint();	
+			repaint();
 		});
-		
+
 		onKey( KeyStroke.getKeyStroke( '-') , () -> {
 			maybeCreateDisplayRange();
-			if ( displayRange != null ) { 
+			if ( displayRange != null ) {
 				displayRange.zoomIn();
 			}
-			repaint();	
+			repaint();
+		});
+		
+		onKey( KeyStroke.getKeyStroke( 'n') , () -> {
+			maybeCreateDisplayRange();
+			if ( displayRange != null ) {
+				displayRange.rollRight();
+			}
+			repaint();
 		});		
 		
-		
-		addKeyListener( new KeyAdapter() 
+		onKey( KeyStroke.getKeyStroke( 'p') , () -> {
+			maybeCreateDisplayRange();
+			if ( displayRange != null ) {
+				displayRange.rollLeft();
+			}
+			repaint();
+		});			
+
+
+		addKeyListener( new KeyAdapter()
 		{
 			@Override
-			public void keyReleased(KeyEvent e) 
+			public void keyReleased(KeyEvent e)
 			{
-				if ( e.getKeyCode() == KeyEvent.VK_ESCAPE ) 
+				if ( e.getKeyCode() == KeyEvent.VK_ESCAPE )
 				{
 					displayRange = null;
-				} 
-				else if ( e.getKeyCode() == KeyEvent.VK_LEFT ) 
+				}
+				else if ( e.getKeyCode() == KeyEvent.VK_LEFT )
 				{
 					maybeCreateDisplayRange();
-					if ( displayRange != null ) { 
+					if ( displayRange != null ) {
 						displayRange.rollLeft();
 					}
 					repaint();
 				} else if ( e.getKeyCode() == KeyEvent.VK_RIGHT ) {
 					maybeCreateDisplayRange();
-					if ( displayRange != null ) { 
+					if ( displayRange != null ) {
 						displayRange.rollRight();
 					}
 					repaint();
 				}
 			}
-			
+
 		});
-		addMouseListener( new MouseAdapter() 
+		addMouseListener( new MouseAdapter()
 		{
 			@Override
-			public void mouseClicked(MouseEvent e) 
+			public void mouseClicked(MouseEvent e)
 			{
 				if ( e.getButton() == MouseEvent.BUTTON3 ) {
 					if ( selectionMode == SelectionMode.NONE ) {
@@ -278,8 +294,8 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 					selectionMode = SelectionMode.NONE;
 					repaint();
 				}
-				
-				if ( e.getButton() == MouseEvent.BUTTON1 ) 
+
+				if ( e.getButton() == MouseEvent.BUTTON1 )
 				{
 				 if ( selectionMode == SelectionMode.NONE) {
 					selectionMode = SelectionMode.MIN;
@@ -288,8 +304,8 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 					 selectionMode = SelectionMode.MAX;
 					 currentSelectionX = e.getX();
 					 repaint();
-				 } 
-				 else if ( selectionMode == SelectionMode.MAX ) 
+				 }
+				 else if ( selectionMode == SelectionMode.MAX )
 				 {
 					 selectionMode = SelectionMode.NONE;
 					 int first = firstSelectionX-RESERVED_WIDTH;
@@ -305,40 +321,40 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 			}
 		});
 		addMouseMotionListener( new MouseMotionListener() {
-			
+
 			@Override
-			public void mouseMoved(MouseEvent e) 
+			public void mouseMoved(MouseEvent e)
 			{
-				if ( selectionMode != SelectionMode.NONE ) 
+				if ( selectionMode != SelectionMode.NONE )
 				{
 					final int mouseX = e.getX();
-					if ( mouseX >= RESERVED_WIDTH && mouseX <= (getWidth()-RIGHT_BORDER ) ) 
+					if ( mouseX >= RESERVED_WIDTH && mouseX <= (getWidth()-RIGHT_BORDER ) )
 					{
 						currentSelectionX = mouseX;
 					}
 					repaint();
 				}
 			}
-			
+
 			@Override
 			public void mouseDragged(MouseEvent e) { }
 		});
 	}
-	
+
 	protected void maybeCreateDisplayRange() {
-		if ( displayRange == null && ! states.isEmpty() ) 
+		if ( displayRange == null && ! states.isEmpty() )
 		{
 			displayRange = new DisplayRange(0,states.size());
 		}
 	}
-	
+
 	protected static final AtomicLong KEY_ID = new AtomicLong(1);
-	
-	private void onKey(KeyStroke key,Runnable action) 
+
+	private void onKey(KeyStroke key,Runnable action)
 	{
-		final String text = KEY_ID.incrementAndGet()+""; 
+		final String text = KEY_ID.incrementAndGet()+"";
 		getInputMap(JComponent.WHEN_FOCUSED).put(key, text );
-		
+
 		AbstractAction aa = new AbstractAction() {
 
 			@Override
@@ -358,27 +374,27 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 	public Component getLocationPeer() {
 		return peer;
 	}
-	
+
 	@Override
 	protected void paintComponent(Graphics graphics)
 	{
 		// clear screen
 		final Graphics2D g = (Graphics2D) graphics;
 		super.paintComponent(g);
-		
+
 		final int w = getWidth();
 		final int h = getHeight();
-		
-		// calculate width of display area 
+
+		// calculate width of display area
 		final int remainingWidth = w - RESERVED_WIDTH - RIGHT_BORDER;
-		
+
 		// get state snapshots from bus
 		states = getBusSnapshots();
 
-		// trim down the list of bus state objects to those that fall within the 
+		// trim down the list of bus state objects to those that fall within the
 		// firstCycle/lastCycle range
 
-		final List<StateSnapshot> statesInRange = new ArrayList<>( states.size() );			
+		final List<StateSnapshot> statesInRange = new ArrayList<>( states.size() );
 
 		for (int i = 0; i < states.size(); i++) {
 			StateSnapshot s = states.get(i);
@@ -388,26 +404,27 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 				statesInRange.add( s );
 			}
 		}
-		
+
 		final StateSnapshot firstSnapshot = statesInRange.isEmpty() ? null : statesInRange.get(0);
 		final StateSnapshot lastSnapshot = statesInRange.isEmpty() ? null : statesInRange.get( statesInRange.size()-1 );
 
 		final long firstCycle = firstSnapshot != null ? firstSnapshot.cycle : 0;
 		final long lastCycle = lastSnapshot != null ? lastSnapshot.cycle : 0;
-		
+
 		final long cycleDelta = Math.max( lastCycle - firstCycle , 1 );
-		
-		// calculate width/length in pixels for an individual cycle 
-		final double cycleWidth;
+
+		// calculate width/length in pixels for an individual cycle
+		double cycleWidth;
 		if ( cycleCountOverride != null ) {
 			cycleWidth = remainingWidth/ (double) cycleCountOverride;
 		} else {
 			cycleWidth = remainingWidth/ (double) cycleDelta;
 		}
+		cycleWidth = Math.max( cycleWidth , 0.00001);
 		// render vertical lines every 100 cycles
 		g.setColor(Color.GRAY);
 //		g.setStroke( DASHED_SLIM );
-		
+
 		final long delta;
 		if ( firstCycleOffset != null && firstSnapshot != null ) {
 			delta = firstCycleOffset- firstSnapshot.cycle;
@@ -421,14 +438,14 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 			currentCycle += 100;
 			x += (100*cycleWidth);
 		}
-		
+
 		// render title
 		final double timeInSeconds = cycleDelta*1/1000000f;
 		g.setColor(Color.RED);
 		final DecimalFormat DF = new DecimalFormat("##0.0######");
 		final String titleString = title+": "+DF.format(timeInSeconds)+"s ("+cycleDelta+" cycles ("+statesInRange.size()+" out of "+states.size()+" states) , first: "+firstCycle+" , last: "+lastCycle+")";
 		Rectangle2D stringBounds = g.getFontMetrics().getStringBounds( titleString , g );
-		g.drawString( titleString , (int) ( w/2- stringBounds.getWidth()/2) , 10 );			
+		g.drawString( titleString , (int) ( w/2- stringBounds.getWidth()/2) , 10 );
 
 		// render lanes plus some free space below the last one
 		// so we can output the state names there
@@ -445,12 +462,12 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 		// we'll stagger the state names so they don't overlap
 		// too easily
 		int stateLineIdx = 0;
-		final int[] stateLineOffset = new int[] { 
-				stateLineY , 
-				stateLineY + 13 , 
+		final int[] stateLineOffset = new int[] {
+				stateLineY ,
+				stateLineY + 13 ,
 				stateLineY + 26 ,
 				stateLineY + 39 ,
-				stateLineY + 52 					
+				stateLineY + 52
 		};
 
 		StateSnapshot previousState = null;
@@ -480,8 +497,8 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 			}
 			previousState=currentState;
 		}
-		
-		switch( selectionMode ) 
+
+		switch( selectionMode )
 		{
 			case MIN:
 				g.setColor(Color.RED);
@@ -501,6 +518,6 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 			default:
 		}
 	}
-	
+
 	protected abstract List<StateSnapshot> getBusSnapshots();
 }

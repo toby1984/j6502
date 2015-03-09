@@ -28,6 +28,26 @@ public class CharsetConverter
 		}
 	}
 
+	/**
+	 * Converts PET ASCII into a string,replacing unprintable characters with '?'.
+	 *
+	 * @param data
+	 * @return
+	 */
+	public static String petToString(byte[] data,int offset,int len)
+	{
+		StringBuilder buffer = new StringBuilder();
+		for ( int i = 0 ; i < len ; i++ ) {
+			char c = petToASCII( data[ offset + i] );
+			if ( c >= 9 ) {
+				buffer.append( c );
+			} else {
+				buffer.append("?");
+			}
+		}
+		return buffer.toString();
+	}
+
 	public static byte asciiToPET(char value) {
 		return asciiToPET.get( value );
 	}
