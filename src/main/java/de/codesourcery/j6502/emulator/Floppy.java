@@ -70,11 +70,20 @@ public final class Floppy extends SerialDevice
 			if ( media == null ) {
 				throw new IllegalStateException("getInputStream() called although no media present ?");
 			}
-			
-			if ( name.length == 1 && name[0] == 0x24 ) {
+
+			if ( isDirectory() ) {
 				return media.createDirectoryInputStream();
 			}
 			return media.getDirectoryEntry( name ).orElseThrow( () -> new RuntimeException("File not found: "+this)).createInputStream();
+		}
+
+		private boolean isDirectory() {
+			return name.length == 1 && name[0] == 0x24;
+		}
+
+		@Override
+		public String toString() {
+			return "'"+CharsetConverter.petToString( this.name , 0 , this.name.length )+"'";
 		}
 	}
 
@@ -105,16 +114,16 @@ public final class Floppy extends SerialDevice
 			cyclesWaited = 0;
 		}
 
-		public final void tick(IECBus bus) 
-		{ 
+		public final void tick(IECBus bus)
+		{
 			final long delta = Math.abs( cycle - waitingStartedAtCycle );
 			cyclesWaited += delta;
 			waitingStartedAtCycle = cycle;
 			tickHook(bus);
 		}
-		
+
 		protected void tickHook(IECBus bus) {
-			
+
 		}
 
 		@Override
@@ -154,7 +163,7 @@ public final class Floppy extends SerialDevice
 				in = fileDesc.getInputStream();
 			}
 
-			final int bytesToRead = Math.min( tmp.length , sendBuffer.getRemainingBytesFree() );
+			final int bytesToRead = Math.min( tmpBuffer.getRemainingBytesFree() , Math.min( tmp.length , sendBuffer.getRemainingBytesFree() ) );
 			final int bytesRead = in.read( tmp , 0 , bytesToRead);
 			if ( bytesRead <= 0 ) {
 				IOUtils.closeQuietly( in );
@@ -209,7 +218,7 @@ public final class Floppy extends SerialDevice
 	public Floppy(int deviceAddress)
 	{
 		super(deviceAddress);
-		
+
 		try {
 			this.media = new D64File( "test.d64" );
 		} catch (IOException e) {
@@ -225,7 +234,7 @@ public final class Floppy extends SerialDevice
 				{
 					if ( DEBUG_VERBOSE ) {
 						System.out.println( "["+floppyState+"]: Sending UNTALK");
-					}					
+					}
 					getBus().send( (byte) 0x5f , false , false ); // UNTALK
 					setState( WAITING_FOR_CMD );
 				}
@@ -246,7 +255,7 @@ public final class Floppy extends SerialDevice
 			{
 				activeTransfer.onTick( bus ); // will advance state to SEND_UNTALK when all bytes have been queued to the buses sendBuffer
 			}
-			
+
 			@Override
 			public void onEnter() {
 

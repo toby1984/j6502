@@ -69,13 +69,13 @@ public class IECBus
 	private BusState SEND_INIT;
 	private BusState SEND_PREPARE_TRANSMISSION;
 
-	private BusState SEND_ACK_TALKING_DELAY;
-	private BusState SEND_ACK_TALKING;
-	
 	private BusState SEND_ATN;
 	private BusState SEND_WAIT_ATN_ACK;
 
 	// states used when reading from the bus
+	protected final BusState RECV_WAIT_BUS_TURN_AROUND;
+	protected final BusState RECV_ACK_BUS_TURN_AROUND2;
+	protected final BusState RECV_ACK_BUS_TURN_AROUND1;
 	protected final BusState RECV_ACK_FRAME;
 	protected final BusState RECV_READ_BIT;
 	protected final BusState RECV_WAIT_FOR_VALID_DATA;
@@ -89,6 +89,10 @@ public class IECBus
 	// helper vars used when timing bus cycles
 	protected long waitingStartedAtCycle;
 	protected long cyclesWaited;
+
+	// used to keep track of whether the current talker wants to
+	// switch roles / wants us to talk and be a listener
+	protected boolean talkReceived = false;
 
 	// buffer holding data to be sent
 	private final RingBuffer sendBuffer = new RingBuffer();
@@ -195,6 +199,7 @@ public class IECBus
 			eoiBuffer.reset();
 			bitsTransmitted = 0;
 			eoi = false;
+			talkReceived = false;
 		}
 		@Override
 		public String toString() {
@@ -341,10 +346,12 @@ public class IECBus
 
 		devices.forEach( device -> device.reset() );
 
-		bitsTransmitted = 0;
 		states.clear();
-		cycle = 0;
 		outputWire.reset();
+
+		cycle = 0;
+		bitsTransmitted = 0;
+		talkReceived = false;
 	}
 
 	private void takeSnapshot()
@@ -633,7 +640,6 @@ public class IECBus
 			}
 		};
 
-
 		SEND_PREPARE_TRANSMISSION = new BusState("SEND_READY") {
 
 			private boolean startWatching;
@@ -686,37 +692,6 @@ public class IECBus
 				startWaiting();
 			}
 		};
-		
-		SEND_ACK_TALKING_DELAY = new BusState("SEND_ACK_TALKING_DELAY") {
-
-			@Override
-			protected void tickHook() 
-			{
-				if ( cyclesWaited >= 60 ) 
-				{
-					setBusState( SEND_INIT );
-				}
-			}
-
-			@Override
-			public void onEnter() {
-				startWaiting();
-			}
-		};		
-		
-		SEND_ACK_TALKING = new WaitForFallingEdge("SEND_ACK_TALKING") {
-
-			@Override
-			protected void onFallingEdge() 
-			{
-				setBusState(SEND_ACK_TALKING_DELAY);
-			}
-			
-			@Override
-			public void onEnterHook() {
-				inputWire.setClock( true );
-			}
-		};
 
 		SEND_WAIT_ATN_ACK = new BusState("SEND_WAIT_ATN_ACK") {
 
@@ -762,13 +737,100 @@ public class IECBus
 		 * === data transmitted by the CPU     ===
 		 * =======================================
 		 */
-		RECV_ACK_FRAME = new BusState("ACK_FRAME")
+		RECV_ACK_BUS_TURN_AROUND2 = new BusState("RECV_ACK_BUS_TURN_AROUND2")
 		{
 			@Override
 			protected void tickHook() {
+				if ( cyclesWaited >= 160 )
+				{
+					System.out.println(cycle+"IEC Bus turneded around, CPU ready to listen");
+					setBusMode( DEVICE_TALKING );
+
+					// bus turn around happens after a frame has been ack'ed ,
+					// to prevent the data receiver from starting to send pre-maturely I
+					// delayed the call to byteReceived() up to this point
+					// (see RECV_ACK_FRAME)
+					byteReceived( currentByte );
+				}
+			}
+
+			@Override
+			public void onEnter() {
+				inputWire.setClock( true );
+				startWaiting();
+			}
+		};
+
+		RECV_ACK_BUS_TURN_AROUND1 = new BusState("RECV_ACK_BUS_TURN_AROUND1")
+		{
+			@Override
+			protected void tickHook() {
+				if ( cyclesWaited >= 20 )
+				{
+					setBusState( RECV_ACK_BUS_TURN_AROUND2 );
+				}
+			}
+
+			@Override
+			public void onEnter() {
+				inputWire.setData( true );
+				startWaiting();
+			}
+		};
+
+		RECV_WAIT_BUS_TURN_AROUND = new BusState("WAIT_BUS_TURN_AROUND")
+		{
+			@Override
+			protected void tickHook()
+			{
+				// wait for clock to become FALSE, data to become TRUE within 20...100us
+				// this is the indicator that the current talker (=CPU) has now switched to LISTEN mode
+				if ( cyclesWaited > 20 ) {
+					if ( cyclesWaited > 100 )
+					{
+						System.out.println("No IEC bus turn-around within 100us");
+						setBusState( RECV_LISTENING );
+						return;
+					}
+					if ( outputWire.getClock() && outputWire.getData() == false ) { // talker wants to switch to listening, ack this by lowering clock again for 80us
+						setBusState( RECV_ACK_BUS_TURN_AROUND1 );
+					}
+				}
+			}
+			@Override
+			public void onEnter() {
+				startWaiting();
+				inputWire.setClock( true );
+				inputWire.setData( false );
+			}
+		};
+
+		RECV_ACK_FRAME = new BusState("ACK_FRAME")
+		{
+			private boolean startWatching;
+
+			@Override
+			protected void tickHook()
+			{
+				if ( outputWire.getATN() ) {
+					startWatching=true;
+				}
+				else if ( startWatching && ! outputWire.getATN() )
+				{
+					if ( DEBUG_VERBOSE) {
+						System.out.println( cycle+": ATN released after "+cyclesWaited+" cycles ");
+					}
+					if ( talkReceived )
+					{
+						// wait for clock to become FALSE, data to become TRUE within 20...100us
+						// this is the indicator that the current talker (=CPU) has now switched to LISTEN mode
+						setBusState( RECV_WAIT_BUS_TURN_AROUND );
+						return;
+					}
+				}
 				if ( cyclesWaited >= 60 ) // hold line for 60us
 				{
-//					inputWire.setData( false );
+					byteReceived( currentByte );
 					setBusState( RECV_LISTENING );
 				}
 			}
@@ -777,6 +839,7 @@ public class IECBus
 			public void onEnter() {
 				inputWire.setData( true );
 				startWaiting();
+				startWatching = false;
 			}
 		};
 
@@ -799,7 +862,6 @@ public class IECBus
 				}
 				bitsTransmitted++;
 				if ( bitsTransmitted == 8 ) {
-					byteReceived( currentByte );
 					setBusState( RECV_ACK_FRAME );
 				} else {
 					setBusState( RECV_WAIT_FOR_VALID_DATA );
@@ -893,7 +955,8 @@ public class IECBus
 				setBusState( RECV_READY_FOR_DATA );
 			}
 			@Override
-			public void onEnterHook() {
+			public void onEnterHook()
+			{
 				inputWire.setData( true );
 			}
 		};
@@ -941,6 +1004,26 @@ public class IECBus
 
 	private void byteReceived(byte data)
 	{
+		if ( outputWire.getATN() )
+		{
+			// keep track of whether the sender (CPU)
+			// wants us to start talking , needed so that
+			// we can properly detect when the CPU is asking for
+			// a bus turn-around after an FRAME ACK.
+			if ( ( data   & 0xff) == 0x5f ) { // UNTALK
+				talkReceived = false;
+			}
+			if ( ( data   & 0xff) == 0x3f ) { // UNLISTEN
+				talkReceived = false;
+			}
+			if ( ( data & 0b1111_0000) == 0x20 ) { // LISTEN
+				talkReceived = false;
+			}
+			if ( ( data   & 0b1110_0000) == 0x40 ) { // TALK
+				talkReceived = true;
+			}
+		}
+
 		System.out.println("BYTE RECEIVED: "+HexDump.toBinaryString( data )+" ( $"+HexDump.toHex( data ) +" )" );
 		for ( SerialDevice device : devices ) {
 			device.receive( data , eoi );
@@ -949,21 +1032,30 @@ public class IECBus
 
 	public void send(byte data,boolean eoi,boolean sendATN)
 	{
-		if ( this.busMode == CPU_TALKING ) // switching CPU talking -> CPU listening, need to acknowledge that we're going to talk
+		if ( ! isBusReadyToSend() )
 		{
-			setBusMode( DEVICE_TALKING ); // also does setBusMode(SEND_INIT)
-			if ( sendATN ) {
-				throw new RuntimeException("Switching CPU TALK -> LISTEN and requesting ATN not implemented yet");
-			} else {
-				setBusState( SEND_ACK_TALKING );				
-			}
-		} 
-		else if ( sendATN ) 
+			throw new IllegalStateException("Cannot send data , bus not turned around yet");
+//			setBusMode( DEVICE_TALKING ); // also does setBusMode(SEND_INIT)
+//			if ( sendATN ) {
+//				throw new RuntimeException("Switching CPU TALK -> LISTEN and requesting ATN not implemented yet");
+//			}
+//			// TODO: Assumption here is that the CPU already asked for an ACK
+//			// TODO: that we're now the talker ... how can I guarantee that the
+//			// TODO: CPU has asked for acknowledgement ???
+//			setBusState( SEND_ACK_TALKING );
+		}
+
+		if ( sendATN )
 		{
 			setBusState( SEND_ATN );
 		}
 		this.sendBuffer.write( data );
-		this.eoiBuffer.write( eoi ? (byte) 0xff : 00 );			
+		this.eoiBuffer.write( eoi ? (byte) 0xff : 00 );
+	}
+
+	public boolean isBusReadyToSend()
+	{
+		return this.busMode == DEVICE_TALKING;
 	}
 
 	protected void setBusMode(BusMode mode)
