@@ -1,0 +1,96 @@
+.,EE13 78       SEI             disable the interrupts
+.,EE14 A9 00    LDA #$00        set 0 bits to do, will flag EOI on timeour
+.,EE16 85 A5    STA $A5         save the serial bus bit count
+.,EE18 20 85 EE JSR $EE85       CLK_IN = 0       ; set the serial clock out high
+.,EE1B 20 A9 EE JSR $EEA9                          get the serial data status in Cb
+.,EE1E 10 FB    BPL $EE1B       WHILE CLK_IN == 0  ; loop if the serial clock is low
+
+; ===============
+; setup EOI timer
+; ===============
+.,EE20 A9 01    LDA #$01        set the timeout count high byte
+.,EE22 8D 07 DC STA $DC07       save VIA 1 timer B high byte
+.,EE25 A9 19    LDA #$19        load timer B, timer B single shot, start timer B
+.,EE27 8D 0F DC STA $DC0F       save VIA 1 CRB
+
+.,EE2A 20 97 EE JSR $EE97       DATA_IN = 0              ;set the serial data out high
+
+; ===========================================
+; wait for CLK_IN == 0 while checking EOI timeout
+; ===========================================
+.,EE2D AD 0D DC LDA $DC0D       read VIA 1 ICR
+.,EE30 AD 0D DC LDA $DC0D       read VIA 1 ICR
+.,EE33 29 02    AND #$02        mask 0000 00x0, timer A interrupt
+.,EE35 D0 07    BNE $EE3E       if timer A interrupt go ??
+.,EE37 20 A9 EE JSR $EEA9                           get the serial data status in Cb
+.,EE3A 30 F4    BMI $EE30       WHILE CLK_IN == 1 ; loop if the serial clock is low
+.,EE3C 10 18    BPL $EE56       ==> CLK_IN = 0 ; else go set 8 bits to do, branch always
+
+; ================
+; timer A timed out => EOI
+; ================
+.,EE3E A5 A5    LDA $A5         get the serial bus bit count
+.,EE40 F0 05    BEQ $EE47       if not already EOI then go flag EOI
+.,EE42 A9 02    LDA #$02        else error $02, read timeour
+.,EE44 4C B2 ED JMP $EDB2       set the serial status and exit
+
+; ================
+; respond to EOI
+; ================
+.,EE47 20 A0 EE JSR $EEA0       DATA_IN = 1 ;   set the serial data out low
+.,EE4A 20 85 EE JSR $EE85       CLK_IN  = 0 ; set the serial clock out high
+.,EE4D A9 40    LDA #$40        set EOI
+.,EE4F 20 1C FE JSR $FE1C       OR into the serial status byte
+.,EE52 E6 A5    INC $A5         increment the serial bus bit count, do error on the next timeout
+.,EE54 D0 CA    BNE $EE20       go try again, branch always
+
+; ===========
+; read 8 bits
+; ===========
+.,EE56 A9 08    LDA #$08        set 8 bits to do
+.,EE58 85 A5    STA $A5         save the serial bus bit count
+
+; ====================
+; wait for CLK_IN == 1
+; ====================
+.,EE5A AD 00 DD LDA $DD00       read VIA 2 DRA, serial port and video address
+.,EE5D CD 00 DD CMP $DD00       compare it with itself
+.,EE60 D0 F8    BNE $EE5A       if changing go try again
+.,EE62 0A       ASL             shift the serial data into the carry
+.,EE63 10 F5    BPL $EE5A       WHILE CLK_IN = 0 ; loop while the serial clock is low
+
+; ================
+; CLK_IN == 1 => Data bit valid
+; ================
+.,EE65 66 A4    ROR $A4         shift the data bit into the receive byte
+
+; ===================
+; Wait for CLK_IN = 0
+; ===================
+.,EE67 AD 00 DD LDA $DD00       read VIA 2 DRA, serial port and video address
+.,EE6A CD 00 DD CMP $DD00       compare it with itself
+.,EE6D D0 F8    BNE $EE67       if changing go try again
+.,EE6F 0A       ASL             shift the serial data into the carry
+.,EE70 30 F5    BMI $EE67       WHILE CLK_IN==1 ; loop while the serial clock is high
+
+.,EE72 C6 A5    DEC $A5         decrement the serial bus bit count
+.,EE74 D0 E4    BNE $EE5A       loop if not all done
+
+; ====================
+; 8 bits done, send FRAME ACK
+; ====================
+.,EE76 20 A0 EE JSR $EEA0       DATA_IN = 1     ; set the serial data out low
+.,EE79 24 90    BIT $90         test the serial status byte
+.,EE7B 50 03    BVC $EE80       if EOI not set skip the bus end sequence
+
+; ============
+; EOI sequence
+; ============
+.,EE7D 20 06 EE JSR $EE06       1ms delay, clock high then data high
+; =========================
+; finished receiving 1 byte
+; =========================
+.,EE80 A5 A4    LDA $A4         get the received byte
+.,EE82 58       CLI             enable the interrupts
+.,EE83 18       CLC             flag ok
+.,EE84 60       RTS

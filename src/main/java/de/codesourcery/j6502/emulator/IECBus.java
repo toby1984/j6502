@@ -589,7 +589,6 @@ public class IECBus
 
 			@Override
 			public void onEnter() {
-//				inputWire.setClock( false ); // pull up clock line
 				startWaiting();
 			}
 		};
@@ -647,9 +646,12 @@ public class IECBus
 			@Override
 			protected void tickHook()
 			{
-				if ( outputWire.getData() ) {
+				if ( inputWire.getClock() ) 
+				{
 					startWatching = true;
-				} else if ( startWatching && ! outputWire.getData() ) { // falling edge detected, listener ready to receive
+				} 
+				else if ( startWatching && ! inputWire.getClock() ) 
+				{ // falling edge detected, listener ready to receive
 					if ( eoi ) {
 						setBusState( SEND_EOI );
 					} else {
@@ -687,8 +689,6 @@ public class IECBus
 
 			@Override
 			public void onEnter() {
-				inputWire.setData( false );
-				inputWire.setClock( false );
 				startWaiting();
 			}
 		};

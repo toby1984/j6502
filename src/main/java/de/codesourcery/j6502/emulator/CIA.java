@@ -223,9 +223,10 @@ PRB 	Data Port B 	Bit 0..7: userport Data PB 0-7 (Pins C,D,E,F,H,J,K,L)
 
 $DD02 	56578 	2
 DDRA 	Data direction
-Port A 	see CIA 1
+        Port A 	see CIA 1
+
 $DD03 	56579 	3
-DDRB 	Data direction
+        DDRB 	Data direction
 Port B 	see CIA 1
 $DD04 	56580 	4
 TA LO 	Timer A

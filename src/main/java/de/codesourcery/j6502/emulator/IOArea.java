@@ -2,6 +2,7 @@ package de.codesourcery.j6502.emulator;
 
 import de.codesourcery.j6502.emulator.IECBus.Wire;
 import de.codesourcery.j6502.emulator.Keyboard.Key;
+import de.codesourcery.j6502.utils.HexDump;
 
 /**
  * I/O area , memory bank 5 ($D000 - $DFFF).
@@ -47,13 +48,58 @@ public class IOArea extends Memory
 		{
 			super.writeByte(adr, value);
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
-			if (offset == 00 )
+			if (offset == CIA1_PRA )
 			{
+				/*
+				 Bit 0..1: Select the position of the VIC-memory
+
+				     %00, 0: Bank 3: $C000-$FFFF, 49152-65535
+				     %01, 1: Bank 2: $8000-$BFFF, 32768-49151
+				     %10, 2: Bank 1: $4000-$7FFF, 16384-32767
+				     %11, 3: Bank 0: $0000-$3FFF, 0-16383 (standard)
+
+				Bit 2: RS-232: TXD Output, userport: Data PA 2 (pin M)
+				Bit 3..5: serial bus Output (0=High/Inactive, 1=Low/Active)
+
+				    Bit 3: ATN OUT
+				    Bit 4: CLOCK OUT
+				    Bit 5: DATA OUT
+
+				Bit 6..7: serial bus Input (0=Low/Active, 1=High/Inactive)
+
+				    Bit 6: CLOCK IN
+				    Bit 7: DATA IN
+				 */
+				
 				// all lines are low-active, 0 = LOGICAL TRUE , 1 = LOGICAL FALSE
-				boolean atn = (value & 1<<3) != 0;
-				boolean clockOut = (value & 1 << 4) == 0;
-				boolean dataOut = (value & 1<<5) == 0;
-				iecBus.getOutputWire().setState( atn , dataOut , clockOut );
+				final Wire outWire = iecBus.getOutputWire();
+				final Wire inWire = iecBus.getInputWire();
+				
+				final boolean atn = outWire.getATN();
+				final boolean clockOut = outWire.getClock();
+				final boolean dataOut = outWire.getData();
+				
+				final boolean clockIn = inWire.getClock();
+				final boolean dataIn= inWire.getData();				
+				
+				final int mask = super.readByte( CIA1_DDRA );
+//				System.out.println("Write to $DD00 with mask: "+HexDump.toBinaryString( (byte) mask ) );
+				int currentValue = (atn ? 1<<3 : 0 ) | ( clockOut ? 0 : 1<<4) | (dataOut ? 0 : 1<<5) |
+						                               ( clockIn  ? 0 : 1<<6) | (dataIn  ? 0 : 1<<7);
+				currentValue = currentValue & ~mask;
+
+				int newValue = (value & 0xff) & mask;
+				newValue = newValue | currentValue;
+				
+				boolean newAtn = (newValue & 1<<3) != 0;
+				boolean newClockOut = (newValue & 1 << 4) == 0;
+				boolean newDataOut = (newValue & 1<<5) == 0;
+				
+				boolean newClockIn = (newValue & 1 << 6) == 0;
+				boolean newDataIn = (newValue & 1<<7) == 0;
+				
+				outWire.setState( newAtn , newDataOut , newClockOut );
+				inWire.setState( false , newDataIn , newClockIn );
 			}
 		}
 		
@@ -83,12 +129,19 @@ public class IOArea extends Memory
 				    Bit 6: CLOCK IN
 				    Bit 7: DATA IN
 				 */
-				Wire wire = iecBus.getInputWire();
-				final boolean clockIn = wire.getClock(); // iecBus.clockIn;
-				final boolean dataIn = wire.getData(); // iecBus.dataIn;
+				final Wire outWire = iecBus.getOutputWire();
+				final boolean atn = outWire.getATN();
+				final boolean clockOut = outWire.getClock(); 
+				final boolean dataOut = outWire.getData();
 				
-				final int busRegister = ( (clockIn ? 0 : 1<<6 ) | ( dataIn ? 0 : 1<<7 ) ) & 0xff;
-				value = (value & 0b00111111 ) | busRegister; // merge CLOCK IN/DATA IN bits
+				final Wire wire = iecBus.getInputWire();
+				final boolean clockIn = wire.getClock();
+				final boolean dataIn = wire.getData();
+				
+				final int busRegister = ( dataIn ? 0 : 1<<7 ) | (clockIn ? 0 : 1<<6 ) |
+						                ( atn ? 1<<3 : 0 ) | ( clockOut ? 0 : 1<<4)   | (dataOut ? 0 : 1<<5);
+				
+				value = (value & 0b0000_0111 ) | busRegister; // merge with bits
 			}
 			return value;
 		};
