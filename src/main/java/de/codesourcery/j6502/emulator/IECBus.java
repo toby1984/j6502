@@ -773,8 +773,8 @@ public class IECBus
 
 			@Override
 			public void onEnter() {
-				inputWire.setData( true );
 				startWaiting();
+				inputWire.setClock(false);
 			}
 		};
 
@@ -792,7 +792,7 @@ public class IECBus
 						setBusState( RECV_LISTENING );
 						return;
 					}
-					if ( outputWire.getClock() && outputWire.getData() == false ) { // talker wants to switch to listening, ack this by lowering clock again for 80us
+					if ( outputWire.getClock() && ! outputWire.getData() ) { // talker wants to switch to listening, ack this by lowering clock again for 80us
 						setBusState( RECV_ACK_BUS_TURN_AROUND1 );
 					}
 				}
@@ -801,7 +801,6 @@ public class IECBus
 			public void onEnter() {
 				startWaiting();
 				inputWire.setClock( true );
-				inputWire.setData( false );
 			}
 		};
 
