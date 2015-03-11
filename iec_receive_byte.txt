@@ -1,9 +1,13 @@
 .,EE13 78       SEI             disable the interrupts
 .,EE14 A9 00    LDA #$00        set 0 bits to do, will flag EOI on timeour
 .,EE16 85 A5    STA $A5         save the serial bus bit count
-.,EE18 20 85 EE JSR $EE85       CLK_IN = 0       ; set the serial clock out high
+
+; =======================
+; Signal ready to receive
+; =======================
+.,EE18 20 85 EE JSR $EE85       CLK_IN = 0 (TRUE)      ; set the serial clock out high
 .,EE1B 20 A9 EE JSR $EEA9                          get the serial data status in Cb
-.,EE1E 10 FB    BPL $EE1B       WHILE CLK_IN == 0  ; loop if the serial clock is low
+.,EE1E 10 FB    BPL $EE1B       WHILE CLK_IN == 0 (TRUE)  ; loop if the serial clock is low
 
 ; ===============
 ; setup EOI timer
