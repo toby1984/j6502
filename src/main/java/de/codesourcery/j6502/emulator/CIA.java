@@ -30,6 +30,23 @@ public class CIA extends Memory
 	public static final int CIA1_ICR        = 0x0d;
 	public static final int CIA1_CRA        = 0x0e;
 	public static final int CIA1_CRB        = 0x0f;
+	
+	public static final int CIA2_PRA        = 0x00;
+	public static final int CIA2_PRB        = 0x01;
+	public static final int CIA2_DDRA       = 0x02;
+	public static final int CIA2_DDRB       = 0x03;
+	public static final int CIA2_TALO       = 0x04;
+	public static final int CIA2_TAHI       = 0x05;
+	public static final int CIA2_TBLO       = 0x06;
+	public static final int CIA2_TBHI       = 0x07;
+	public static final int CIA2_TOD_10THS  = 0x08;
+	public static final int CIA2_TOD_SECOND = 0x09;
+	public static final int CIA2_TOD_MIN    = 0x0a;
+	public static final int CIA2_TOD_HOUR   = 0x0b;
+	public static final int CIA2_SDR        = 0x0c;
+	public static final int CIA2_ICR        = 0x0d;
+	public static final int CIA2_CRA        = 0x0e;
+	public static final int CIA2_CRB        = 0x0f;	
 
 	/*
 ----
@@ -174,8 +191,9 @@ $DC10-$DCFF 	56336-56575 	- 	- 	The CIA 1 register are mirrored each 16 Bytes
 [edit] CIA 2
 
 The second CIA-chip is identical to the first. Therefore in the following table are only entries which are specific to the usage in the C64.
-Adress range: $DD00-$DDFF, 56576-56831 Tasks: Serial bus, RS-232, VIC memory, NMI control
-Adress
+Adress range: $DD00-$DDFF, 56576-56831 Tasks: Serial bus, RS-232, VIC memory, NMI control 
+
+
 Hex 	Adress
 Dec 	Register 	Function 	Remark
 $DD00 	56576 	0

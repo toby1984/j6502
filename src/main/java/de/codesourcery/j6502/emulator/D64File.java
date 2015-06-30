@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -330,7 +331,17 @@ public class D64File
 
 	public D64File(String imageFileOnClasspath) throws IOException
 	{
-		this( D64File.class.getResourceAsStream("/disks/"+imageFileOnClasspath) );
+		this( openDiskFileFromClassPath(imageFileOnClasspath ) );
+	}
+	
+	private static InputStream openDiskFileFromClassPath(String imageFileOnClasspath) throws FileNotFoundException 
+	{
+		final String path = "/disks/"+imageFileOnClasspath;
+		final InputStream  stream = D64File.class.getResourceAsStream( path );
+		if ( stream == null ) {
+			throw new FileNotFoundException("Failed to load file from classpath:"+path);
+		}
+		return stream;
 	}
 
 	public static void main(String[] args) throws IOException
@@ -673,8 +684,8 @@ public class D64File
 
 			// terminate line
 			out.write( 0x00 );
-
 		}
+		System.out.println("Directory input stream has "+out.toByteArray().length+" bytes.");
 		return new ByteArrayInputStream( out.toByteArray() );
 	}
 

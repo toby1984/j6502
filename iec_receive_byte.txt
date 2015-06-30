@@ -5,9 +5,9 @@
 ; =======================
 ; Signal ready to receive
 ; =======================
-.,EE18 20 85 EE JSR $EE85       CLK_IN = 0 (TRUE)      ; set the serial clock out high
-.,EE1B 20 A9 EE JSR $EEA9                          get the serial data status in Cb
-.,EE1E 10 FB    BPL $EE1B       WHILE CLK_IN == 0 (TRUE)  ; loop if the serial clock is low
+.,EE18 20 85 EE JSR $EE85       ; CLK_OUT = 0 (HIGH)      set the serial clock out high
+.,EE1B 20 A9 EE JSR $EEA9       ; get DATA_IN in carry, CLK_IN in SIGN bit
+.,EE1E 10 FB    BPL $EE1B       WHILE CLK_IN == 0 (HIGH)  ; loop until the serial clock is low
 
 ; ===============
 ; setup EOI timer
@@ -17,18 +17,18 @@
 .,EE25 A9 19    LDA #$19        load timer B, timer B single shot, start timer B
 .,EE27 8D 0F DC STA $DC0F       save VIA 1 CRB
 
-.,EE2A 20 97 EE JSR $EE97       DATA_IN = 0              ;set the serial data out high
+.,EE2A 20 97 EE JSR $EE97       DATA_OUT = 0 (HIGH)   set the serial data out high
 
 ; ===========================================
-; wait for CLK_IN == 0 while checking EOI timeout
+; wait for CLK_IN == 0 (HIGH) while checking EOI timeout
 ; ===========================================
 .,EE2D AD 0D DC LDA $DC0D       read VIA 1 ICR
 .,EE30 AD 0D DC LDA $DC0D       read VIA 1 ICR
 .,EE33 29 02    AND #$02        mask 0000 00x0, timer A interrupt
 .,EE35 D0 07    BNE $EE3E       if timer A interrupt go ??
-.,EE37 20 A9 EE JSR $EEA9                           get the serial data status in Cb
+.,EE37 20 A9 EE JSR $EEA9       ; get DATA_IN in carry, CLK_IN in SIGN bit
 .,EE3A 30 F4    BMI $EE30       WHILE CLK_IN == 1 ; loop if the serial clock is low
-.,EE3C 10 18    BPL $EE56       ==> CLK_IN = 0 ; else go set 8 bits to do, branch always
+.,EE3C 10 18    BPL $EE56       ==> CLK_IN = 0 (HIGH) ; else go set 8 bits to do, branch always
 
 ; ================
 ; timer A timed out => EOI
@@ -55,16 +55,16 @@
 .,EE58 85 A5    STA $A5         save the serial bus bit count
 
 ; ====================
-; wait for CLK_IN == 1
+; wait for CLK_IN == 1 (LOW)
 ; ====================
 .,EE5A AD 00 DD LDA $DD00       read VIA 2 DRA, serial port and video address
 .,EE5D CD 00 DD CMP $DD00       compare it with itself
 .,EE60 D0 F8    BNE $EE5A       if changing go try again
-.,EE62 0A       ASL             shift the serial data into the carry
-.,EE63 10 F5    BPL $EE5A       WHILE CLK_IN = 0 ; loop while the serial clock is low
+.,EE62 0A       ASL             ; get DATA_IN in carry, CLK_IN in SIGN bit
+.,EE63 10 F5    BPL $EE5A       WHILE CLK_IN = 0 (HIGH) ; loop while the serial clock is low
 
 ; ================
-; CLK_IN == 1 => Data bit valid
+; CLK_IN == 1 (LOW) => Data bit valid
 ; ================
 .,EE65 66 A4    ROR $A4         shift the data bit into the receive byte
 
@@ -98,3 +98,41 @@
 .,EE82 58       CLI             enable the interrupts
 .,EE83 18       CLC             flag ok
 .,EE84 60       RTS
+
+; ==================================
+; set the serial clock out high (=0)
+; ==================================
+
+.,EE85 AD 00 DD LDA $DD00       read VIA 2 DRA, serial port and video address
+.,EE88 29 EF    AND #$EF        mask xxx0 xxxx, set serial clock out high : 1110_1111 (bit 4 = CLOCK_OUT)
+.,EE8A 8D 00 DD STA $DD00       save VIA 2 DRA, serial port and video address
+.,EE8D 60       RTS
+
+; ============================
+; set the serial DATA_OUT high
+; ============================
+
+.,EE97 AD 00 DD LDA $DD00       read VIA 2 DRA, serial port and video address
+.,EE9A 29 DF    AND #$DF        mask xx0x xxxx, set serial data out high : 11011111 (bit 5 = DATA_OUT)
+.,EE9C 8D 00 DD STA $DD00       save VIA 2 DRA, serial port and video address
+.,EE9F 60       RTS
+
+; ===========================
+; set the serial DATA_OUT low
+; ===========================
+
+.,EEA0 AD 00 DD LDA $DD00       read VIA 2 DRA, serial port and video address
+.,EEA3 09 20    ORA #$20        mask xx1x xxxx, set serial data out low ( 00100000 =  bit 5 = DATA_OUT)
+.,EEA5 8D 00 DD STA $DD00       save VIA 2 DRA, serial port and video address
+.,EEA8 60       RTS
+
+
+; ===============================
+; Shift serial DATA_IN into carry,
+; CLK_IN into SIGN flag
+; ===============================
+.,EEA9 AD 00 DD LDA $DD00       read VIA 2 DRA, serial port and video address
+.,EEAC CD 00 DD CMP $DD00       compare it with itself
+.,EEAF D0 F8    BNE $EEA9       if changing got try again
+.,EEB1 0A       ASL             shift the serial DATA_IN into carry, CLK_IN into SIGN flag
+.,EEB2 60       RTS

@@ -185,12 +185,9 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 	{
 		this.title = title;
 
-		lanes.add( new Lane("EOI") { @Override protected boolean getState(StateSnapshot state) { return state.eoi; } });
 		lanes.add( new Lane("ATN") { @Override protected boolean getState(StateSnapshot state) { return state.atn; } });
-		lanes.add( new Lane("CLK_IN") { @Override protected boolean getState(StateSnapshot state) { return state.clkIn; } });
-		lanes.add( new Lane("DATA_IN") { @Override protected boolean getState(StateSnapshot state) { return state.dataIn; } });
-		lanes.add( new Lane("CLOCK_OUT") { @Override protected boolean getState(StateSnapshot state) { return state.clkOut; } });
-		lanes.add( new Lane("DATA_OUT") { @Override protected boolean getState(StateSnapshot state) { return state.dataOut; } });
+		lanes.add( new Lane("CLOCK") { @Override protected boolean getState(StateSnapshot state) { return state.clk; } });
+		lanes.add( new Lane("DATA") { @Override protected boolean getState(StateSnapshot state) { return state.data; } });
 		setMinimumSize( new Dimension(RESERVED_WIDTH+100*3 , 6*30 ) );
 		setFocusable(true);
 		setRequestFocusEnabled( true );

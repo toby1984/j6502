@@ -1,8 +1,8 @@
 package de.codesourcery.j6502.emulator;
 
-import de.codesourcery.j6502.emulator.IECBus.Wire;
+import org.apache.commons.lang.StringUtils;
+
 import de.codesourcery.j6502.emulator.Keyboard.Key;
-import de.codesourcery.j6502.utils.HexDump;
 
 /**
  * I/O area , memory bank 5 ($D000 - $DFFF).
@@ -31,7 +31,7 @@ public class IOArea extends Memory
 						if ( tmp != 0xff ) // there's a bit set on this column
 						{
 							result2 &= tmp;
-//								System.out.println("Read: keyboard column "+col+" on "+this+" = "+HexDump.toBinaryString( (byte) result2 ));
+							//								System.out.println("Read: keyboard column "+col+" on "+this+" = "+HexDump.toBinaryString( (byte) result2 ));
 						}
 					}
 				}
@@ -46,7 +46,6 @@ public class IOArea extends Memory
 		@Override
 		public void writeByte(int adr, byte value)
 		{
-			super.writeByte(adr, value);
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
 			if (offset == CIA1_PRA )
 			{
@@ -70,39 +69,25 @@ public class IOArea extends Memory
 				    Bit 6: CLOCK IN
 				    Bit 7: DATA IN
 				 */
-				
-				// all lines are low-active, 0 = LOGICAL TRUE , 1 = LOGICAL FALSE
-				final Wire outWire = iecBus.getOutputWire();
-				final Wire inWire = iecBus.getInputWire();
-				
-				final boolean atn = outWire.getATN();
-				final boolean clockOut = outWire.getClock();
-				final boolean dataOut = outWire.getData();
-				
-				final boolean clockIn = inWire.getClock();
-				final boolean dataIn= inWire.getData();				
-				
-				final int mask = super.readByte( CIA1_DDRA );
-//				System.out.println("Write to $DD00 with mask: "+HexDump.toBinaryString( (byte) mask ) );
-				int currentValue = (atn ? 1<<3 : 0 ) | ( clockOut ? 0 : 1<<4) | (dataOut ? 0 : 1<<5) |
-						                               ( clockIn  ? 0 : 1<<6) | (dataIn  ? 0 : 1<<7);
-				currentValue = currentValue & ~mask;
 
-				int newValue = (value & 0xff) & mask;
-				newValue = newValue | currentValue;
-				
-				boolean newAtn = (newValue & 1<<3) != 0;
-				boolean newClockOut = (newValue & 1 << 4) == 0;
-				boolean newDataOut = (newValue & 1<<5) == 0;
-				
-				boolean newClockIn = (newValue & 1 << 6) == 0;
-				boolean newDataIn = (newValue & 1<<7) == 0;
-				
-				outWire.setState( newAtn , newDataOut , newClockOut );
-				inWire.setState( false , newDataIn , newClockIn );
+				super.writeByte( adr , (byte) value);
+
+				SerialDevice dev = cpuDevice;
+				final boolean atn = (value     & 0b0000_1000) != 0; 
+				final boolean clkOut = (value  & 0b0001_0000) != 0; 
+				final boolean dataOut = (value & 0b0010_0000) != 0; 
+				System.out.println("Write to $DD00: to_write: "+toBinaryString( value)+", ATN: "+atn+" , clkOut: "+clkOut+", dataOut: "+dataOut);
+			} 
+			else 
+			{
+				super.writeByte(adr, value);
 			}
 		}
 		
+		private String toLogicalValue(boolean value) {
+			return value ? "HIGH" : "LOW";
+		}
+
 		@Override
 		public int readByte(int adr)
 		{
@@ -128,33 +113,98 @@ public class IOArea extends Memory
 
 				    Bit 6: CLOCK IN
 				    Bit 7: DATA IN
+				    
+			public boolean getData() 
+			{
+				// !!! Implementation HAS to match what's used in readByte(int) method !!!
+				return ( cia2.readByte( CIA.CIA2_PRA ) & 0b0010_0000) == 0; 
+			}
+
+			@Override
+			public boolean getClock() {
+				// !!! Implementation HAS to match what's used in readByte(int) method !!!
+				return ( cia2.readByte( CIA.CIA2_PRA ) & 0b0001_0000) == 0; 
+			}				    
 				 */
-				final Wire outWire = iecBus.getOutputWire();
-				final boolean atn = outWire.getATN();
-				final boolean clockOut = outWire.getClock(); 
-				final boolean dataOut = outWire.getData();
+				final boolean clockState = iecBus.getClk(); // has to match implementation in CPU SerialDevice#getClock() !!!
+				final boolean dataState = iecBus.getData(); // has to match implementation in CPU SerialDevice#getClock() !!!
 				
-				final Wire wire = iecBus.getInputWire();
-				final boolean clockIn = wire.getClock();
-				final boolean dataIn = wire.getData();
+				if ( clockState ) { // High = 1
+					value |= 0b0100_0000;
+				} else {
+					value &=  ~0b0100_0000;
+				}
 				
-				final int busRegister = ( dataIn ? 0 : 1<<7 ) | (clockIn ? 0 : 1<<6 ) |
-						                ( atn ? 1<<3 : 0 ) | ( clockOut ? 0 : 1<<4)   | (dataOut ? 0 : 1<<5);
-				
-				value = (value & 0b0000_0111 ) | busRegister; // merge with bits
+				if ( dataState ) { // High = 1
+					value |= 0b1000_0000;
+				} else {
+					value &=  ~0b1000_0000;
+				}				
 			}
 			return value;
 		};
 	};
 
+	private final SerialDevice cpuDevice;
 	private final IMemoryRegion mainMemory;
 
 	public IOArea(String identifier, AddressRange range, IMemoryRegion mainMemory)
 	{
 		super(identifier, range);
-		
-		this.iecBus = new IECBus("default bus");
-		iecBus.addDevice( new Floppy(8) );
+
+		cpuDevice = new SerialDevice() {
+
+			@Override
+			public void tick(IECBus bus) {
+			}
+
+			@Override
+			public void reset() {
+			}
+
+			@Override
+			public int getPrimaryAddress() {
+				return 0;
+			}
+
+			/*
+					Bit 3..5: serial bus Output (0=High/Inactive, 1=Low/Active)
+
+					    Bit 3: ATN OUT
+					    Bit 4: ~CLOCK OUT
+					    Bit 5: ~DATA OUT
+					    
+					   DATA  ATN
+				          |  |
+					    0000_0000
+					       |
+					       CLOCK   
+
+					Bit 6..7: serial bus Input (0=Low/Active, 1=High/Inactive)
+
+					    Bit 6: CLOCK IN
+					    Bit 7: DATA IN
+			 */
+			@Override
+			public boolean getData() 
+			{
+				// !!! Implementation HAS to match what's used in readByte(int) method !!!
+				return ( cia2.readByte( CIA.CIA2_PRA ) & 0b0010_0000) != 0; 
+			}
+
+			@Override
+			public boolean getClock() {
+				// !!! Implementation HAS to match what's used in readByte(int) method !!!
+				return ( cia2.readByte( CIA.CIA2_PRA ) & 0b0001_0000) != 0; 
+			}
+
+			@Override
+			public boolean getATN() {
+				// !!! Implementation HAS to match what's used in readByte(int) method !!!
+				return ( cia2.readByte( CIA.CIA2_PRA ) & 0b0000_1000) != 0; 
+			}
+		};		
+		this.iecBus = new IECBus("default bus" , cpuDevice );
 		this.mainMemory = mainMemory;
 		this.vic = new VIC("VIC", AddressRange.range( 0xd000, 0xd02f));
 	}
@@ -257,5 +307,12 @@ public class IOArea extends Memory
 
 	public IECBus getIECBus() {
 		return iecBus;
+	}
+	
+	protected static String toBinaryString(int value) 
+	{
+		final String string = Integer.toBinaryString( value & 0xff );
+		final String result = "%"+StringUtils.repeat("0" , 8-string.length())+string;
+		return result.substring(0,5)+"_"+result.substring(5);
 	}
 }
