@@ -474,12 +474,14 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 			long offset = currentState.cycle - firstCycle + delta ;
 			final int x = (int) (RESERVED_WIDTH + (offset * cycleWidth));
 			// mark state changes with vertical, dashed line
-			if ( previousState == null || previousState.busState != currentState.busState )
+			if ( previousState == null || ! previousState.equals( currentState) )
 			{
 				Color oldColor = g.getColor();
 				Stroke oldStroke = g.getStroke();
 				g.setColor( Color.GREEN);
-				g.drawString( currentState.busState.toString() , x , stateLineOffset[ stateLineIdx++] );
+				
+				// g.drawString( currentState.busState.toString() , x , stateLineOffset[ stateLineIdx++] );
+				
 				g.setStroke( DASHED_SLIM );
 				g.drawLine( x , getHeight() , x , 0 );
 				stateLineIdx = stateLineIdx % stateLineOffset.length;

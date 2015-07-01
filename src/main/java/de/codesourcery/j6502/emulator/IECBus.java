@@ -21,7 +21,7 @@ public class IECBus
 	private final List<SerialDevice> devices = new ArrayList<>();
 	private final List<StateSnapshot> states = new ArrayList<>();
 	
-	private boolean atn;
+	private boolean atn=false;
 	private boolean clkSum;
 	private boolean dataSum;
 
@@ -33,16 +33,21 @@ public class IECBus
 
 		public final long cycle;
 
-		public final String busState;
-
 		public StateSnapshot(boolean atn,boolean clk,boolean data,long cycle)
 		{
 			this.cycle = cycle;
 			this.atn = atn;
 			this.clk = clk;
 			this.data = data;
-			this.busState = "unknown";
 		}
+		
+		public boolean equals(Object other) {
+			if ( other instanceof StateSnapshot) {
+				final StateSnapshot o = (StateSnapshot) other;
+				return this.atn == o.atn && this.clk == o.clk && this.data == o.data;
+			}
+			return false;
+ 		}
 		
 		@Override
 		public String toString() {
@@ -74,16 +79,6 @@ public class IECBus
 	public Optional<SerialDevice> getDevice(int primaryAddress)
 	{
 		return devices.stream().filter( d -> d.getPrimaryAddress() == primaryAddress ).findFirst();
-	}
-
-	public void reset()
-	{
-		this.clkSum = false;
-		this.dataSum = false;
-
-		devices.forEach( device -> device.reset() );
-		states.clear();
-		cycle = 0;
 	}
 
 	private void takeSnapshot()
@@ -141,16 +136,18 @@ public class IECBus
 		 * - A line will become LOW ("true") (LOW / PULLED DOWN, or 0V) if one or more devices signal true (LOW);
          * - A line will become HIGH ("false") (HIGH / RELEASED, or 5V) only if all devices signal false (HIGH).
 		 */
-		boolean sumClk = false;
-		boolean sumData = false;
+		
+		boolean sumClk = true;
+		boolean sumData = true;
 		
 		for (int i = 0; i < devices.size(); i++) 
 		{
 			final SerialDevice dev = devices.get(i);
 			dev.tick(this);
-			sumClk |= dev.getClock();
-			sumData |= dev.getData();
+			sumData &= dev.getData();
+			sumClk &= dev.getClock();
 		}
+		
 		if ( CAPTURE_BUS_SNAPSHOTS ) 
 		{ 
 			if ( sumClk != clkSum || sumData != dataSum || this.atn != cpu.getATN() ) 
@@ -167,4 +164,15 @@ public class IECBus
 		}
 		cycle++;
 	}
+	
+	public void reset()
+	{
+		this.clkSum = false;
+		this.dataSum = false;
+		this.atn = false;
+
+		devices.forEach( device -> device.reset() );
+		states.clear();
+		cycle = 0;
+	}	
 }

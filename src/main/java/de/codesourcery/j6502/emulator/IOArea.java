@@ -47,7 +47,7 @@ public class IOArea extends Memory
 		public void writeByte(int adr, byte value)
 		{
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
-			if (offset == CIA1_PRA )
+			if (offset == CIA2_PRA )
 			{
 				/*
 				 Bit 0..1: Select the position of the VIC-memory
@@ -72,22 +72,20 @@ public class IOArea extends Memory
 
 				super.writeByte( adr , (byte) value);
 
-				SerialDevice dev = cpuDevice;
-				final boolean atn = (value     & 0b0000_1000) != 0; 
-				final boolean clkOut = (value  & 0b0001_0000) != 0; 
-				final boolean dataOut = (value & 0b0010_0000) != 0; 
+				final boolean atn = (value     & 0b0000_1000) == 0; 
+				final boolean clkOut = (value  & 0b0001_0000) == 0; 
+				final boolean dataOut = (value & 0b0010_0000) == 0; 
 				System.out.println("Write to $DD00: to_write: "+toBinaryString( value)+", ATN: "+atn+" , clkOut: "+clkOut+", dataOut: "+dataOut);
 			} 
 			else 
 			{
+				if ( offset == CIA2_DDRA ) {
+					System.out.println("Write to $DD02 DDRA: "+toBinaryString(value));
+				} 
 				super.writeByte(adr, value);
 			}
 		}
 		
-		private String toLogicalValue(boolean value) {
-			return value ? "HIGH" : "LOW";
-		}
-
 		@Override
 		public int readByte(int adr)
 		{
@@ -113,32 +111,20 @@ public class IOArea extends Memory
 
 				    Bit 6: CLOCK IN
 				    Bit 7: DATA IN
-				    
-			public boolean getData() 
-			{
-				// !!! Implementation HAS to match what's used in readByte(int) method !!!
-				return ( cia2.readByte( CIA.CIA2_PRA ) & 0b0010_0000) == 0; 
-			}
-
-			@Override
-			public boolean getClock() {
-				// !!! Implementation HAS to match what's used in readByte(int) method !!!
-				return ( cia2.readByte( CIA.CIA2_PRA ) & 0b0001_0000) == 0; 
-			}				    
 				 */
-				final boolean clockState = iecBus.getClk(); // has to match implementation in CPU SerialDevice#getClock() !!!
-				final boolean dataState = iecBus.getData(); // has to match implementation in CPU SerialDevice#getClock() !!!
+				final boolean clockState = iecBus.getClk(); 
+				final boolean dataState = iecBus.getData();
 				
-				if ( clockState ) { // High = 1
-					value |= 0b0100_0000;
+				if ( clockState ) {  // true == BUS HIGH (has to match implementation in CPU SerialDevice#getClock() !!!)
+					value &= ~0b0100_0000;
 				} else {
-					value &=  ~0b0100_0000;
+					value |=  0b0100_0000;
 				}
 				
-				if ( dataState ) { // High = 1
-					value |= 0b1000_0000;
+				if ( dataState ) { // true == BUS HIGH (has to match implementation in CPU SerialDevice#getClock() !!!)
+					value &= ~0b1000_0000;
 				} else {
-					value &=  ~0b1000_0000;
+					value |=  0b1000_0000;
 				}				
 			}
 			return value;
@@ -170,7 +156,7 @@ public class IOArea extends Memory
 			/*
 					Bit 3..5: serial bus Output (0=High/Inactive, 1=Low/Active)
 
-					    Bit 3: ATN OUT
+					    Bit 3: ~ATN OUT
 					    Bit 4: ~CLOCK OUT
 					    Bit 5: ~DATA OUT
 					    
@@ -189,19 +175,34 @@ public class IOArea extends Memory
 			public boolean getData() 
 			{
 				// !!! Implementation HAS to match what's used in readByte(int) method !!!
-				return ( cia2.readByte( CIA.CIA2_PRA ) & 0b0010_0000) != 0; 
+				final int value = cia2.readByte( CIA.CIA2_PRA );
+				final int ddra = cia2.readByte( CIA.CIA2_DDRA );
+				if ( ( (ddra & 1 << 5) == 0 ) ) {
+					return true;
+				}
+				return ( value & 0b0010_0000) == 0; 
 			}
 
 			@Override
 			public boolean getClock() {
 				// !!! Implementation HAS to match what's used in readByte(int) method !!!
-				return ( cia2.readByte( CIA.CIA2_PRA ) & 0b0001_0000) != 0; 
+				final int value = cia2.readByte( CIA.CIA2_PRA );
+				final int ddra = cia2.readByte( CIA.CIA2_DDRA );
+				if ( ( (ddra & 1 << 4) == 0 ) ) {
+					return true;
+				}
+				return ( value & 0b0001_0000) == 0; 
 			}
 
 			@Override
 			public boolean getATN() {
 				// !!! Implementation HAS to match what's used in readByte(int) method !!!
-				return ( cia2.readByte( CIA.CIA2_PRA ) & 0b0000_1000) != 0; 
+				final int value = cia2.readByte( CIA.CIA2_PRA );			
+				final int ddra = cia2.readByte( CIA.CIA2_DDRA );
+				if ( ( (ddra & 1 << 5) == 0 ) ) {
+					return false;
+				}
+				return ( value & 0b0000_1000) != 0; 
 			}
 		};		
 		this.iecBus = new IECBus("default bus" , cpuDevice );
