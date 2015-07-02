@@ -122,7 +122,7 @@ public class AbstractSerialDevice implements SerialDevice {
 			{
 			    data = false;			
 				if ( bus.getATN() ) {
-					dataByteReceived();
+					onDataByteReceived(currentByte);
 					setState( LISTEN_WAIT_FOR_TALKER_READY );
 				} else {
 					setState( commandByteReceived(LISTEN_WAIT_FOR_TALKER_READY) );
@@ -304,10 +304,6 @@ public class AbstractSerialDevice implements SerialDevice {
 		deviceAddressed = false;
 	}
 	
-	protected void dataByteReceived() {
-		System.out.println("########## DATA: 0x"+Integer.toHexString( currentByte) );
-	}
-	
 	protected final State commandByteReceived(State nextState) 
 	{
 		final int payload = currentByte & 0b1111;
@@ -367,6 +363,10 @@ public class AbstractSerialDevice implements SerialDevice {
 				throw new RuntimeException("Unhandled command: "+cmdType);
 		}
 		return nextState;
+	}	
+	
+	protected void onDataByteReceived(int data) {
+		System.out.println("########## DATA: 0x"+Integer.toHexString( data ) );
 	}	
 	
 	protected void onListen() {
