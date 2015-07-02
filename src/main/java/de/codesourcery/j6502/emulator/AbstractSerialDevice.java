@@ -1,5 +1,7 @@
 package de.codesourcery.j6502.emulator;
 
+import org.apache.commons.lang.StringUtils;
+
 public class AbstractSerialDevice implements SerialDevice {
 
 	private final int primaryAddress;
@@ -50,7 +52,7 @@ public class AbstractSerialDevice implements SerialDevice {
 		protected abstract void onEdge(IECBus bus);
 		
 		@Override
-		public final void tickHook(IECBus bus) 
+		public void tickHook(IECBus bus) 
 		{
 			if ( bus.getClk() ) {
 				waitingStarted = true;
@@ -77,7 +79,7 @@ public class AbstractSerialDevice implements SerialDevice {
 		protected abstract void onEdge(IECBus bus);
 		
 		@Override
-		public final void tickHook(IECBus bus) 
+		public void tickHook(IECBus bus) 
 		{
 			if ( ! bus.getClk() ) {
 				waitingStarted = true;
@@ -95,34 +97,38 @@ public class AbstractSerialDevice implements SerialDevice {
 	private final State RECEIVE_ACK_FRAME = new State("RECEIVE_ACK_FRAME") 
 	{
 		@Override
-		public void tickHook(IECBus bus) {
-				
+		public void tickHook(IECBus bus) 
+		{
+				data = true;
+				setState( WAIT_FOR_TALKER_READY );
 		}
 		
-		public void onEnterHook(IECBus bus) {
-			
+		public void onEnterHook(IECBus bus) 
+		{
+			bus.takeSnapshot( "FRAME_ACK" );
+			data = false;
 		}
 	};
 	
-	private final State RECEIVE_BIT = new WaitForFallingEdge("RECEIVE_BIT") 
+	private final State RECEIVE_BIT = new WaitForRisingEdge("RECEIVE_BIT") 
 	{
 		@Override
 		protected void onEdge(IECBus bus) 
 		{
-			final int bit = bus.getData() ? 1 : 0;
-			System.out.println("Got bit "+bitsReceived+": "+bit);
-			currentByte <<= 1;
+			final int bit = bus.getData() ? 1<<7 : 0;
+			currentByte = currentByte >> 1;
 			currentByte |= bit;
 			bitsReceived++;
-			if ( bitsReceived < 8 ) {
+			if ( bitsReceived != 8 ) {
 				setState( RECEIVE_WAIT );
 			} else {
+				System.out.println("Got byte: "+Integer.toHexString( currentByte ) );
 				setState( RECEIVE_ACK_FRAME );
 			}
 		}
 	};	
 	
-	private final State RECEIVE_WAIT = new WaitForRisingEdge("RECEIVE_WAIT") 
+	private final State RECEIVE_WAIT = new WaitForFallingEdge("RECEIVE_WAIT") 
 	{
 		@Override
 		protected void onEdge(IECBus bus) {
@@ -135,13 +141,15 @@ public class AbstractSerialDevice implements SerialDevice {
 		@Override
 		public void tickHook(IECBus bus) 
 		{
-			data = false;
-			setState( RECEIVE_WAIT );
+			if ( cyclesWaited >= 50 ) {
+				data = true;
+				setState( RECEIVE_WAIT );
+			}
 		}
 		
 		public void onEnterHook(IECBus bus) 
 		{
-			data = false;
+			data = false;			
 			bitsReceived = 0;
 			currentByte = 0;
 		}
@@ -149,6 +157,17 @@ public class AbstractSerialDevice implements SerialDevice {
 	
 	private final State WAIT_FOR_TALKER_READY = new WaitForRisingEdge("WAIT_FOR_TALKER_READY") 
 	{
+		public void tickHook(IECBus bus) 
+		{
+			if ( bus.getATN() ) 
+			{
+				System.out.println("*** ATN low again, giving up");
+				setState( WAIT_FOR_ATN );
+				return;
+			}
+			super.tickHook( bus );
+		}
+		
 		@Override
 		protected void onEdge(IECBus bus) {
 			setState(READY_TO_RECEIVE);			
@@ -160,10 +179,10 @@ public class AbstractSerialDevice implements SerialDevice {
 		@Override
 		public void tickHook(IECBus bus) 
 		{
-			if ( bus.getATN() ) 
+			if ( ! bus.getATN() ) 
 			{
 				System.out.println("*** device received ATN ***");
-				data = true;
+				data = false;
 				clk = true;
 				setState( WAIT_FOR_TALKER_READY );
 			}

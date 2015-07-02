@@ -75,7 +75,7 @@ public class IOArea extends Memory
 				final boolean atn = (value     & 0b0000_1000) == 0; 
 				final boolean clkOut = (value  & 0b0001_0000) == 0; 
 				final boolean dataOut = (value & 0b0010_0000) == 0; 
-				System.out.println("Write to $DD00: to_write: "+toBinaryString( value)+", ATN: "+atn+" , clkOut: "+clkOut+", dataOut: "+dataOut);
+				System.out.println("Write to $DD00: to_write: "+toBinaryString( value)+toLogical(", ATN: ",atn)+toLogical(" , clkOut: ",clkOut)+toLogical(", dataOut: ",dataOut));
 			} 
 			else 
 			{
@@ -84,6 +84,10 @@ public class IOArea extends Memory
 				} 
 				super.writeByte(adr, value);
 			}
+		}
+		
+		private String toLogical(String msg,boolean level) {
+			return msg+" "+(level?"HIGH":"LOW");
 		}
 		
 		@Override
@@ -116,15 +120,15 @@ public class IOArea extends Memory
 				final boolean dataState = iecBus.getData();
 				
 				if ( clockState ) {  // true == BUS HIGH (has to match implementation in CPU SerialDevice#getClock() !!!)
-					value &= ~0b0100_0000;
-				} else {
 					value |=  0b0100_0000;
+				} else {
+					value &= ~0b0100_0000;
 				}
 				
 				if ( dataState ) { // true == BUS HIGH (has to match implementation in CPU SerialDevice#getClock() !!!)
-					value &= ~0b1000_0000;
-				} else {
 					value |=  0b1000_0000;
+				} else {
+					value &= ~0b1000_0000;
 				}				
 			}
 			return value;
@@ -178,7 +182,7 @@ public class IOArea extends Memory
 				final int value = cia2.readByte( CIA.CIA2_PRA );
 				final int ddra = cia2.readByte( CIA.CIA2_DDRA );
 				if ( ( (ddra & 1 << 5) == 0 ) ) {
-					return true;
+					return false;
 				}
 				return ( value & 0b0010_0000) == 0; 
 			}
@@ -189,7 +193,7 @@ public class IOArea extends Memory
 				final int value = cia2.readByte( CIA.CIA2_PRA );
 				final int ddra = cia2.readByte( CIA.CIA2_DDRA );
 				if ( ( (ddra & 1 << 4) == 0 ) ) {
-					return true;
+					return false;
 				}
 				return ( value & 0b0001_0000) == 0; 
 			}
@@ -202,7 +206,7 @@ public class IOArea extends Memory
 				if ( ( (ddra & 1 << 5) == 0 ) ) {
 					return false;
 				}
-				return ( value & 0b0000_1000) != 0; 
+				return ( value & 0b0000_1000) == 0; 
 			}
 		};		
 		this.iecBus = new IECBus("default bus" , cpuDevice );

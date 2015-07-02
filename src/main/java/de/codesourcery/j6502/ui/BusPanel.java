@@ -67,7 +67,7 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 			this.firstState = firstState;
 			this.statesToDisplay = statesToDisplay;
 		}
-
+		
 		public void zoomOut() {
 			statesToDisplay++;
 		}
@@ -393,6 +393,7 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 
 		final List<StateSnapshot> statesInRange = new ArrayList<>( states.size() );
 
+		int firstStateOffset=displayRange ==null ? 0 : displayRange.firstState;
 		for (int i = 0; i < states.size(); i++) {
 			StateSnapshot s = states.get(i);
 			if ( displayRange == null ) {
@@ -429,18 +430,21 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 			delta = 0;
 		}
 		long currentCycle = firstCycle + delta;
-		for ( double x = RESERVED_WIDTH ; x < w ; ) {
-			g.drawLine( (int) x , 0 , (int) x , h );
-			g.drawString( Long.toString(currentCycle) , (int) x , 35 );
-			currentCycle += 100;
-			x += (100*cycleWidth);
+		if ( 100*cycleWidth >= 10 ) // only draw cycle tick lines if there's a reasonable distance between them 
+		{
+			for ( double x = RESERVED_WIDTH ; x < w ; ) {
+				g.drawLine( (int) x , 0 , (int) x , h );
+				g.drawString( Long.toString(currentCycle) , (int) x , 35 );
+				currentCycle += 100;
+				x += (100*cycleWidth);
+			}
 		}
 
 		// render title
 		final double timeInSeconds = cycleDelta*1/1000000f;
 		g.setColor(Color.RED);
 		final DecimalFormat DF = new DecimalFormat("##0.0######");
-		final String titleString = title+": "+DF.format(timeInSeconds)+"s ("+cycleDelta+" cycles ("+statesInRange.size()+" out of "+states.size()+" states) , first: "+firstCycle+" , last: "+lastCycle+")";
+		final String titleString = title+": "+DF.format(timeInSeconds)+"s ("+cycleDelta+" cycles ("+statesInRange.size()+" out of "+states.size()+" states starting @ "+firstStateOffset+" , first: "+firstCycle+" , last: "+lastCycle+")";
 		Rectangle2D stringBounds = g.getFontMetrics().getStringBounds( titleString , g );
 		g.drawString( titleString , (int) ( w/2- stringBounds.getWidth()/2) , 10 );
 
@@ -459,17 +463,19 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 		// we'll stagger the state names so they don't overlap
 		// too easily
 		int stateLineIdx = 0;
-		final int[] stateLineOffset = new int[] {
-				stateLineY ,
-				stateLineY + 13 ,
-				stateLineY + 26 ,
-				stateLineY + 39 ,
-				stateLineY + 52
-		};
+//		final int[] stateLineOffset = new int[] {
+//				stateLineY ,
+//				stateLineY + 13 ,
+//				stateLineY + 26 ,
+//				stateLineY + 39 ,
+//				stateLineY + 52
+//		};
+		
+		final int[] stateLineOffset = new int[] { stateLineY };
 
 		StateSnapshot previousState = null;
 
-		for ( StateSnapshot currentState : statesInRange )
+		for ( final StateSnapshot currentState : statesInRange )
 		{
 			long offset = currentState.cycle - firstCycle + delta ;
 			final int x = (int) (RESERVED_WIDTH + (offset * cycleWidth));
@@ -480,7 +486,9 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 				Stroke oldStroke = g.getStroke();
 				g.setColor( Color.GREEN);
 				
-				// g.drawString( currentState.busState.toString() , x , stateLineOffset[ stateLineIdx++] );
+				if ( currentState.msg != null ) {
+					g.drawString( currentState.msg, x , stateLineOffset[ stateLineIdx++] );
+				}
 				
 				g.setStroke( DASHED_SLIM );
 				g.drawLine( x , getHeight() , x , 0 );

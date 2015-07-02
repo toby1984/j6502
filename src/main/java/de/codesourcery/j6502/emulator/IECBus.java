@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.apache.commons.lang.StringUtils;
+
 public class IECBus
 {
 	public static final boolean CAPTURE_BUS_SNAPSHOTS = true;
@@ -21,9 +23,9 @@ public class IECBus
 	private final List<SerialDevice> devices = new ArrayList<>();
 	private final List<StateSnapshot> states = new ArrayList<>();
 	
-	private boolean atn=false;
-	private boolean clkSum;
-	private boolean dataSum;
+	private boolean atn=true;
+	private boolean clkSum=true;
+	private boolean dataSum=true;
 
 	public static final class StateSnapshot
 	{
@@ -32,9 +34,12 @@ public class IECBus
 		public final boolean data;
 
 		public final long cycle;
+		
+		public final String msg;
 
-		public StateSnapshot(boolean atn,boolean clk,boolean data,long cycle)
+		public StateSnapshot(String msg,boolean atn,boolean clk,boolean data,long cycle)
 		{
+			this.msg = msg;
 			this.cycle = cycle;
 			this.atn = atn;
 			this.clk = clk;
@@ -44,14 +49,17 @@ public class IECBus
 		public boolean equals(Object other) {
 			if ( other instanceof StateSnapshot) {
 				final StateSnapshot o = (StateSnapshot) other;
-				return this.atn == o.atn && this.clk == o.clk && this.data == o.data;
+				return this.atn == o.atn && this.clk == o.clk && this.data == o.data && StringUtils.equals( this.msg ,  o.msg );
 			}
 			return false;
  		}
 		
 		@Override
 		public String toString() {
-			return cycle+" - ATN: "+toLevel(atn)+","+"CLK: "+toLevel(clk)+","+"DATA: "+toLevel(data);
+			if ( msg == null ) {
+				return cycle+" - ATN: "+toLevel(atn)+","+"CLK: "+toLevel(clk)+","+"DATA: "+toLevel(data);
+			}
+			return cycle+" - ATN: "+toLevel(atn)+","+"CLK: "+toLevel(clk)+","+"DATA: "+toLevel(data)+" - "+msg;
 		}
 		
 		private static String toLevel(boolean value) {
@@ -81,11 +89,11 @@ public class IECBus
 		return devices.stream().filter( d -> d.getPrimaryAddress() == primaryAddress ).findFirst();
 	}
 
-	private void takeSnapshot()
+	public void takeSnapshot(String msg)
 	{
 		synchronized(states) 
 		{
-			final StateSnapshot snapshot = new StateSnapshot( atn , clkSum , dataSum , cycle );
+			final StateSnapshot snapshot = new StateSnapshot( msg , atn , clkSum , dataSum , cycle );
 			System.out.println("SNAPSHOT: "+snapshot);
 			states.add( snapshot );
 			if ( states.size() > MAX_CYCLES_TO_KEEP ) {
@@ -137,15 +145,18 @@ public class IECBus
          * - A line will become HIGH ("false") (HIGH / RELEASED, or 5V) only if all devices signal false (HIGH).
 		 */
 		
-		boolean sumClk = true;
-		boolean sumData = true;
+		boolean sumClk = false;
+		boolean sumData = false;
 		
+		final boolean outsideResetSequence = cycle > 1000000;
 		for (int i = 0; i < devices.size(); i++) 
 		{
 			final SerialDevice dev = devices.get(i);
-			dev.tick(this);
-			sumData &= dev.getData();
-			sumClk &= dev.getClock();
+			if ( outsideResetSequence ) {
+				dev.tick(this);
+			}
+			sumData |= dev.getData();
+			sumClk |= dev.getClock();
 		}
 		
 		if ( CAPTURE_BUS_SNAPSHOTS ) 
@@ -155,7 +166,7 @@ public class IECBus
 				this.clkSum = sumClk;
 				this.dataSum = sumData;			
 				this.atn = cpu.getATN();
-				takeSnapshot();
+				takeSnapshot(null);
 			}
 		} else {
 			this.atn = cpu.getATN();
@@ -167,9 +178,9 @@ public class IECBus
 	
 	public void reset()
 	{
-		this.clkSum = false;
-		this.dataSum = false;
-		this.atn = false;
+		this.clkSum = true;
+		this.dataSum = true;
+		this.atn = true;
 
 		devices.forEach( device -> device.reset() );
 		states.clear();
