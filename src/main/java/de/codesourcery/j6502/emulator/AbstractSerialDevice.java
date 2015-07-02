@@ -2,16 +2,52 @@ package de.codesourcery.j6502.emulator;
 
 public class AbstractSerialDevice implements SerialDevice {
 
-	private final int primaryAddress;
+	protected  final int primaryAddress;
 
-	private boolean clk=false; // bus == high
-	private boolean data=false; // bus == high
+	protected  boolean clk=false; // bus == high
+	protected  boolean data=false; // bus == high
 
-	private State state;
-	private State nextState;	
+	protected  State state;
+	protected  State nextState;	
 	
-	private int bitsProcessed = 0;
-	private int currentByte = 0;
+	protected int bitsProcessed = 0;
+	protected  int currentByte = 0;
+	
+	protected static enum CommandType 
+	{
+		LISTEN(true),OPEN(true),OPEN_CHANNEL(true),TALK(true),UNTALK(false),UNLISTEN(false),CLOSE(true);
+		
+		public final boolean supportsPayload;
+		
+		private CommandType(boolean supportsPayload) {
+			this.supportsPayload = supportsPayload;
+		}
+	}
+	
+	protected static final class Command {
+		
+		public final CommandType type;
+		public final int payload;
+		
+		public Command(CommandType type,int payload) {
+			this.type = type;
+			this.payload = payload;
+		}
+		
+		public boolean hasType(CommandType t) {
+			return t.equals( this.type );
+		}
+		
+		@Override
+		public String toString() 
+		{
+			if ( type.supportsPayload ) 
+			{
+				return type+" #"+payload;
+			}
+			return type.toString();
+		}
+	}
 	
 	protected abstract class State 
 	{
@@ -92,7 +128,7 @@ public class AbstractSerialDevice implements SerialDevice {
 		}
 	}
 	
-	private final State NOP = new State("NOP") {
+	private final State IDLE = new State("IDLE") {
 
 		@Override
 		public void tickHook(IECBus bus, boolean atnLowered) 
@@ -123,12 +159,11 @@ public class AbstractSerialDevice implements SerialDevice {
 			currentByte |= bit;
 			System.out.println("Got bit "+bitsProcessed+" : "+(bit != 0 ? 1 : 0));
 			bitsProcessed++;
-			if ( bitsProcessed != 8 ) {
+			if ( bitsProcessed != 8 ) 
+			{
 				setState( LISTEN_WAIT_FOR_TRANSMISSION );
 			} else {
-				System.out.println("\n=============");
-				System.out.println("Got byte: "+Integer.toHexString( currentByte ) );
-				System.out.println("\n=============");
+				byteReceived( bus);
 				setState( LISTEN_ACK_FRAME1 );
 			}
 		}
@@ -283,7 +318,57 @@ public class AbstractSerialDevice implements SerialDevice {
 	{
 		clk = false;
 		data = false;
-		this.state = NOP;
+		this.state = IDLE;
 		this.nextState = null;
+	}
+	
+	protected final void byteReceived(IECBus bus) 
+	{
+		if ( bus.getATN() ) {
+			processDataByte( currentByte );
+		} else {
+			processCommandByte( currentByte );
+		}
+	}
+	protected void processDataByte(int payload) {
+		System.out.println("########## DATA: 0x"+Integer.toHexString( payload ) );
+	}
+	
+	protected void processCommandByte(int payload) {
+		System.out.println("########## COMMAND: 0x"+Integer.toHexString( payload )+" => "+toCommand( payload ) );
+	}	
+	
+	public Command toCommand(int data) 
+	{
+		final int payload = data & 0b1111;
+		if ( (data & 0b1111_0000) == 0x60 ) 
+		{
+			return new Command(CommandType.OPEN_CHANNEL , payload );
+		}
+		if (  (data & 0b1111_0000) == 0xf0 ) 
+		{
+			return new Command(CommandType.OPEN , payload );
+		}
+		if ( ( data    & 0b1111_0000) == 0xe0 ) 
+		{
+			return new Command(CommandType.CLOSE , payload );
+		}
+		if ( ( data   & 0b1110_0000) == 0x40 ) 
+		{
+			return new Command(CommandType.TALK , payload );
+		}
+		if ( ( data   & 0xff) == 0x5f ) 
+		{
+			return new Command(CommandType.UNTALK , 0 );
+		}	
+		if ( ( data & 0b1111_0000) == 0x20 ) 
+		{
+			return new Command(CommandType.LISTEN , payload );
+		}
+		if ( ( data & 0xff) == 0x3f ) 
+		{
+			return new Command(CommandType.UNLISTEN , payload );
+		}		
+		return null;
 	}
 }
