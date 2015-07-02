@@ -10,7 +10,7 @@ public class AbstractSerialDevice implements SerialDevice {
 	private State state;
 	private State nextState;	
 	
-	private int bitsReceived = 0;
+	private int bitsProcessed = 0;
 	private int currentByte = 0;
 	
 	protected abstract class State 
@@ -136,9 +136,9 @@ public class AbstractSerialDevice implements SerialDevice {
 			final int bit = bus.getData() ? 1<<7 : 0;
 			currentByte = currentByte >> 1;
 			currentByte |= bit;
-			System.out.println("Got bit "+bitsReceived+" : "+(bit != 0 ? 1 : 0));
-			bitsReceived++;
-			if ( bitsReceived != 8 ) {
+			System.out.println("Got bit "+bitsProcessed+" : "+(bit != 0 ? 1 : 0));
+			bitsProcessed++;
+			if ( bitsProcessed != 8 ) {
 				setState( RECEIVE_WAIT );
 			} else {
 				System.out.println("\n=============");
@@ -218,7 +218,7 @@ public class AbstractSerialDevice implements SerialDevice {
 		public void onEnterHook(IECBus bus,boolean atnLowered) 
 		{
 			data = false;			
-			bitsReceived = 0;
+			bitsProcessed = 0;
 			currentByte = 0;
 		}
 	};	
