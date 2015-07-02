@@ -91,13 +91,16 @@ public class IECBus
 
 	public void takeSnapshot(String msg)
 	{
-		synchronized(states) 
+		if ( CAPTURE_BUS_SNAPSHOTS ) 
 		{
-			final StateSnapshot snapshot = new StateSnapshot( msg , atn , clkSum , dataSum , cycle );
-			System.out.println("SNAPSHOT: "+snapshot);
-			states.add( snapshot );
-			if ( states.size() > MAX_CYCLES_TO_KEEP ) {
-				states.remove(0);
+			synchronized(states) 
+			{
+				final StateSnapshot snapshot = new StateSnapshot( msg , atn , clkSum , dataSum , cycle );
+				System.out.println("SNAPSHOT: "+snapshot);
+				states.add( snapshot );
+				if ( states.size() > MAX_CYCLES_TO_KEEP ) {
+					states.remove(0);
+				}
 			}
 		}
 	}

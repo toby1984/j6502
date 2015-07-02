@@ -16,19 +16,19 @@ public class AbstractSerialDevice implements SerialDevice {
 	protected abstract class State 
 	{
 		public final String name;
-		protected long cyclesWaited = 0;
+		protected long cyclesInState = 0;
 
 		public State(String name) { this.name = name; }
 
 		public final void tick(IECBus bus, boolean atnLowered) {
-			cyclesWaited++;
+			cyclesInState++;
 			tickHook(bus, atnLowered);
 		}
 
 		public abstract void tickHook(IECBus bus, boolean atnLowered);
 
 		public final void onEnter(IECBus bus, boolean atnLowered) { 
-			cyclesWaited = 0;
+			cyclesInState = 0;
 			onEnterHook(bus,atnLowered);
 		} 
 
@@ -100,35 +100,20 @@ public class AbstractSerialDevice implements SerialDevice {
 		}
 	};
 	
-	private final State RECEIVE_ACK_FRAME2 = new State("RECEIVE_ACK_FRAME2") 
+	private final State LISTEN_ACK_FRAME1 = new State("RECEIVE_ACK_FRAME1") 
 	{
 		@Override
 		public void tickHook(IECBus bus, boolean atnLowered) 
 		{
-		    bus.takeSnapshot( "FRAME_ACK_END" );			
-			setState( WAIT_FOR_TALKER_READY );
-		}
-		
-		@Override
-		public void onEnterHook(IECBus bus,boolean atnLowered) 
-		{
-			bus.takeSnapshot( "FRAME_ACK_START" );			
-		    data = false;	
-		}
-	};	
-	
-	private final State RECEIVE_ACK_FRAME1 = new State("RECEIVE_ACK_FRAME1") 
-	{
-		@Override
-		public void tickHook(IECBus bus, boolean atnLowered) 
-		{
-			if ( bus.getData() ) {
-				setState( RECEIVE_ACK_FRAME2 );
+			if ( bus.getData() ) 
+			{
+			    data = false;					
+				setState( LISTEN_WAIT_FOR_TALKER_READY );
 			}
 		}
 	};
 	
-	private final State RECEIVE_BIT = new WaitForRisingEdge("RECEIVE_BIT") 
+	private final State LISTEN_RECEIVE_BIT = new WaitForRisingEdge("RECEIVE_BIT") 
 	{
 		@Override
 		protected void onEdge(IECBus bus) 
@@ -139,36 +124,36 @@ public class AbstractSerialDevice implements SerialDevice {
 			System.out.println("Got bit "+bitsProcessed+" : "+(bit != 0 ? 1 : 0));
 			bitsProcessed++;
 			if ( bitsProcessed != 8 ) {
-				setState( RECEIVE_WAIT );
+				setState( LISTEN_WAIT_FOR_TRANSMISSION );
 			} else {
 				System.out.println("\n=============");
 				System.out.println("Got byte: "+Integer.toHexString( currentByte ) );
 				System.out.println("\n=============");
-				setState( RECEIVE_ACK_FRAME1 );
+				setState( LISTEN_ACK_FRAME1 );
 			}
 		}
 	};	
 	
-	private final State RECEIVE_WAIT2 = new WaitForFallingEdge("RECEIVE_WAIT2") 
+	private final State LISTEN_WAIT2 = new WaitForFallingEdge("RECEIVE_WAIT2") 
 	{
 		@Override
 		protected void onEdge(IECBus bus) 
 		{
-			setState(RECEIVE_BIT);
+			setState(LISTEN_RECEIVE_BIT);
 		}
 	};
 	
-	private final State RECEIVE_ACK_EOI = new State("ACK_EOI") 
+	private final State LISTEN_ACK_EOI = new State("ACK_EOI") 
 	{
 		public void tickHook(IECBus bus, boolean atnLowered)
 		{
-			if ( cyclesWaited > 60 ) 
+			if ( cyclesInState > 60 ) 
 			{
 				if ( IECBus.CAPTURE_BUS_SNAPSHOTS){
 					bus.takeSnapshot("EOI_ACKED");
 				}
 				data = true;
-				setState(RECEIVE_WAIT2);
+				setState(LISTEN_WAIT2);
 			}
 		}
 		
@@ -178,17 +163,15 @@ public class AbstractSerialDevice implements SerialDevice {
 		}
 	};
 	
-	private final State RECEIVE_WAIT = new WaitForFallingEdge("RECEIVE_WAIT") 
+	private final State LISTEN_WAIT_FOR_TRANSMISSION = new WaitForFallingEdge("RECEIVE_WAIT") 
 	{
 		public void tickHook(IECBus bus, boolean atnLowered) {
 		
-			if ( cyclesWaited > 100 ) 
+			if ( cyclesInState > 100 ) 
 			{
-				if ( IECBus.CAPTURE_BUS_SNAPSHOTS){
-					bus.takeSnapshot("EOI_RCV");
-				}
+				bus.takeSnapshot("EOI_RCV");
 				System.out.println("****** EOI !!!!");
-				setState(RECEIVE_ACK_EOI);
+				setState(LISTEN_ACK_EOI);
 			} else {
 				super.tickHook(bus, atnLowered);
 			}
@@ -197,20 +180,20 @@ public class AbstractSerialDevice implements SerialDevice {
 		@Override
 		protected void onEdge(IECBus bus) 
 		{
-			setState(RECEIVE_BIT);
+			setState(LISTEN_RECEIVE_BIT);
 		}
 	};
 
-	private final State READY_TO_RECEIVE = new State("READY_TO_RECEIVE") 
+	private final State LISTEN_RDY_TO_RECEIVE = new State("RDY_TO_RECEIVE") 
 	{
 		@Override
 		public void tickHook(IECBus bus, boolean atnLowered) 
 		{
-			if ( cyclesWaited >= 20 ) 
+			if ( cyclesInState >= 20 ) 
 			{
 				bus.takeSnapshot("READY_TO_RECV");
 				data = true;
-				setState( RECEIVE_WAIT );
+				setState( LISTEN_WAIT_FOR_TRANSMISSION );
 			}
 		}
 		
@@ -223,12 +206,12 @@ public class AbstractSerialDevice implements SerialDevice {
 		}
 	};	
 	
-	private final State WAIT_FOR_TALKER_READY = new WaitForRisingEdge("WAIT_FOR_TALKER_READY") 
+	private final State LISTEN_WAIT_FOR_TALKER_READY = new WaitForRisingEdge("WAIT_FOR_TALKER") 
 	{
 		@Override
 		protected void onEdge(IECBus bus) {
 			bus.takeSnapshot("WAITING");
-			setState(READY_TO_RECEIVE);			
+			setState(LISTEN_RDY_TO_RECEIVE);			
 		}
 	};
 	
@@ -237,7 +220,7 @@ public class AbstractSerialDevice implements SerialDevice {
 		@Override
 		public void tickHook(IECBus bus, boolean atnLowered) 
 		{
-			setState( WAIT_FOR_TALKER_READY );
+			setState( LISTEN_WAIT_FOR_TALKER_READY );
 		}
 
 		@Override
@@ -296,7 +279,8 @@ public class AbstractSerialDevice implements SerialDevice {
 	}
 
 	@Override
-	public void reset() {
+	public void reset() 
+	{
 		clk = false;
 		data = false;
 		this.state = NOP;
