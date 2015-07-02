@@ -13,39 +13,16 @@ public class AbstractSerialDevice implements SerialDevice {
 	protected int bitsProcessed = 0;
 	protected  int currentByte = 0;
 	
-	protected static enum CommandType 
+	protected boolean deviceAddressed = false;
+	
+	protected static enum BusCommand 
 	{
-		LISTEN(true),OPEN(true),OPEN_CHANNEL(true),TALK(true),UNTALK(false),UNLISTEN(false),CLOSE(true);
+		LISTEN(true),OPEN(true),OPEN_CHANNEL(true),TALK(true),UNTALK(false),UNLISTEN(false),CLOSE(true),UNKNOWN(false);
 		
 		public final boolean supportsPayload;
 		
-		private CommandType(boolean supportsPayload) {
+		private BusCommand(boolean supportsPayload) {
 			this.supportsPayload = supportsPayload;
-		}
-	}
-	
-	protected static final class Command {
-		
-		public final CommandType type;
-		public final int payload;
-		
-		public Command(CommandType type,int payload) {
-			this.type = type;
-			this.payload = payload;
-		}
-		
-		public boolean hasType(CommandType t) {
-			return t.equals( this.type );
-		}
-		
-		@Override
-		public String toString() 
-		{
-			if ( type.supportsPayload ) 
-			{
-				return type+" #"+payload;
-			}
-			return type.toString();
 		}
 	}
 	
@@ -143,8 +120,13 @@ public class AbstractSerialDevice implements SerialDevice {
 		{
 			if ( bus.getData() ) 
 			{
-			    data = false;					
-				setState( LISTEN_WAIT_FOR_TALKER_READY );
+			    data = false;			
+				if ( bus.getATN() ) {
+					dataByteReceived();
+					setState( LISTEN_WAIT_FOR_TALKER_READY );
+				} else {
+					setState( commandByteReceived(LISTEN_WAIT_FOR_TALKER_READY) );
+				}	
 			}
 		}
 	};
@@ -163,7 +145,6 @@ public class AbstractSerialDevice implements SerialDevice {
 			{
 				setState( LISTEN_WAIT_FOR_TRANSMISSION );
 			} else {
-				byteReceived( bus);
 				setState( LISTEN_ACK_FRAME1 );
 			}
 		}
@@ -277,7 +258,7 @@ public class AbstractSerialDevice implements SerialDevice {
 	}
 
 	@Override
-	public void tick(IECBus bus,boolean atnLowered) 
+	public final void tick(IECBus bus,boolean atnLowered) 
 	{
 		if ( atnLowered ) {
 			nextState = ANSWER_ATN;
@@ -294,22 +275,22 @@ public class AbstractSerialDevice implements SerialDevice {
 	}
 
 	@Override
-	public boolean getClock() {
+	public final boolean getClock() {
 		return clk;
 	}
 
 	@Override
-	public boolean getData() {
+	public final boolean getData() {
 		return data;
 	}
 
 	@Override
-	public boolean getATN() {
+	public final boolean getATN() {
 		return false;
 	}
 
 	@Override
-	public int getPrimaryAddress() {
+	public final int getPrimaryAddress() {
 		return primaryAddress;
 	}
 
@@ -320,55 +301,127 @@ public class AbstractSerialDevice implements SerialDevice {
 		data = false;
 		this.state = IDLE;
 		this.nextState = null;
+		deviceAddressed = false;
 	}
 	
-	protected final void byteReceived(IECBus bus) 
+	protected void dataByteReceived() {
+		System.out.println("########## DATA: 0x"+Integer.toHexString( currentByte) );
+	}
+	
+	protected final State commandByteReceived(State nextState) 
 	{
-		if ( bus.getATN() ) {
-			processDataByte( currentByte );
+		final int payload = currentByte & 0b1111;
+		final BusCommand cmdType = parseCommand( currentByte );
+		if ( cmdType.supportsPayload ) {
+			System.out.println("########## COMMAND: 0x"+Integer.toHexString( currentByte )+" => "+cmdType+" #"+payload );
 		} else {
-			processCommandByte( currentByte );
+			System.out.println("########## COMMAND: 0x"+Integer.toHexString( currentByte )+" => "+cmdType);
 		}
-	}
-	protected void processDataByte(int payload) {
-		System.out.println("########## DATA: 0x"+Integer.toHexString( payload ) );
-	}
-	
-	protected void processCommandByte(int payload) {
-		System.out.println("########## COMMAND: 0x"+Integer.toHexString( payload )+" => "+toCommand( payload ) );
+		switch( cmdType ) 
+		{
+			case LISTEN:
+				if ( payload != getPrimaryAddress() ) 
+				{
+					deviceAddressed = false;
+					return IDLE;
+				}
+				deviceAddressed = true;
+				onListen();
+				break;
+			case TALK:
+				if ( payload != getPrimaryAddress() ) {
+					deviceAddressed = false;
+					return IDLE;
+				} 
+				deviceAddressed = true;
+				onTalk();
+				break;				
+			case OPEN:
+				if ( deviceAddressed ) {
+					onOpenData(payload);
+				}
+				break;
+			case OPEN_CHANNEL:
+				if ( deviceAddressed ) {
+					onOpenChannel(payload);
+				}
+				break;
+			case CLOSE:
+				if ( deviceAddressed ) {
+					onClose(payload);
+				}
+				break;				
+			case UNLISTEN:
+				if ( deviceAddressed ) {
+					onUnlisten();
+				}
+				deviceAddressed = false;
+				return IDLE;
+			case UNTALK:
+				if ( deviceAddressed ) {
+					onUntalk();
+				}
+				deviceAddressed = false;
+				return IDLE;
+			default:
+				throw new RuntimeException("Unhandled command: "+cmdType);
+		}
+		return nextState;
 	}	
 	
-	public Command toCommand(int data) 
+	protected void onListen() {
+	}
+	
+	protected void onUnlisten() {
+	}
+	
+	protected void onTalk() {
+	}
+	
+	protected void onUntalk() {
+	}
+	
+	protected void onOpenChannel(int payload) {
+		
+	}
+	
+	protected void onOpenData(int payload) {
+		
+	}
+	
+	protected void onClose(int payload) {
+	}
+	
+	private BusCommand parseCommand(int data) 
 	{
-		final int payload = data & 0b1111;
 		if ( (data & 0b1111_0000) == 0x60 ) 
 		{
-			return new Command(CommandType.OPEN_CHANNEL , payload );
+			return BusCommand.OPEN_CHANNEL;
 		}
 		if (  (data & 0b1111_0000) == 0xf0 ) 
 		{
-			return new Command(CommandType.OPEN , payload );
+			return BusCommand.OPEN;
 		}
 		if ( ( data    & 0b1111_0000) == 0xe0 ) 
 		{
-			return new Command(CommandType.CLOSE , payload );
+			return BusCommand.CLOSE;
 		}
 		if ( ( data   & 0b1110_0000) == 0x40 ) 
 		{
-			return new Command(CommandType.TALK , payload );
+			return BusCommand.TALK;
 		}
 		if ( ( data   & 0xff) == 0x5f ) 
 		{
-			return new Command(CommandType.UNTALK , 0 );
+			return BusCommand.UNTALK;
 		}	
 		if ( ( data & 0b1111_0000) == 0x20 ) 
 		{
-			return new Command(CommandType.LISTEN , payload );
+			return BusCommand.LISTEN;
 		}
 		if ( ( data & 0xff) == 0x3f ) 
 		{
-			return new Command(CommandType.UNLISTEN , payload );
+			return BusCommand.UNLISTEN;
 		}		
-		return null;
+		return BusCommand.UNKNOWN;
 	}
 }
