@@ -379,7 +379,7 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 		final Graphics2D g = (Graphics2D) graphics;
 		super.paintComponent(g);
 
-		final int w = getWidth();
+		final int w = (int) (getWidth()*0.9f);
 		final int h = getHeight();
 
 		// calculate width of display area
@@ -463,16 +463,14 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 		// we'll stagger the state names so they don't overlap
 		// too easily
 		int stateLineIdx = 0;
-//		final int[] stateLineOffset = new int[] {
-//				stateLineY ,
-//				stateLineY + 13 ,
-//				stateLineY + 26 ,
-//				stateLineY + 39 ,
-//				stateLineY + 52
-//		};
+		final int[] stateLineOffset = new int[] {
+				stateLineY ,
+				stateLineY + 13 ,
+				stateLineY + 26 ,
+				stateLineY + 39 ,
+				stateLineY + 52
+		};
 		
-		final int[] stateLineOffset = new int[] { stateLineY };
-
 		StateSnapshot previousState = null;
 
 		for ( final StateSnapshot currentState : statesInRange )

@@ -145,18 +145,16 @@ public class IECBus
          * - A line will become HIGH ("false") (HIGH / RELEASED, or 5V) only if all devices signal false (HIGH).
 		 */
 		
-		boolean sumClk = false;
-		boolean sumData = false;
+		boolean sumClk = true;
+		boolean sumData = true;
 		
-		final boolean outsideResetSequence = cycle > 1000000;
+		final boolean atnLowered = (this.atn != cpu.getATN()) && ! cpu.getATN();
 		for (int i = 0; i < devices.size(); i++) 
 		{
 			final SerialDevice dev = devices.get(i);
-			if ( outsideResetSequence ) {
-				dev.tick(this);
-			}
-			sumData |= dev.getData();
-			sumClk |= dev.getClock();
+			dev.tick(this , atnLowered );
+			sumData &= dev.getData();
+			sumClk &= dev.getClock();
 		}
 		
 		if ( CAPTURE_BUS_SNAPSHOTS ) 

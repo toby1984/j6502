@@ -145,7 +145,7 @@ public class IOArea extends Memory
 		cpuDevice = new SerialDevice() {
 
 			@Override
-			public void tick(IECBus bus) {
+			public void tick(IECBus bus,boolean atnLowered) {
 			}
 
 			@Override
@@ -180,10 +180,6 @@ public class IOArea extends Memory
 			{
 				// !!! Implementation HAS to match what's used in readByte(int) method !!!
 				final int value = cia2.readByte( CIA.CIA2_PRA );
-				final int ddra = cia2.readByte( CIA.CIA2_DDRA );
-				if ( ( (ddra & 1 << 5) == 0 ) ) {
-					return false;
-				}
 				return ( value & 0b0010_0000) == 0; 
 			}
 
@@ -191,10 +187,6 @@ public class IOArea extends Memory
 			public boolean getClock() {
 				// !!! Implementation HAS to match what's used in readByte(int) method !!!
 				final int value = cia2.readByte( CIA.CIA2_PRA );
-				final int ddra = cia2.readByte( CIA.CIA2_DDRA );
-				if ( ( (ddra & 1 << 4) == 0 ) ) {
-					return false;
-				}
 				return ( value & 0b0001_0000) == 0; 
 			}
 
@@ -202,10 +194,6 @@ public class IOArea extends Memory
 			public boolean getATN() {
 				// !!! Implementation HAS to match what's used in readByte(int) method !!!
 				final int value = cia2.readByte( CIA.CIA2_PRA );			
-				final int ddra = cia2.readByte( CIA.CIA2_DDRA );
-				if ( ( (ddra & 1 << 5) == 0 ) ) {
-					return false;
-				}
 				return ( value & 0b0000_1000) == 0; 
 			}
 		};		
