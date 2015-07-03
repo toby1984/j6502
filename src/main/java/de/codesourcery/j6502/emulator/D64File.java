@@ -36,6 +36,7 @@ public class D64File
 
 	protected static final int DIR_LOAD_ADR = 0x801;
 
+	private final String source;
 	private final byte[] data;
 
 	private final BAM bam = new BAM();
@@ -317,10 +318,11 @@ public class D64File
           E0-FF: Eighth dir entry
 	 */
 
-	public D64File(InputStream in) throws IOException
+	public D64File(InputStream in,String source) throws IOException
 	{
 		Validate.notNull(in, "in must not be NULL");
-
+		Validate.notNull(source, "source must not be NULL");
+		this.source = source;
 		final ByteArrayOutputStream tmp = new ByteArrayOutputStream(IMAGE_SIZE_IN_BYTES);
 		final byte[] buffer = new byte[1024];
 		try {
@@ -336,14 +338,18 @@ public class D64File
 
 	public D64File(File file) throws IOException
 	{
-		this( new FileInputStream(file ) );
+		this( new FileInputStream(file ) , "file:"+file.getAbsolutePath() );
 	}
 
 	public D64File(String imageFileOnClasspath) throws IOException
 	{
-		this( openDiskFileFromClassPath(imageFileOnClasspath ) );
+		this( openDiskFileFromClassPath(imageFileOnClasspath ) , "classpath:"+imageFileOnClasspath );
 	}
 
+	public String getSource() {
+		return source;
+	}
+	
 	private static InputStream openDiskFileFromClassPath(String imageFileOnClasspath) throws FileNotFoundException
 	{
 		final String path = "/disks/"+imageFileOnClasspath;
@@ -356,6 +362,7 @@ public class D64File
 
 	public static void main(String[] args) throws IOException
 	{
+		System.out.println("BAM offset: "+getFirstSectorNoForTrack( 18 ) * BYTES_PER_SECTOR);
 		final D64File file = new D64File( "test.d64");
 
 		final List<DirectoryEntry> directory = file.getDirectory();
@@ -446,26 +453,6 @@ public class D64File
 		}
 	}
 
-	private static int getSectorCountForTrack(int trackNo)
-	{
-		if ( trackNo <  1 || trackNo > 40 ) {
-			throw new IllegalArgumentException("Invalid track no. "+trackNo);
-		}
-		if ( trackNo <= 17 ) {
-			return 21;
-		}
-		if ( trackNo <= 24 ) {
-			return 19;
-		}
-		if ( trackNo <= 30 ) {
-			return 18;
-		}
-		if ( trackNo <= 40 ) {
-			return 17;
-		}
-		throw new IllegalArgumentException("Invalid track no. "+trackNo);
-	}
-
 	public static int getFirstSectorNoForTrack(int trackNo)
 	{
 		switch(trackNo) {
@@ -514,49 +501,6 @@ public class D64File
 		}
 	}
 
-	public static int getTrackForSector(int sector)
- 	{
-		if ( sector <  21) return 1;
-		if ( sector <  42) return 2;
-		if ( sector <  63) return 3;
-		if ( sector <  84) return 4;
-		if ( sector < 105) return 5;
-		if ( sector < 126) return 6;
-		if ( sector < 147) return 7;
-		if ( sector < 168) return 8;
-		if ( sector < 189) return 9;
-		if ( sector < 210) return 10;
-		if ( sector < 231) return 11;
-		if ( sector < 252) return 12;
-		if ( sector < 273) return 13;
-		if ( sector < 294) return 14;
-		if ( sector < 315) return 15;
-		if ( sector < 336) return 16;
-		if ( sector < 357) return 17;
-		if ( sector < 376) return 18;
-		if ( sector < 395) return 19;
-		if ( sector < 414) return 20;
-		if ( sector < 433) return 21;
-		if ( sector < 452) return 22;
-		if ( sector < 471) return 23;
-		if ( sector < 490) return 24;
-		if ( sector < 508) return 25;
-		if ( sector < 526) return 26;
-		if ( sector < 544) return 27;
-		if ( sector < 562) return 28;
-		if ( sector < 580) return 29;
-		if ( sector < 598) return 30;
-		if ( sector < 615) return 31;
-		if ( sector < 632) return 32;
-		if ( sector < 649) return 33;
-		if ( sector < 666) return 34;
-		if ( sector < 683) return 35;
-		if ( sector < 700) return 36;
-		if ( sector < 717) return 37;
-		if ( sector < 734) return 38;
-		if ( sector < 751) return 39;
-		return 40;
- 	}
 	public int getSectorCount() {
 		return 683;
 	}
@@ -792,7 +736,7 @@ public class D64File
 
 	protected final class BAM
 	{
-		private final int offset = getFirstSectorNoForTrack( 18 )*BYTES_PER_SECTOR;
+		private final int offset = getFirstSectorNoForTrack( 18 ) * BYTES_PER_SECTOR;
 
 		/*
   Bytes:$00-01: Track/Sector location of the first directory sector (should
@@ -830,13 +774,8 @@ public class D64File
 
 		public byte[] getDiskName()
 		{
-			int len = 0;
-			int start = offset+0x90;
-			for ( ; len < 16 && ( data[ start+ len ] & 0xff) != 0xa0 ; len++ ) {
-				len++;
-			}
-			byte[] result = new byte[len];
-			System.arraycopy( data , offset+0x90 , result , 0 , len );
+			byte[] result = new byte[16];
+			System.arraycopy( data , offset+0x90 , result , 0 , 16 );
 			return result;
 		}
 	}

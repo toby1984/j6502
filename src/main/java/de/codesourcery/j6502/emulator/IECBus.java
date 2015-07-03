@@ -12,9 +12,9 @@ public class IECBus
 
 	private final int MAX_CYCLES_TO_KEEP = 200;
 
-	public static final boolean DEBUG_WIRE_LEVEL = false;
-	public static final boolean DEBUG_DEVICE_LEVEL_VERBOSE = false;
-	public static final boolean DEBUG_DEVICE_LEVEL = false;
+	public static final boolean DEBUG_WIRE_LEVEL = true;
+	public static final boolean DEBUG_DEVICE_LEVEL_VERBOSE = true;
+	public static final boolean DEBUG_DEVICE_LEVEL = true;
 
 	// current cycle count
 	protected long cycle;
@@ -91,6 +91,10 @@ public class IECBus
 	{
 		return devices.stream().filter( d -> d.getPrimaryAddress() == primaryAddress ).findFirst();
 	}
+	
+	public List<SerialDevice> getDevices() {
+		return devices;
+	}
 
 	public void takeSnapshot(String msg)
 	{
@@ -135,7 +139,7 @@ public class IECBus
 		this.identifier = identifier;
 		this.cpu = cpu;
 		addDevice(cpu);
-		addDevice( new NewFloppy( 8 ) );
+		addDevice( new Floppy( 8 ) );
 	}
 
 	@Override

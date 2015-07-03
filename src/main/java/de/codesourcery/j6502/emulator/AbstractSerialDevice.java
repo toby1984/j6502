@@ -34,13 +34,13 @@ public class AbstractSerialDevice implements SerialDevice {
 	{
 		public final int channelNo;
 		public boolean isOpen;
+		public final RingBuffer receiveBuffer = new RingBuffer();
+		public final RingBuffer sendBuffer = new RingBuffer();		
 
 		public Channel(int channelNo)
 		{
 			this.channelNo = channelNo;
 		}
-		public final RingBuffer receiveBuffer = new RingBuffer();
-		public final RingBuffer sendBuffer = new RingBuffer();
 
 		public void receive(int data)
 		{
@@ -591,7 +591,7 @@ public class AbstractSerialDevice implements SerialDevice {
 	}
 
 	@Override
-	public void reset()
+	public final void reset()
 	{
 		channels.clear();
 		activeChannel = null;
@@ -600,6 +600,11 @@ public class AbstractSerialDevice implements SerialDevice {
 		this.state = IDLE;
 		this.nextState = null;
 		deviceSelected = false;
+		resetHook();
+	}
+	
+	protected void resetHook() {
+		
 	}
 
 	protected final State commandByteReceived(State nextState)
@@ -834,6 +839,15 @@ public class AbstractSerialDevice implements SerialDevice {
 
 	protected final Channel getActiveChannel() {
 		return activeChannel;
+	}
+	
+	public final DeviceState getDeviceState() {
+		return deviceState;
+	}
+	
+	public boolean isBusy() 
+	{
+		return ! deviceState.equals( DeviceState.IDLE );
 	}
 
 	/*

@@ -17,8 +17,12 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.font.LineMetrics;
 import java.awt.geom.Rectangle2D;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -27,12 +31,18 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import javax.swing.JButton;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
 import javax.swing.JDesktopPane;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JInternalFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -52,8 +62,11 @@ import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPU.Flag;
+import de.codesourcery.j6502.emulator.D64File;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.EmulatorTest;
+import de.codesourcery.j6502.emulator.Floppy;
+import de.codesourcery.j6502.emulator.IECBus;
 import de.codesourcery.j6502.emulator.IECBus.StateSnapshot;
 import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
@@ -120,6 +133,8 @@ public class Debugger
 	private final CPUStatusPanel cpuPanel = new CPUStatusPanel();
 	private final BreakpointsWindow breakpointsWindow = new BreakpointsWindow();
 	private final ScreenPanel screenPanel = new ScreenPanel();
+	
+	private volatile boolean busPanelEnabled = IECBus.CAPTURE_BUS_SNAPSHOTS;
 	private BusPanel busPanel;
 
 	public static void main(String[] args)
@@ -183,6 +198,10 @@ public class Debugger
 			}
 		});
 
+		final JMenuBar menuBar = new JMenuBar();
+		menuBar.add( createMenu() );
+		frame.setJMenuBar( menuBar );
+		
 		final ILocationAware loc = new ILocationAware() {
 
 			@Override
@@ -205,6 +224,129 @@ public class Debugger
 		frame.setVisible(true);
 
 		updateWindows();
+	}
+
+	private JMenu createMenu() {
+		JMenu menu = new JMenu("File");
+
+		JMenuItem item = new JMenuItem("Insert disk...");
+		item.addActionListener( event -> insertDisk() );
+		menu.add( item );
+
+		item = new JMenuItem("Eject disk...");
+		item.addActionListener( event -> ejectDisk() );
+		menu.add( item );
+		
+		final JCheckBoxMenuItem checkItem = new JCheckBoxMenuItem("Capture IEC bus traces",IECBus.CAPTURE_BUS_SNAPSHOTS);
+		checkItem.setEnabled( IECBus.CAPTURE_BUS_SNAPSHOTS );
+		checkItem.addActionListener( ev -> 
+		{
+			busPanelEnabled = checkItem.isSelected();
+		});
+		menu.add(checkItem );
+		
+		return menu;
+	}
+
+	private void ejectDisk() 
+	{
+		try 
+		{
+			doWithFloppy( floppy -> floppy.ejectDisk() );
+		} catch(Exception e) {
+			showError("Failed to eject disk",e);
+		}
+	}
+
+	private void doWithFloppy(Consumer<Floppy> consumer) 
+	{
+		synchronized(emulator) 
+		{
+			emulator.getMemory().getIOArea().getIECBus().getDevices()
+			.stream().filter( dev -> dev instanceof Floppy).map( dev -> (Floppy) dev).findFirst().ifPresent( consumer );
+		}
+	}
+
+	private <T> Optional<T> doWithFloppyAndReturn(Function<Floppy,T> consumer) 
+	{
+		synchronized(emulator) 
+		{
+			Optional<Floppy> floppy = emulator.getMemory().getIOArea().getIECBus().getDevices()
+					.stream().filter( dev -> dev instanceof Floppy).map( dev -> (Floppy) dev).findFirst();
+			if ( floppy.isPresent() ) 
+			{
+				return Optional.ofNullable( consumer.apply( floppy.get() ) );
+			}
+			return Optional.empty();
+		}
+	}
+
+	private void insertDisk() 
+	{
+		final Optional<D64File> current = doWithFloppyAndReturn( floppy -> floppy.getDisk() );
+		final JFileChooser chooser;
+		if ( current.isPresent() && current.get().getSource().startsWith("file:" ) ) 
+		{
+			chooser = new JFileChooser(new File( current.get().getSource().substring("file:".length()) ) );
+		} else {
+			chooser = new JFileChooser();
+		}
+		int result = chooser.showOpenDialog( null );
+
+		if ( result != JFileChooser.APPROVE_OPTION ) 
+		{
+			return;
+		}
+		final File file = chooser.getSelectedFile();
+		try 
+		{
+			doWithFloppy( floppy -> 
+			{
+				D64File d64File;
+				try {
+					d64File = new D64File( file );
+				} catch(RuntimeException e) {
+					throw e;
+				} catch (Exception e) {
+					throw new RuntimeException(e);
+				}
+				floppy.insertDisk( d64File );
+			});
+		} catch (Exception e) {
+			showError("Failed to load disk file "+file.getAbsolutePath(),e);
+		}
+	}
+
+	private void showError(String message,Throwable t) 
+	{
+		final String[] msg = { message };
+		if ( t != null ) {
+			msg[0] += "\n";
+			final ByteArrayOutputStream out = new ByteArrayOutputStream();
+			final PrintWriter writer = new PrintWriter( out );
+			t.printStackTrace( writer);
+			writer.close();
+			try {
+				msg[0] += out.toString("UTF-8");
+			} catch (UnsupportedEncodingException e) {
+				e.printStackTrace();
+			}
+		}
+		invokeAndWait( () -> JOptionPane.showConfirmDialog(null, msg[0] , "Error" , JOptionPane.ERROR_MESSAGE ) );
+	}
+
+	private void invokeAndWait(Runnable r) 
+	{
+		try 
+		{
+			if ( SwingUtilities.isEventDispatchThread() ) {
+				r.run();
+			} else {
+				SwingUtilities.invokeAndWait( r );
+			}
+		} catch(Exception e) {
+			e.printStackTrace();
+		}
 	}
 
 	private void onApplicationShutdown()
@@ -388,7 +530,10 @@ public class Debugger
 		screenPanel.repaint();
 		cpuPanel.repaint();
 		hexPanel.repaint();
-		busPanel.repaint();
+		
+		if ( busPanelEnabled ) {
+			busPanel.repaint();
+		}
 	}
 
 	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.ILocationAware {
@@ -418,18 +563,18 @@ public class Debugger
 					boolean shiftPressed = false;
 					boolean controlPressed = false;
 					if ( ( (mask & KeyEvent.SHIFT_DOWN_MASK) != 0 ) ||
-						 ( ( mask & KeyEvent.SHIFT_MASK ) != 0 )
-					)
+							( ( mask & KeyEvent.SHIFT_MASK ) != 0 )
+							)
 					{
 						shiftPressed = true;
 					}
 
 					if ( ( (mask & KeyEvent.CTRL_DOWN_MASK) != 0 ) ||
-							 ( ( mask & KeyEvent.CTRL_MASK ) != 0 )
-						)
-						{
-							controlPressed = true;
-						}
+							( ( mask & KeyEvent.CTRL_MASK ) != 0 )
+							)
+					{
+						controlPressed = true;
+					}
 					if ( ! controlPressed && ! shiftPressed ) {
 						return Collections.emptySet();
 					}
@@ -774,7 +919,7 @@ public class Debugger
 					alignmentCorrect = false;
 					lines.clear();
 					final Consumer<Line> lineConsumer = new Consumer<Line>()
-							{
+					{
 						private int y = Y_OFFSET;
 
 						@Override
@@ -786,10 +931,10 @@ public class Debugger
 							lines.add( new LineWithBounds( line , bounds ) );
 							y += LINE_HEIGHT;
 						}
-							};
-							dis.disassemble( emulator.getMemory() , offset, bytesToDisassemble , lineConsumer);
-							alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
-							offset++;
+					};
+					dis.disassemble( emulator.getMemory() , offset, bytesToDisassemble , lineConsumer);
+					alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
+					offset++;
 				}
 			}
 		}
@@ -960,10 +1105,10 @@ public class Debugger
 		@Override
 		public String getColumnName(int column) {
 			switch(column) {
-				case 0: return "Address";
-				case 1: return "Required CPU flags";
-				default:
-					return "unknown";
+			case 0: return "Address";
+			case 1: return "Required CPU flags";
+			default:
+				return "unknown";
 			}
 		}
 
@@ -1009,15 +1154,15 @@ public class Debugger
 		{
 			Breakpoint bp = getBreakpoints().get(rowIndex);
 			switch( columnIndex ) {
-				case 0:
-					return HexDump.toAdr( bp.address );
-				case 1:
-					if ( bp.checkCPUFlags ) {
-						return CPU.Flag.toFlagString( bp.cpuFlagsMask );
-					}
-					return "<unconditional breakpoint>";
-				default:
-					throw new RuntimeException("Unreachable code reached");
+			case 0:
+				return HexDump.toAdr( bp.address );
+			case 1:
+				if ( bp.checkCPUFlags ) {
+					return CPU.Flag.toFlagString( bp.cpuFlagsMask );
+				}
+				return "<unconditional breakpoint>";
+			default:
+				throw new RuntimeException("Unreachable code reached");
 			}
 		}
 
