@@ -33,6 +33,27 @@ public final class RingBuffer {
 		return data.length - bytesInBuffer;
 	}
 
+	public byte[] readFully()
+	{
+		final byte[] result = new byte[ bytesInBuffer ];
+		for ( int offset = 0 ; ! isEmpty() ; )
+		{
+			result[offset++] = read();
+		}
+		return result;
+	}
+
+	public int read(byte[] data)
+	{
+		int offset = 0;
+		final int len = data.length;
+		while ( ! isEmpty() && offset < len)
+		{
+			data[offset++] = read();
+		}
+		return offset;
+	}
+
 	public boolean isFull()
 	{
 		return bytesInBuffer == data.length;

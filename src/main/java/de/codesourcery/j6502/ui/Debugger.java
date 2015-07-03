@@ -1,6 +1,5 @@
 package de.codesourcery.j6502.ui;
 
-import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -10,19 +9,16 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
-import java.awt.Stroke;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseMotionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.font.LineMetrics;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
 import java.io.InputStream;
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -72,6 +68,11 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class Debugger
 {
+	/**
+	 * Time between consecutive UI updates while trying to run emulation at full speed.
+	 */
+	public static final int UI_REFRESH_MILLIS = 500;
+
 	protected final Emulator emulator = new Emulator();
 
 	protected static final int LINE_HEIGHT = 15;
@@ -102,7 +103,7 @@ public class Debugger
 		{
 			final long now = System.currentTimeMillis();
 			long age = now - lastTick;
-			if ( age > 250 ) // do not post more than 60 events / second to not overload the Swing Event handling queue
+			if ( age > UI_REFRESH_MILLIS ) // do not post more than 60 events / second to not overload the Swing Event handling queue
 			{
 				lastTick = now;
 				SwingUtilities.invokeLater( () -> updateWindows() );
@@ -157,7 +158,7 @@ public class Debugger
 		busPanel = new BusPanel("IEC") {
 
 			@Override
-			protected List<StateSnapshot> getBusSnapshots() 
+			protected List<StateSnapshot> getBusSnapshots()
 			{
 				synchronized( emulator ) {
 					return emulator.getBus().getSnapshots();

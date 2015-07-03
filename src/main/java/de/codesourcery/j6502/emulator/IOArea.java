@@ -70,26 +70,29 @@ public class IOArea extends Memory
 				    Bit 7: DATA IN
 				 */
 
-				super.writeByte( adr , (byte) value);
+				super.writeByte( adr , value);
 
-				final boolean atn = (value     & 0b0000_1000) == 0; 
-				final boolean clkOut = (value  & 0b0001_0000) == 0; 
-				final boolean dataOut = (value & 0b0010_0000) == 0; 
-				System.out.println("Write to $DD00: to_write: "+toBinaryString( value)+toLogical(", ATN: ",atn)+toLogical(" , clkOut: ",clkOut)+toLogical(", dataOut: ",dataOut));
-			} 
-			else 
+				final boolean atn = (value     & 0b0000_1000) == 0;
+				final boolean clkOut = (value  & 0b0001_0000) == 0;
+				final boolean dataOut = (value & 0b0010_0000) == 0;
+				if ( IECBus.DEBUG_WIRE_LEVEL ) {
+					System.out.println("Write to $DD00: to_write: "+toBinaryString( value)+toLogical(", ATN: ",atn)+toLogical(" , clkOut: ",clkOut)+toLogical(", dataOut: ",dataOut));
+				}
+			}
+			else
 			{
-				if ( offset == CIA2_DDRA ) {
+				if ( offset == CIA2_DDRA && IECBus.DEBUG_WIRE_LEVEL )
+				{
 					System.out.println("Write to $DD02 DDRA: "+toBinaryString(value));
-				} 
+				}
 				super.writeByte(adr, value);
 			}
 		}
-		
+
 		private String toLogical(String msg,boolean level) {
 			return msg+" "+(level?"HIGH":"LOW");
 		}
-		
+
 		@Override
 		public int readByte(int adr)
 		{
@@ -116,20 +119,20 @@ public class IOArea extends Memory
 				    Bit 6: CLOCK IN
 				    Bit 7: DATA IN
 				 */
-				final boolean clockState = iecBus.getClk(); 
+				final boolean clockState = iecBus.getClk();
 				final boolean dataState = iecBus.getData();
-				
+
 				if ( clockState ) {  // true == BUS HIGH (has to match implementation in CPU SerialDevice#getClock() !!!)
 					value |=  0b0100_0000;
 				} else {
 					value &= ~0b0100_0000;
 				}
-				
+
 				if ( dataState ) { // true == BUS HIGH (has to match implementation in CPU SerialDevice#getClock() !!!)
 					value |=  0b1000_0000;
 				} else {
 					value &= ~0b1000_0000;
-				}				
+				}
 			}
 			return value;
 		};
@@ -163,12 +166,12 @@ public class IOArea extends Memory
 					    Bit 3: ~ATN OUT
 					    Bit 4: ~CLOCK OUT
 					    Bit 5: ~DATA OUT
-					    
+
 					   DATA  ATN
 				          |  |
 					    0000_0000
 					       |
-					       CLOCK   
+					       CLOCK
 
 					Bit 6..7: serial bus Input (0=Low/Active, 1=High/Inactive)
 
@@ -176,27 +179,27 @@ public class IOArea extends Memory
 					    Bit 7: DATA IN
 			 */
 			@Override
-			public boolean getData() 
+			public boolean getData()
 			{
 				// !!! Implementation HAS to match what's used in readByte(int) method !!!
 				final int value = cia2.readByte( CIA.CIA2_PRA );
-				return ( value & 0b0010_0000) == 0; 
+				return ( value & 0b0010_0000) == 0;
 			}
 
 			@Override
 			public boolean getClock() {
 				// !!! Implementation HAS to match what's used in readByte(int) method !!!
 				final int value = cia2.readByte( CIA.CIA2_PRA );
-				return ( value & 0b0001_0000) == 0; 
+				return ( value & 0b0001_0000) == 0;
 			}
 
 			@Override
 			public boolean getATN() {
 				// !!! Implementation HAS to match what's used in readByte(int) method !!!
-				final int value = cia2.readByte( CIA.CIA2_PRA );			
-				return ( value & 0b0000_1000) == 0; 
+				final int value = cia2.readByte( CIA.CIA2_PRA );
+				return ( value & 0b0000_1000) == 0;
 			}
-		};		
+		};
 		this.iecBus = new IECBus("default bus" , cpuDevice );
 		this.mainMemory = mainMemory;
 		this.vic = new VIC("VIC", AddressRange.range( 0xd000, 0xd02f));
@@ -301,8 +304,8 @@ public class IOArea extends Memory
 	public IECBus getIECBus() {
 		return iecBus;
 	}
-	
-	protected static String toBinaryString(int value) 
+
+	protected static String toBinaryString(int value)
 	{
 		final String string = Integer.toBinaryString( value & 0xff );
 		final String result = "%"+StringUtils.repeat("0" , 8-string.length())+string;

@@ -14,6 +14,8 @@ import de.codesourcery.j6502.utils.Misc;
  */
 public class CIA extends Memory
 {
+	private static final boolean DEBUG = false;
+
 	public static final int CIA1_PRA        = 0x00;
 	public static final int CIA1_PRB        = 0x01;
 	public static final int CIA1_DDRA       = 0x02;
@@ -30,7 +32,7 @@ public class CIA extends Memory
 	public static final int CIA1_ICR        = 0x0d;
 	public static final int CIA1_CRA        = 0x0e;
 	public static final int CIA1_CRB        = 0x0f;
-	
+
 	public static final int CIA2_PRA        = 0x00;
 	public static final int CIA2_PRB        = 0x01;
 	public static final int CIA2_DDRA       = 0x02;
@@ -46,7 +48,7 @@ public class CIA extends Memory
 	public static final int CIA2_SDR        = 0x0c;
 	public static final int CIA2_ICR        = 0x0d;
 	public static final int CIA2_CRA        = 0x0e;
-	public static final int CIA2_CRB        = 0x0f;	
+	public static final int CIA2_CRB        = 0x0f;
 
 	/*
 ----
@@ -191,7 +193,7 @@ $DC10-$DCFF 	56336-56575 	- 	- 	The CIA 1 register are mirrored each 16 Bytes
 [edit] CIA 2
 
 The second CIA-chip is identical to the first. Therefore in the following table are only entries which are specific to the usage in the C64.
-Adress range: $DD00-$DDFF, 56576-56831 Tasks: Serial bus, RS-232, VIC memory, NMI control 
+Adress range: $DD00-$DDFF, 56576-56831 Tasks: Serial bus, RS-232, VIC memory, NMI control
 
 
 Hex 	Adress
@@ -200,21 +202,21 @@ $DD00 	56576 	0
 PRA 	Data Port A
 
 		Bit 0..1: Select the position of the VIC-memory
-		
+
 		     %00, 0: Bank 3: $C000-$FFFF, 49152-65535
 		     %01, 1: Bank 2: $8000-$BFFF, 32768-49151
 		     %10, 2: Bank 1: $4000-$7FFF, 16384-32767
 		     %11, 3: Bank 0: $0000-$3FFF, 0-16383 (standard)
-		
+
 		Bit 2: RS-232: TXD Output, userport: Data PA 2 (pin M)
 		Bit 3..5: serial bus Output (0=High/Inactive, 1=Low/Active)
-		
+
 		    Bit 3: ATN OUT
 		    Bit 4: CLOCK OUT
 		    Bit 5: DATA OUT
-		
+
 		Bit 6..7: serial bus Input (0=Low/Active, 1=High/Inactive)
-		
+
 		    Bit 6: CLOCK IN
 		    Bit 7: DATA IN
 
@@ -223,16 +225,16 @@ PRB 	Data Port B 	Bit 0..7: userport Data PB 0-7 (Pins C,D,E,F,H,J,K,L)
 
 		The KERNAL offers several RS232-Routines, which use the pins as followed:
 		Bit 0, 3..7: RS-232: reading
-		
+
 		    Bit 0: RXD
 		    Bit 3: RI
 		    Bit 4: DCD
 		    Bit 5: User port pin J
 		    Bit 6: CTS
 		    Bit 7: DSR
-		
+
 		Bit 1..5: RS-232: writing
-		
+
 		    Bit 1: RTS
 		    Bit 2: DTR
 		    Bit 3: RI
@@ -441,7 +443,7 @@ ende     rts             ; back to BASIC
 				return timerBValue & 0xff;
 			case CIA1_TBHI:
 				return (timerBValue >> 8 ) & 0xff;
-			// ======== return ToD ====
+				// ======== return ToD ====
 			case CIA1_TOD_10THS: //  = 0x08;
 				this.todRunning = false; //  Writing CIA1_TOD_10TS register stops TOD, until register 8 (TOD 10THS) is read.
 				todRunning = true;
@@ -502,7 +504,7 @@ ende     rts             ; back to BASIC
 				//  Writing into this register stops TOD, until register 8 (TOD 10THS) will be read.
 				this.todRunning = false;
 				return;
-			// ===============================
+				// ===============================
 			case CIA1_ICR:
 				/*
 		        Bit 0: 1 = Interrupt release through timer A underflow
@@ -514,14 +516,14 @@ ende     rts             ; back to BASIC
 		        Bit 7: Source bit. 0 = set bits 0..4 are clearing the according mask bit.
 		                           1 = set bits 0..4 are setting the according mask bit.
 		                           If all bits 0..4 are cleared, there will be no change to the mask.
-							 */
+				 */
 				this.rtcAlarmIRQEnabled = (value & 1<<2 ) != 0;
 				if ( (value & 1<<7) == 0 ) { // clear corresponding bits 0-4 in IRQ mask
- 					int mask = ~(value & 0b11111);
- 					irqMask &= mask;
+					int mask = ~(value & 0b11111);
+					irqMask &= mask;
 				} else { // set corresponding bits 0-4 in IRQ mask
- 					int mask = (value & 0b11111);
- 					irqMask |= mask;
+					int mask = (value & 0b11111);
+					irqMask |= mask;
 				}
 				break;
 			case CIA1_TALO:
@@ -543,13 +545,52 @@ ende     rts             ; back to BASIC
 				}
 				break;
 			case CIA1_CRA:
+				/* Timer control A
+				 * Bit 0: 0 = Stop timer; 1 = Start timer
+				 * Bit 1: 1 = Indicates a timer underflow at port B in bit 6.
+				 * Bit 2: 0 = Through a timer overflow, bit 6 of port B will get high for one cycle , 1 = Through a timer underflow, bit 6 of port B will be inverted
+				 * Bit 3: 0 = Timer-restart after underflow (latch will be reloaded), 1 = Timer stops after underflow.
+				 * Bit 4: 1 = Load latch into the timer once.
+				 * Bit 5: 0 = Timer counts system cycles, 1 = Timer counts positive slope at CNT-pin
+				 * Bit 6: Direction of the serial shift register, 0 = SP-pin is input (read), 1 = SP-pin is output (write)
+				 * Bit 7: Real Time Clock, 0 = 60 Hz, 1 = 50 Hz
+				 */
+				boolean oldState = timerARunning;
 				timerARunning = ( value & 1) != 0;
+				if ( DEBUG ) {
+					if ( oldState != timerARunning ) {
+						System.out.println( this+" , timer A running: "+timerARunning);
+					}
+				}
 				if ( ( value & 1 << 4) != 0 ) {
 					timerAValue = timerALatch;
 				}
 				break;
 			case CIA1_CRB:
+				/* Timer control B
+				 *
+				 * Bit 0: 0 = Stop timer; 1 = Start timer
+				 * Bit 1: 1 = Indicates a timer underflow at port B in bit 7.
+				 * Bit 2: 0 = Through a timer overflow, bit 7 of port B will get high for one cycle , 1 = Through a timer underflow, bit 7 of port B will be inverted
+				 * Bit 3: 0 = Timer-restart after underflow (latch will be reloaded), 1 = Timer stops after underflow.
+				 * Bit 4: 1 = Load latch into the timer once.
+				 * Bit 5..6:
+				 *
+				 * %00 = Timer counts System cycle
+				 * %01 = Timer counts positive slope on CNT-pin
+				 * %10 = Timer counts underflow of timer A
+				 * %11 = Timer counts underflow of timer A if the CNT-pin is high
+				 *
+				 * Bit 7: 0 = Writing into the TOD register sets the clock time, 1 = Writing into the TOD register sets the alarm time.
+				 */
+				oldState = timerBRunning;
 				timerBRunning = ( value & 1) != 0;
+				if ( DEBUG ) {
+					if ( oldState != timerBRunning ) {
+						System.out.println( this+" , timer B running: "+timerBRunning);
+					}
+				}
+
 				if ( ( value & 1 << 4) != 0 ) {
 					timerBValue = timerBLatch;
 				}
@@ -578,11 +619,11 @@ ende     rts             ; back to BASIC
 			}
 		}
 		if ( this.rtcAlarmIRQEnabled &&
-		     this.tod10s == this.todAlarm10s &&
-		     this.todSeconds == this.todAlarmSeconds &&
-		     this.todMinutes == this.todAlarmMinutes &&
-		     this.todHours == this.todAlarmHours &&
-		     this.timeOfDay == this.todAlarmTimeOfDay )
+				this.tod10s == this.todAlarm10s &&
+				this.todSeconds == this.todAlarmSeconds &&
+				this.todMinutes == this.todAlarmMinutes &&
+				this.todHours == this.todAlarmHours &&
+				this.timeOfDay == this.todAlarmTimeOfDay )
 		{
 			icr_read |= 2; // tod == tod alarm time
 			cpu.queueInterrupt();
@@ -628,20 +669,20 @@ ende     rts             ; back to BASIC
 		}
 
 		/* $DC0F 	CRB 	Control Timer B
-         *
-         * Bit 0: 0 = Stop timer; 1 = Start timer
-         * Bit 1: 1 = Indicates a timer underflow at port B in bit 7.
-         * Bit 2: 0 = Through a timer overflow, bit 7 of port B will get high for one cycle , 1 = Through a timer underflow, bit 7 of port B will be inverted
-         * Bit 3: 0 = Timer-restart after underflow (latch will be reloaded), 1 = Timer stops after underflow.
-         * Bit 4: 1 = Load latch into the timer once.
-         * Bit 5..6:
-         *
-         * %00 = Timer counts System cycle
-         * %01 = Timer counts positive slope on CNT-pin
-         * %10 = Timer counts underflow of timer A
-         * %11 = Timer counts underflow of timer A if the CNT-pin is high
-         *
-         * Bit 7: 0 = Writing into the TOD register sets the clock time, 1 = Writing into the TOD register sets the alarm time.
+		 *
+		 * Bit 0: 0 = Stop timer; 1 = Start timer
+		 * Bit 1: 1 = Indicates a timer underflow at port B in bit 7.
+		 * Bit 2: 0 = Through a timer overflow, bit 7 of port B will get high for one cycle , 1 = Through a timer underflow, bit 7 of port B will be inverted
+		 * Bit 3: 0 = Timer-restart after underflow (latch will be reloaded), 1 = Timer stops after underflow.
+		 * Bit 4: 1 = Load latch into the timer once.
+		 * Bit 5..6:
+		 *
+		 * %00 = Timer counts System cycle
+		 * %01 = Timer counts positive slope on CNT-pin
+		 * %10 = Timer counts underflow of timer A
+		 * %11 = Timer counts underflow of timer A if the CNT-pin is high
+		 *
+		 * Bit 7: 0 = Writing into the TOD register sets the clock time, 1 = Writing into the TOD register sets the alarm time.
 		 */
 		if ( timerBRunning )
 		{
@@ -658,34 +699,40 @@ ende     rts             ; back to BASIC
 
 	private void handleTimerBUnderflow(int crb,CPU cpu)
 	{
-		// System.out.println("CIA #1 timer b underflow");
+//		System.out.println("CIA #1 timer B underflow");
+		icr_read |= 2; // timerB triggered underflow
 		if ( (irqMask & 2 ) != 0 ) { // trigger interrupt on timer B underflow ?
-			icr_read |= 2; // timerB triggered underflow
 			cpu.queueInterrupt();
 		}
 		if ( (crb & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
 			timerBRunning = false;
 			timerAValue = 0xffff;
 		} else { // // bit 3 = 0 => Timer-restart after underflow (latch will be reloaded)
+			if ( DEBUG ) {
+				System.out.println(this+" , loading timer B latch = "+timerBLatch);
+			}
 			timerBValue = timerBLatch;
 		}
 	}
 
 	private void handleTimerAUnderflow(int cra,CPU cpu)
 	{
-		// System.out.println("CIA #1 timer A underflow");
+//		System.out.println("CIA #1 timer A underflow");
 		/*
         Bit 0: 1 = Interrupt release through timer A underflow
         Bit 1: 1 = Interrupt release through timer B underflow
 		 */
+		icr_read |= 1; // timerA underflow triggered IRQ
 		if ( (irqMask & 1) != 0 ) { // trigger interrupt on timer A underflow ?
-			icr_read |= 1; // timerA underflow triggered IRQ
 			cpu.queueInterrupt();
 		}
 		if ( (cra & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
 			timerARunning = false;
 			timerAValue = 0xffff;
 		} else { // // bit 3 = 0 => Timer-restart after underflow (latch will be reloaded)
+			if ( DEBUG ) {
+				System.out.println(this+" , loading timer A latch = "+timerALatch);
+			}
 			timerAValue = timerALatch;
 		}
 	}

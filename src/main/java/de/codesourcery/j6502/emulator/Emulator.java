@@ -68,7 +68,7 @@ public class Emulator
 
 	public void doOneCycle()
 	{
-		if ( cpu.cycles > 0 )
+		if ( cpu.cycles > 0 ) // wait until current command has 'finished' executing
 		{
 			cpu.cycles--;
 			return;

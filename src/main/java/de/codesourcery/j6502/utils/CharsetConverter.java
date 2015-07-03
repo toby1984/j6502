@@ -52,6 +52,15 @@ public class CharsetConverter
 		return asciiToPET.get( value );
 	}
 
+	public static String petToASCII(byte[] data)
+	{
+		final StringBuilder buffer = new StringBuilder();
+		for ( byte b : data ) {
+			buffer.append( petToASCII( b ) );
+		}
+		return buffer.toString();
+	}
+
 	public static char petToASCII(byte value) {
 		return petToASCII.get( value );
 	}
