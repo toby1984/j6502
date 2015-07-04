@@ -142,7 +142,8 @@ public class Parser
 			final Token dot = lexer.next(); // consume dot
 
 			//
-			if ( lexer.peek(TokenType.CHARACTERS ) ) {
+			if ( lexer.peek(TokenType.CHARACTERS ) ) 
+			{
 				switch( lexer.peek().text.toLowerCase() )
 				{
 					case "byte":

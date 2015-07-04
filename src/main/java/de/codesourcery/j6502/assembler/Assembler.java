@@ -147,8 +147,15 @@ public class Assembler
 						if ( region != null )
 						{
 							TextLocation loc = sourceHelper.getLocation( region.getStartingOffset() );
-							if ( loc != null ) {
-								sourceMap.addAddressRange( (short) start  , end-start , loc.lineNumber );
+							if ( loc != null ) 
+							{
+								try {
+									sourceMap.addAddressRange( start  , end-start , loc.lineNumber );
+								}
+								catch(IllegalArgumentException e) 
+								{
+									throw new IllegalArgumentException("Error with location "+loc+" (offset: "+region.getStartingOffset()+")",e);
+								}
 							}
 						}
 					}

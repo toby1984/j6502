@@ -1603,7 +1603,7 @@ Subroutines are normally terminated by a RTS op code.
 			return 0;
 		}
 
-		final int relOffset = lit.getWordValue() - writer.getCurrentAddress()-2; // -2 because branching is done relative to the END of the branch instruction
+		final int relOffset = (lit.getWordValue() & 0xffff) - writer.getCurrentAddress()-2; // -2 because branching is done relative to the END of the branch instruction
 
 		if( relOffset > 255 || relOffset < -128 ) {
 			throw new BranchTargetOutOfRangeException(ins, relOffset);

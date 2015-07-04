@@ -170,63 +170,63 @@ public class VIC extends Memory
 	public  static final int VIC_SPRITE4_X_COORD = 8;
 	public  static final int VIC_SPRITE4_Y_COORD = 9;
 
-	public  static final int VIC_SPRITE5_X_COORD = 10;
-	public  static final int VIC_SPRITE5_Y_COORD = 11;
+	public  static final int VIC_SPRITE5_X_COORD = 0x0a;
+	public  static final int VIC_SPRITE5_Y_COORD = 0x0b;
 
-	public  static final int VIC_SPRITE6_X_COORD = 12;
-	public  static final int VIC_SPRITE6_Y_COORD = 13;
+	public  static final int VIC_SPRITE6_X_COORD = 0x0c;
+	public  static final int VIC_SPRITE6_Y_COORD = 0x0d;
 
-	public  static final int VIC_SPRITE7_X_COORD = 14;
-	public  static final int VIC_SPRITE7_Y_COORD = 15;
+	public  static final int VIC_SPRITE7_X_COORD = 0x0e;
+	public  static final int VIC_SPRITE7_Y_COORD = 0x0f;
 
-	public  static final int VIC_SPRITE_X_COORDS_HI_BIT = 15;
+	public  static final int VIC_SPRITE_X_COORDS_HI_BIT = 0x10;
 
-	public  static final int VIC_CTRL1 = 17;
+	public  static final int VIC_CTRL1 = 0x11;
 
-	public  static final int VIC_SCANLINE = 18;
+	public  static final int VIC_SCANLINE = 0x12;
 
-	public  static final int VIC_LIGHTPEN_X_COORDS = 19;
-	public  static final int VIC_LIGHTPEN_Y_COORDS = 20;
+	public  static final int VIC_LIGHTPEN_X_COORDS = 0x13;
+	public  static final int VIC_LIGHTPEN_Y_COORDS = 0x14;
 
-	public  static final int VIC_SPRITE_ENABLE = 21;
+	public  static final int VIC_SPRITE_ENABLE = 0x15;
 
-	public  static final int VIC_CTRL2 = 22;
+	public  static final int VIC_CTRL2 = 0x16;
 
-	public  static final int VIC_SPRITE_DOUBLE_HEIGHT = 23;
+	public  static final int VIC_SPRITE_DOUBLE_HEIGHT = 0x17;
 
-	public  static final int VIC_MEMORY_MAPPING = 24;
+	public  static final int VIC_MEMORY_MAPPING = 0x18;
 
-	public  static final int VIC_IRQ_ACTIVE_BITS = 25;
+	public  static final int VIC_IRQ_ACTIVE_BITS = 0x19;
 
-	public  static final int VIC_IRQ_ENABLE_BITS = 26;
+	public  static final int VIC_IRQ_ENABLE_BITS = 0x1a;
 
-	public  static final int VIC_SPRITE_PRIORITY = 27;
+	public  static final int VIC_SPRITE_PRIORITY = 0x1b;
 
-	public  static final int VIC_SPRITE_MULTICOLOR_MODE = 28;
+	public  static final int VIC_SPRITE_MULTICOLOR_MODE = 0x1c;
 
-	public  static final int VIC_SPRITE_DOUBLE_WIDTH = 29;
+	public  static final int VIC_SPRITE_DOUBLE_WIDTH = 0x1d;
 
-	public  static final int VIC_SPRITE_SPRITE_COLLISIONS = 30;
-	public  static final int VIC_SPRITE_BACKGROUND_COLLISIONS = 31;
+	public  static final int VIC_SPRITE_SPRITE_COLLISIONS = 0x1e;
+	public  static final int VIC_SPRITE_BACKGROUND_COLLISIONS = 0x1f;
 
-	public  static final int VIC_BORDER_COLOR = 32;
-	public  static final int VIC_BACKGROUND_COLOR = 33;
+	public  static final int VIC_BORDER_COLOR = 0x20;
+	public  static final int VIC_BACKGROUND_COLOR = 0x21;
 
-	public  static final int VIC_BACKGROUND0_EXT_COLOR = 34;
-	public  static final int VIC_BACKGROUND1_EXT_COLOR = 35;
-	public  static final int VIC_BACKGROUND2_EXT_COLOR = 36;
+	public  static final int VIC_BACKGROUND0_EXT_COLOR = 0x22;
+	public  static final int VIC_BACKGROUND1_EXT_COLOR = 0x23;
+	public  static final int VIC_BACKGROUND2_EXT_COLOR = 0x24;
 
-	public  static final int VIC_SPRITE_COLOR10_MULTICOLOR_MODE = 37;
-	public  static final int VIC_SPRITE_COLOR11_MULTICOLOR_MODE = 38;
+	public  static final int VIC_SPRITE_COLOR10_MULTICOLOR_MODE = 0x25;
+	public  static final int VIC_SPRITE_COLOR11_MULTICOLOR_MODE = 0x26;
 
-	public  static final int VIC_SPRITE0_COLOR10 = 39;
-	public  static final int VIC_SPRITE1_COLOR10 = 40;
-	public  static final int VIC_SPRITE2_COLOR10 = 41;
-	public  static final int VIC_SPRITE3_COLOR10 = 42;
-	public  static final int VIC_SPRITE4_COLOR10 = 43;
-	public  static final int VIC_SPRITE5_COLOR10 = 44;
-	public  static final int VIC_SPRITE6_COLOR10 = 45;
-	public  static final int VIC_SPRITE7_COLOR10 = 46;
+	public  static final int VIC_SPRITE0_COLOR10 = 0x27;
+	public  static final int VIC_SPRITE1_COLOR10 = 0x28;
+	public  static final int VIC_SPRITE2_COLOR10 = 0x29;
+	public  static final int VIC_SPRITE3_COLOR10 = 0x2a;
+	public  static final int VIC_SPRITE4_COLOR10 = 0x2b;
+	public  static final int VIC_SPRITE5_COLOR10 = 0x2c;
+	public  static final int VIC_SPRITE6_COLOR10 = 0x2d;
+	public  static final int VIC_SPRITE7_COLOR10 = 0x2e;
 
 	public static final int BORDER_HEIGHT_PIXELS = 15;
 	public static final int BORDER_WIDTH_PIXELS = 15;

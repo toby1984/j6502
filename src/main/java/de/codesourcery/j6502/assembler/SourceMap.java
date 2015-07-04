@@ -30,9 +30,9 @@ public class SourceMap
 		ranges.clear();
 	}
 
-	public void addAddressRange(short start,int len, int lineNo)
+	public void addAddressRange(int start,int len, int lineNo)
 	{
-		ranges.add( new RangeWithLine( new AddressRange(start,len) , lineNo ) );
+		ranges.add( new RangeWithLine( new AddressRange(start & 0xffff,len) , lineNo ) );
 	}
 
 	public Optional<Integer> getLineNumberForAddress(int adr)

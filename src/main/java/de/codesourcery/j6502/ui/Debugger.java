@@ -33,6 +33,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
@@ -47,10 +48,13 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.border.TitledBorder;
 import javax.swing.table.AbstractTableModel;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.assembler.Assembler;
 import de.codesourcery.j6502.assembler.parser.Lexer;
@@ -133,6 +137,19 @@ public class Debugger
 	private final CPUStatusPanel cpuPanel = new CPUStatusPanel();
 	private final BreakpointsWindow breakpointsWindow = new BreakpointsWindow();
 	private final ScreenPanel screenPanel = new ScreenPanel();
+	private final CalculatorPanel calculatorPanel = new CalculatorPanel();
+	private final AsmPanel asmPanel = new AsmPanel() {
+
+		@Override
+		protected void binaryUploadedToEmulator() 
+		{
+			if ( SwingUtilities.isEventDispatchThread() ) {
+				updateWindows();
+			} else {
+				SwingUtilities.invokeLater( () -> updateWindows() );
+			}
+		}
+	};
 	
 	private volatile boolean busPanelEnabled = IECBus.CAPTURE_BUS_SNAPSHOTS;
 	private BusPanel busPanel;
@@ -169,6 +186,13 @@ public class Debugger
 
 		final JInternalFrame screenPanelFrame = wrap( "Screen" , screenPanel );
 		desktop.add( screenPanelFrame  );
+		
+		final JInternalFrame calculatorPanelFrame = wrap( "Calculator" , calculatorPanel );
+		desktop.add( calculatorPanelFrame  );		
+		
+		final JInternalFrame asmPanelFrame = wrap( AsmPanel.PANEL_TITLE , asmPanel );
+		asmPanel.setEmulator( emulator );
+		desktop.add( asmPanelFrame  );		
 
 		busPanel = new BusPanel("IEC") {
 
@@ -535,6 +559,96 @@ public class Debugger
 			busPanel.repaint();
 		}
 	}
+	
+	protected final class CalculatorPanel extends JPanel implements ILocationAware {
+
+		private Component peer;
+
+		private JTextField input = new JTextField();
+		private JTextField hexOutput = new JTextField();
+		private JTextField decOutput = new JTextField();
+		private JTextField binOutput = new JTextField();
+		
+		public CalculatorPanel() 
+		{
+			setLayout( new FlowLayout() );
+			
+			input.addActionListener( ev -> 
+			{
+				String text = input.getText();
+				Integer inputValue = null;
+				if ( StringUtils.isNotBlank( text ) ) 
+				{
+					text = text.trim();
+					try {
+						if ( text.startsWith("$" ) ) {
+							inputValue = Integer.parseInt( text.substring(1) , 16 );
+						} else if ( text.startsWith("0x" ) ) {
+							inputValue = Integer.parseInt( text.substring(2) , 16 );
+						} else if ( text.startsWith("0b" ) ) {
+							inputValue = Integer.parseInt( text.substring(2) , 2 );
+						} else if ( text.startsWith("%" ) ) {
+							inputValue = Integer.parseInt( text.substring(1) , 2 );
+						} else {
+							inputValue = Integer.parseInt( text );
+						}
+					} 
+					catch(Exception e) 
+					{
+					}
+				}
+				if ( inputValue != null ) 
+				{
+					hexOutput.setText( Integer.toHexString( inputValue ) );
+					decOutput.setText( Integer.toString( inputValue ) );
+					binOutput.setText( Integer.toBinaryString( inputValue ) );
+				} else {
+					hexOutput.setText("No/invalid input");
+					decOutput.setText("No/invalid input");
+					binOutput.setText("No/invalid input");
+				}
+			});
+			
+			input.setColumns( 10 );
+			hexOutput.setColumns( 10 );
+			decOutput.setColumns( 10 );
+			binOutput.setColumns( 10 );
+			
+			setup(input,"To convert");
+			setup(hexOutput,"Hexadecimal");
+			setup(decOutput,"Decimal");
+			setup( binOutput , "Binary" );
+			
+			add( input );
+			add( hexOutput);
+			add( decOutput);
+			add( binOutput);
+			hexOutput.setEditable( false );
+			decOutput.setEditable( false );
+			binOutput.setEditable( false );
+			
+			setPreferredSize( new Dimension(200,100 ) );
+		}
+		
+		private void setup(JComponent c,String label) 
+		{
+			TitledBorder border = BorderFactory.createTitledBorder( label );
+			border.setTitleColor( Color.WHITE );
+			c.setBorder( border );
+			c.setBackground( Color.BLACK );
+			c.setForeground( Color.GREEN );
+		}
+		
+		@Override
+		public void setLocationPeer(Component frame) {
+			this.peer = frame;
+		}
+
+		@Override
+		public Component getLocationPeer() {
+			return peer;
+		}
+	}
 
 	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.ILocationAware {
 
@@ -674,17 +788,28 @@ public class Debugger
 			}
 		}
 	}
+	
+	public static void setup(JComponent c1,JComponent... other) {
+		setup(c1);
+		
+		if ( other != null ) 
+		{
+			for ( JComponent c : other ) {
+				setup(c);
+			}
+		}
+	}	
 
-	protected static void setup(JComponent c) {
+	public static void setup(JComponent c) {
 		setMonoSpacedFont( c );
 		setColors( c );
 	}
 
-	protected static void setMonoSpacedFont(JComponent c) {
+	public static void setMonoSpacedFont(JComponent c) {
 		c.setFont( MONO_FONT );
 	}
 
-	protected static void setColors(JComponent c) {
+	public static void setColors(JComponent c) {
 		c.setBackground( BG_COLOR );
 		c.setForeground( FG_COLOR );
 	}
@@ -1023,7 +1148,15 @@ public class Debugger
 
 		public BreakpointsWindow()
 		{
+			setColors(this);
+			
 			final JTable breakpointTable = new JTable( bpModel );
+			setColors( breakpointTable );
+			breakpointTable.setFillsViewportHeight( true );
+			
+			breakpointTable.getTableHeader().setForeground( FG_COLOR );
+			breakpointTable.getTableHeader().setBackground( BG_COLOR );
+			
 			setup( breakpointTable );
 			final JScrollPane scrollPane = new JScrollPane( breakpointTable );
 			setup( scrollPane );
