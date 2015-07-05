@@ -68,52 +68,62 @@ public class Emulator
 
 	public void doOneCycle()
 	{
+		/* First (low) half of clock cycle.
+		 * 
+		 * One period of this signal corresponds to one clock cycle consisting
+         * of two phases: ph2 is low in the first phase and high in the second
+         * phase (hence the name 'ph2' for "phase 2"). The 6510 only accesses
+         * the bus in the second (HIGH) clock phase, the VIC normally only in the
+         * first (LOW) phase.
+		 */
+		
+		memory.tick( cpu , false ); // clock == LOW		
+		
+		/*
+		 * Second (high) half of clock cycle.
+		 */
 		if ( cpu.cycles > 0 ) // wait until current command has 'finished' executing
 		{
 			cpu.cycles--;
-			return;
-		}
-
-		if ( cpu.isInterruptQueued() && ! cpu.isSet(CPU.Flag.IRQ_DISABLE ) )
+		} 
+		else 
 		{
-			cpu.performInterrupt(memory);
-		}
-
-		int oldPc = cpu.pc();
-
-		if ( PRINT_DISASSEMBLY )
-		{
-			System.out.println("=====================");
-			final Disassembler dis = new Disassembler();
-			dis.setAnnotate( true );
-			dis.setWriteAddresses( true );
-			dis.disassemble( memory , cpu.pc() , 3 , new Consumer<Line>()
+			if ( cpu.isInterruptQueued() && ! cpu.isSet(CPU.Flag.IRQ_DISABLE ) )
 			{
-				private boolean linePrinted = false;
+				cpu.performInterrupt(memory);
+			}
 
-				@Override
-				public void accept(Line line) {
-					if ( ! linePrinted ) {
-						System.out.println( line );
-						linePrinted = true;
+			final int oldPc = cpu.pc();
+
+			if ( PRINT_DISASSEMBLY )
+			{
+				System.out.println("=====================");
+				final Disassembler dis = new Disassembler();
+				dis.setAnnotate( true );
+				dis.setWriteAddresses( true );
+				dis.disassemble( memory , cpu.pc() , 3 , new Consumer<Line>()
+				{
+					private boolean linePrinted = false;
+
+					@Override
+					public void accept(Line line) {
+						if ( ! linePrinted ) {
+							System.out.println( line );
+							linePrinted = true;
+						}
 					}
-				}
-			});
-		}
-
-		try {
+				});
+			}
+			
 			doSingleStep();
+			
+			if ( PRINT_DISASSEMBLY ) {
+				System.out.println( cpu );
+			}
+			cpu.previousPC = (short) oldPc;			
 		}
-		finally
-		{
-			memory.tick( cpu );
-		}
-
-		if ( PRINT_DISASSEMBLY ) {
-			System.out.println( cpu );
-		}
-
-		cpu.previousPC = (short) oldPc;
+		
+		memory.tick( cpu , true ); // clock == HIGH
 	}
 
 	private void doSingleStep()

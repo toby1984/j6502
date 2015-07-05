@@ -285,12 +285,12 @@ public class IOArea extends Memory
 		iecBus.reset();
 	}
 
-	public void tick(CPU cpu)
+	public void tick(CPU cpu,boolean clockHigh)
 	{
-		cia1.tick( cpu );
-		cia2.tick(cpu );
-		vic.tick( cpu );
-		iecBus.tick();
+		cia1.tick( cpu , clockHigh );
+		cia2.tick(cpu , clockHigh );
+		vic.tick( cpu , clockHigh );
+		iecBus.tick(clockHigh);
 	}
 
 	public CIA getCIA1() {

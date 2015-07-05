@@ -630,10 +630,14 @@ ende     rts             ; back to BASIC
 		}
 	}
 
-	public void tick(CPU cpu)
+	public void tick(CPU cpu,boolean clockHigh)
 	{
+		if ( ! clockHigh ) {
+			return;
+		}
+		
 		tickCounter++;
-		if ( todRunning & ( tickCounter % 100000) == 0 ) // RTC increases in 1/10 of a second intervals = every 100 milliseconds = every 100.000 microseconds
+		if ( todRunning & ( tickCounter % 100_000) == 0 ) // RTC increases in 1/10 of a second intervals = every 100 milliseconds = every 100.000 microseconds
 		{
 			increaseRTC( cpu );
 		}

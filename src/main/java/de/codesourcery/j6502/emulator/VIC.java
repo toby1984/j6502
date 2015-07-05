@@ -390,8 +390,12 @@ public class VIC extends Memory
 		g.drawImage( buffer , 0 , 0 , width, height , null );
 	}
 
-	public void tick(CPU cpu)
+	public void tick(CPU cpu,boolean clockHigh)
 	{
+		if ( ! clockHigh ) {
+			return;
+		}
+		
 		cycleCount++;
 
 		// decrement

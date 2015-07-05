@@ -12,9 +12,9 @@ public class IECBus
 
 	private final int MAX_CYCLES_TO_KEEP = 200;
 
-	public static final boolean DEBUG_WIRE_LEVEL = false;
-	public static final boolean DEBUG_DEVICE_LEVEL_VERBOSE = false;
-	public static final boolean DEBUG_DEVICE_LEVEL = false;
+	public static final boolean DEBUG_WIRE_LEVEL = true;
+	public static final boolean DEBUG_DEVICE_LEVEL_VERBOSE = true;
+	public static final boolean DEBUG_DEVICE_LEVEL = true;
 
 	// current cycle count
 	protected long cycle;
@@ -147,8 +147,12 @@ public class IECBus
 		return "[BUS: "+identifier+"] ATN: "+getATN()+" | CLK: "+clkSum+" | DATA: "+dataSum;
 	}
 
-	public void tick()
+	public void tick(boolean clockHigh)
 	{
+		if ( ! clockHigh ) {
+			return;
+		}
+		
 		/*
 		 * High = Logical false
 		 * Low  = Logical true

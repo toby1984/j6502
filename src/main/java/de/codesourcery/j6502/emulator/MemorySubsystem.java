@@ -328,9 +328,9 @@ public final class MemorySubsystem extends IMemoryRegion
 		System.out.println( this );
 	}
 
-	public void tick(CPU cpu)
+	public void tick(CPU cpu,boolean clockHigh)
 	{
-		ioArea.tick( cpu );
+		ioArea.tick( cpu , clockHigh );
 	}
 
 	private void createRegions(int index)

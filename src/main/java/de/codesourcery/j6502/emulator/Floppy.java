@@ -155,6 +155,11 @@ public class Floppy extends AbstractSerialDevice
 	public Floppy(int primaryAddress)
 	{
 		super(primaryAddress);
+		try {
+			disk = new D64File("test.d64");
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	/*

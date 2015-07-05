@@ -17,7 +17,15 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public enum Opcode
 {
-	// generic #1
+	/* Immediate       LDA #$A5       $A9      2     2   
+     * Zero Page       LDA $A5        $A5      2     3   
+     * Zero Page,X     LDA $A5,X      $B5      2     4   
+     * Absolute        LDA $A5B6      $AD      3     4   
+     * Absolute,X      LDA $A5B6,X    $BD      3     4+  
+     * Absolute,Y      LDA $A5B6,Y    $B9      3     4+  
+     * (Indirect,X)    LDA ($A5,X)    $A1      2     6   
+     * (Indirect),Y    LDA ($A5),Y    $B1      2     5+   	 
+	 */
 	LDA("LDA")
 	{
 		@Override
@@ -63,6 +71,14 @@ public enum Opcode
 			updateZeroSignedFromAccumulator(cpu);
 		}
 	},
+	/* Zero Page       STA $A5        $85      2     3   
+     * Zero Page,X     STA $A5,X      $95      2     4   
+     * Absolute        STA $A5B6      $8D      3     4   
+     * Absolute,X      STA $A5B6,X    $9D      3     5   
+     * Absolute,Y      STA $A5B6,Y    $99      3     5   
+     * (Indirect,X)    STA ($A5,X)    $81      2     6   
+     * (Indirect),Y    STA ($A5),Y    $91      2     6  	 
+	 */
 	STA("STA")
 	{
 		@Override
@@ -219,14 +235,14 @@ public enum Opcode
  Affects Flags: S Z
 
 MODE           SYNTAX       HEX LEN TIM
-Immediate     EOR #$44      $49  2   2
-Zero Page     EOR $44       $45  2   3
-Zero Page,X   EOR $44,X     $55  2   4
-Absolute      EOR $4400     $4D  3   4
-Absolute,X    EOR $4400,X   $5D  3   4+
-Absolute,Y    EOR $4400,Y   $59  3   4+
-Indirect,X    EOR ($44,X)   $41  2   6
-Indirect,Y    EOR ($44),Y   $51  2   5+
+  Immediate       EOR #$A5       $49      2     2   
+  Zero Page       EOR $A5        $45      2     3   
+  Zero Page,X     EOR $A5,X      $55      2     4   
+  Absolute        EOR $A5B6      $4D      3     4   
+  Absolute,X      EOR $A5B6,X    $5D      3     4+  
+  Absolute,Y      EOR $A5B6,Y    $59      3     4+  
+  (Indirect,X)    EOR ($A5,X)    $41      2     6   
+  (Indirect),Y    EOR ($A5),Y    $51      2     5+  
 
 + add 1 cycle if page boundary crossed
 			 */
@@ -270,6 +286,15 @@ Indirect,Y    EOR ($44),Y   $51  2   5+
 			updateZeroSigned( result , cpu );
 		}
 	},
+	/* Immediate       ADC #$A5       $69      2     2   
+     * Zero Page       ADC $A5        $65      2     3   
+     * Zero Page,X     ADC $A5,X      $75      2     4   
+     * Absolute        ADC $A5B6      $6D      3     4   
+     * Absolute,X      ADC $A5B6,X    $7D      3     4+  
+     * Absolute,Y      ADC $A5B6,Y    $79      3     4+  
+     * (Indirect,X)    ADC ($A5,X)    $61      2     6   
+     * (Indirect),Y    ADC ($A5),Y    $71      2     5+   
+	 */
 	ADC("ADC")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer) { assembleGeneric1(ins,writer, 0b011 ); }
@@ -282,7 +307,7 @@ Indirect,Y    EOR ($44),Y   $51  2   5+
 			{
 				case 0x69: // Immediate     ADC #$44      $69  2   2
 					b = readImmediateValue(cpu,memory);
-					cpu.cycles += 3;
+					cpu.cycles += 2;
 					break;
 				case 0x65: // Zero Page     ADC $44       $65  2   3
 					b = readZeroPageValue( cpu , memory );
@@ -435,16 +460,16 @@ lack thereof and the sign (i.e. A>=$80) of the accumulator.
 		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator)
 		{
 			/*
-MODE           SYNTAX       HEX LEN TIM
-Immediate     SBC #$44      $E9  2   2
-Zero Page     SBC $44       $E5  2   3
-Zero Page,X   SBC $44,X     $F5  2   4
-Absolute      SBC $4400     $ED  3   4
-Absolute,X    SBC $4400,X   $FD  3   4+
-Absolute,Y    SBC $4400,Y   $F9  3   4+
-Indirect,X    SBC ($44,X)   $E1  2   6
-Indirect,Y    SBC ($44),Y   $F1  2   5+
-
+  MODE           SYNTAX       HEX LEN TIM
+  Immediate       SBC #$A5       $E9      2     2   
+  Zero Page       SBC $A5        $E5      2     3   
+  Zero Page,X     SBC $A5,X      $F5      2     4   
+  Absolute        SBC $A5B6      $ED      3     4   
+  Absolute,X      SBC $A5B6,X    $FD      3     4+  
+  Absolute,Y      SBC $A5B6,Y    $F9      3     4+  
+  (Indirect,X)    SBC ($A5,X)    $E1      2     6   
+  (Indirect),Y    SBC ($A5),Y    $F1      2     5+ 
+  
 SBC results are dependant on the setting of the decimal flag.
 In decimal mode, subtraction is carried out on the assumption that the values involved are packed BCD (Binary Coded Decimal).
 There is no way to subtract without the carry which works as an inverse borrow. i.e, to subtract you set the carry before the
@@ -455,7 +480,7 @@ operation. If the carry is cleared by the operation, it indicates a borrow occur
 			{
 				case 0xE9: // Immediate     ADC #$44      $69  2   2
 					b = readImmediateValue(cpu,memory);
-					cpu.cycles += 3;
+					cpu.cycles += 2;
 					break;
 				case 0xE5: // Zero Page     ADC $44       $65  2   3
 					b = readZeroPageValue( cpu , memory );
@@ -558,12 +583,12 @@ M - N - B	SBC of M and N with borrow B
 			/*
  Affects Flags: S Z C
 
-MODE           SYNTAX       HEX LEN TIM
-Accumulator   ASL A         $0A  1   2
-Zero Page     ASL $44       $06  2   5
-Zero Page,X   ASL $44,X     $16  2   6
-Absolute      ASL $4400     $0E  3   6
-Absolute,X    ASL $4400,X   $1E  3   7
+  MODE           SYNTAX       HEX LEN TIM
+  Accumulator     ASL A          $0A      1     2   
+  Zero Page       ASL $A5        $06      2     5   
+  Zero Page,X     ASL $A5,X      $16      2     6   
+  Absolute        ASL $A5B6      $0E      3     6   
+  Absolute,X      ASL $A5B6,X    $1E      3     7   
 
 ASL shifts all bits left one position. 0 is shifted into bit 0 and the original bit 7 is shifted into the Carry.
 			 */
@@ -616,6 +641,13 @@ ASL shifts all bits left one position. 0 is shifted into bit 0 and the original 
 			cpu.setFlag(Flag.CARRY , (result  & 0b1_0000_0000) != 0 );
 		}
 	},
+	/*
+  Accumulator     ROL A          $2A      1    2   
+  Zero Page       ROL $A5        $26      2    5   
+  Zero Page,X     ROL $A5,X      $36      2    6   
+  Absolute        ROL $A5B6      $2E      3    6   
+  Absolute,X      ROL $A5B6,X    $3E      3    7    	 
+	 */
 	ROL("ROL")
 	{
 		@Override public void assemble(InstructionNode ins, ICompilationContext writer)
@@ -705,11 +737,11 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 			Affects Flags: S Z C
 
 			MODE           SYNTAX       HEX LEN TIM
-			Accumulator   LSR A         $4A  1   2
-			Zero Page     LSR $44       $46  2   5
-			Zero Page,X   LSR $44,X     $56  2   6
-			Absolute      LSR $4400     $4E  3   6
-			Absolute,X    LSR $4400,X   $5E  3   7
+            Accumulator     LSR A          $4A      1     2   
+            Zero Page       LSR $A5        $46      2     5   
+            Zero Page,X     LSR $A5,X      $56      2     6   
+            Absolute        LSR $A5B6      $4E      3     6   
+            Absolute,X      LSR $A5B6,X    $5E      3     7   
 
 			LSR shifts all bits right one position. 0 is shifted into bit 7 and the original bit 0 is shifted into the Carry.
 			 */
@@ -787,12 +819,12 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 			/*
  Affects Flags: S Z C
 
-MODE           SYNTAX       HEX LEN TIM
-Accumulator   ROR A         $6A  1   2
-Zero Page     ROR $44       $66  2   5
-Zero Page,X   ROR $44,X     $76  2   6
-Absolute      ROR $4400     $6E  3   6
-Absolute,X    ROR $4400,X   $7E  3   7
+  MODE           SYNTAX       HEX LEN TIM
+  Accumulator     ROR A          $6A      1     2   
+  Zero Page       ROR $A5        $66      2     5   
+  Zero Page,X     ROR $A5,X      $76      2     6   
+  Absolute        ROR $A5B6      $6E      3     6   
+  Absolute,X      ROR $A5B6,X    $7E      3     7    
 
 ROR shifts all bits right one position. The Carry is shifted into bit 7 and the original bit 0 is shifted into the Carry.
 			 */
@@ -923,11 +955,12 @@ Absolute      STX $4400     $8E  3   4
 		{
 			/*
 MODE           SYNTAX       HEX LEN TIM
-Immediate     LDX #$44      $A2  2   2
-Zero Page     LDX $44       $A6  2   3
-Zero Page,Y   LDX $44,Y     $B6  2   4
-Absolute      LDX $4400     $AE  3   4
-Absolute,Y    LDX $4400,Y   $BE  3   4+
+
+  Immediate       LDX #$A5       $A2      2     2   
+  Zero Page       LDX $A5        $A6      2     3   
+  Zero Page,Y     LDX $A5,Y      $B6      2     4   
+  Absolute        LDX $A5B6      $AE      2     4   
+  Absolute,Y      LDX $A5B6,Y    $BE      2     4+  
 			 */
 
 			switch( opcode ) {
@@ -1170,12 +1203,12 @@ Absolute      STY $4400     $8C  3   4
 			/*
  Affects Flags: S Z
 
-MODE           SYNTAX       HEX LEN TIM
-Immediate     LDY #$44      $A0  2   2
-Zero Page     LDY $44       $A4  2   3
-Zero Page,X   LDY $44,X     $B4  2   4
-Absolute      LDY $4400     $AC  3   4
-Absolute,X    LDY $4400,X   $BC  3   4+
+  MODE           SYNTAX       HEX LEN TIM
+  Immediate       LDY #$A5       $A0      2     2   
+  Zero Page       LDY $A5        $A4      2     3   
+  Zero Page,X     LDY $A5,X      $B4      2     4   
+  Absolute        LDY $A5B6      $AC      2     4   
+  Absolute,X      LDY $A5B6,X    $BC      2     4+  
 
 + add 1 cycle if page boundary crossed
 
@@ -2189,6 +2222,11 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 			default:
 				throw new RuntimeException("Unreachable code reached");
 		}
+		
+		/*
+		 * - Add 1 (one) T-State if a the branch occurs and the destination address is on the same Page
+         * - Add 2 (two) T-States if a the branch occurs and the destination address is on a different Page
+		 */
 		if ( takeBranch )
 		{
 //			System.out.println("*** branch taken ***");

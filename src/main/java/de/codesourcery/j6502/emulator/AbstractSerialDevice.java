@@ -14,6 +14,8 @@ public class AbstractSerialDevice implements SerialDevice {
 	protected  boolean clk=false; // bus == high
 	protected  boolean data=false; // bus == high
 
+	protected boolean waitingStarted;	
+	protected long cyclesInState = 0;
 	protected  State state;
 	protected  State nextState;
 
@@ -70,7 +72,6 @@ public class AbstractSerialDevice implements SerialDevice {
 	protected abstract class State
 	{
 		public final String name;
-		protected long cyclesInState = 0;
 
 		public State(String name) { this.name = name; }
 
@@ -95,8 +96,6 @@ public class AbstractSerialDevice implements SerialDevice {
 
 	protected abstract class WaitForFallingEdge extends State {
 
-		boolean waitingStarted;
-
 		public WaitForFallingEdge(String name) {
 			super(name);
 		}
@@ -120,8 +119,6 @@ public class AbstractSerialDevice implements SerialDevice {
 	}
 
 	protected abstract class WaitForRisingEdge extends State {
-
-		boolean waitingStarted;
 
 		public WaitForRisingEdge(String name) {
 			super(name);
@@ -192,7 +189,7 @@ public class AbstractSerialDevice implements SerialDevice {
 		@Override
 		public void tickHook(IECBus bus, boolean atnLowered)
 		{
-			if ( cyclesInState >= 20 )
+			if ( cyclesInState >= 40 )
 			{
 				setState( TALK_RAISE_CLK );
 				if ( currentBit == 8 )
@@ -223,7 +220,7 @@ public class AbstractSerialDevice implements SerialDevice {
 		@Override
 		public void tickHook(IECBus bus, boolean atnLowered)
 		{
-			if ( cyclesInState >= 20 ) {
+			if ( cyclesInState >= 40 ) {
 				setState( TALK_RAISE_CLK );
 			}
 		}
@@ -331,7 +328,7 @@ public class AbstractSerialDevice implements SerialDevice {
 		@Override
 		public void tickHook(IECBus bus, boolean atnLowered)
 		{
-			if ( cyclesInState >= 20 ) {
+			if ( cyclesInState >= 100 ) {
 				clk = true;
 				setState( TALK_WAIT_FOR_LISTENER );
 			}
