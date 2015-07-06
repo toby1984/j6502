@@ -6,7 +6,7 @@ Since the emulator is constantly under development, I added quite a lot of tooli
 
 This screenshot should explain it :)
 
-
+<img src="https://github.com/toby1984/j6502/blob/master/screenshot.png?raw=true" width="640" height="480" />
 
 What's working:
 
