@@ -10,6 +10,8 @@ This screenshot should explain it :)
 
 What's working:
 
+- 6502 assembler (supports local labels but not much else, especially expression/macro support is painfully absent...)
+- 6502 disassembler 
 - CPU
 - CIA (partially, some things are most likely broken)
 - IEC bus-level emulation 
