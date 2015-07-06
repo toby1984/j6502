@@ -139,7 +139,9 @@ public class Debugger
 	private final CPUStatusPanel cpuPanel = new CPUStatusPanel();
 	private final BreakpointsWindow breakpointsWindow = new BreakpointsWindow();
 	private final ScreenPanel screenPanel = new ScreenPanel();
+	private final BlockAllocationPanel bamPanel = new BlockAllocationPanel();
 	private final CalculatorPanel calculatorPanel = new CalculatorPanel();
+	
 	private final AsmPanel asmPanel = new AsmPanel(desktop) {
 
 		@Override
@@ -189,6 +191,9 @@ public class Debugger
 		
 		final JInternalFrame calculatorPanelFrame = wrap( "Calculator" , calculatorPanel );
 		desktop.add( calculatorPanelFrame  );		
+		
+		final JInternalFrame bamPanelFrame = wrap( "BAM" , bamPanel );
+		desktop.add( bamPanelFrame  );			
 		
 		final JInternalFrame asmPanelFrame = wrap( AsmPanel.PANEL_TITLE , asmPanel );
 		asmPanel.setEmulator( emulator );
@@ -248,6 +253,9 @@ public class Debugger
 		frame.setVisible(true);
 
 		updateWindows();
+		
+		final Optional<D64File> current = doWithFloppyAndReturn( floppy -> floppy.getDisk() );
+		bamPanel.setDisk( current.orElse( null ) );
 	}
 
 	private JMenu createMenu() {
@@ -335,6 +343,7 @@ public class Debugger
 					throw new RuntimeException(e);
 				}
 				floppy.insertDisk( d64File );
+				bamPanel.setDisk( d64File );
 			});
 		} catch (Exception e) {
 			showError("Failed to load disk file "+file.getAbsolutePath(),e);

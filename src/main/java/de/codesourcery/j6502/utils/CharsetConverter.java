@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.utils;
 
+import java.io.ByteArrayOutputStream;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -63,5 +64,14 @@ public class CharsetConverter
 
 	public static char petToASCII(byte value) {
 		return petToASCII.get( value );
+	}
+
+	public static byte[] asciiToPET(char[] charArray) 
+	{
+		final ByteArrayOutputStream out = new ByteArrayOutputStream();
+		for ( char c : charArray ) {
+			out.write( asciiToPET( c ) );
+		}
+		return out.toByteArray();
 	}
 }

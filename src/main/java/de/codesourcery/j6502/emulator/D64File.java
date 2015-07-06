@@ -452,6 +452,31 @@ public class D64File
 			buffer[i]=this.data[offset+i];
 		}
 	}
+	
+	public int getSectorsOnTrack(int trackNo) 
+	{
+		if ( trackNo < 1 ) {
+			throw new IllegalArgumentException("Invalid track no. "+trackNo);
+		}
+		
+		/*
+ 1 - 17 	21 	16M/4/(13+0) = 307 692
+18 - 24 	19 	16M/4/(13+1) = 285 714
+25 - 30 	18 	16M/4/(13+2) = 266 667
+31 - 35 	17 	16M/4/(13+3) = 250 000
+36 - 42 	17 	16M/4/(13+3) = 250 000		 
+		 */
+		if ( trackNo <= 17 ) {
+			return 21;
+		}
+		if ( trackNo <= 24 ) {
+			return 19;
+		}
+		if ( trackNo <= 30 ) {
+			return 18;
+		}		
+		return 17;
+	}
 
 	public static int getFirstSectorNoForTrack(int trackNo)
 	{
@@ -508,6 +533,12 @@ public class D64File
 	public int getTrackCount() {
 		return 35;
 	}
+	
+	public int getFreeSectorCount() 
+	{
+		int totalFree = getBAM().getAllocationMap().stream().mapToInt( e -> e.freeSectorsCount ).sum();
+		return totalFree - getBAM().getAllocationMap( 18 ).freeSectorsCount;
+	}
 
 	public InputStream createDirectoryInputStream()
 	{
@@ -552,6 +583,19 @@ public class D64File
 		{
 			lines.add( toDirectoryLine(entry) );
 		}
+		
+		final byte[] blocksFree = new byte[32];
+		final byte[] blocksFreePET = CharsetConverter.asciiToPET( " blocks free.".toCharArray() );
+		blocksFree[0]=1;
+		blocksFree[1]=1;
+		
+		final int freeSectorsCount = getFreeSectorCount();
+		blocksFree[2]= (byte) (freeSectorsCount & 0xff);
+		blocksFree[3]= (byte) ( ( freeSectorsCount >> 8 ) & 0xff );
+		for ( int i=4,j=0 ; j < blocksFreePET.length ; i++,j++) {
+			blocksFree[i] = blocksFreePET[j];
+		}
+		lines.add( blocksFree );
 
 		// header line
 		final byte[] header = createHeaderLine();
@@ -605,8 +649,8 @@ public class D64File
 		out.write( 01 );
 
 		// drive (for simplicities sake I always return drive #0)
-		out.write( 0x01 ); // lo
-		out.write( 0x01 ); // hi
+		out.write( 0x00 ); // lo
+		out.write( 0x00 ); // hi
 
 		// 'reverse' character so that C64 will
 		// show the directory using inverted glyphs
@@ -733,8 +777,23 @@ public class D64File
 		out.write( 0x00 );
 		return out.toByteArray();
 	}
+	
+	public static final class BAMEntry 
+	{
+		public final int trackNo;
+		public final int sectorsOnTrack;
+		public final int freeSectorsCount;
+		public final boolean[] freeSectorsMap;
+		
+		public BAMEntry(int trackNo, int freeSectorsCount,int sectorsOnTrack,boolean[] allocation) {
+			this.trackNo = trackNo;
+			this.sectorsOnTrack = sectorsOnTrack;
+			this.freeSectorsCount = freeSectorsCount;
+			this.freeSectorsMap = allocation;
+		}
+	}
 
-	protected final class BAM
+	public final class BAM
 	{
 		private final int offset = getFirstSectorNoForTrack( 18 ) * BYTES_PER_SECTOR;
 
@@ -778,5 +837,37 @@ public class D64File
 			System.arraycopy( data , offset+0x90 , result , 0 , 16 );
 			return result;
 		}
+		
+		public BAMEntry getAllocationMap(int track) {
+			return getAllocationMap().stream().filter( e -> e.trackNo == track ).findFirst().orElseThrow( () -> new IllegalArgumentException("Invalid track no. "+track));
+		}
+		
+		public List<BAMEntry> getAllocationMap() 
+		{
+			final List<BAMEntry> result = new ArrayList<>();
+			int entryOffset = offset+4;
+			for ( int i = 0 ; i < 35 ; i++ ) 
+			{
+				final boolean[] freeSectorsMap = new boolean[24];
+				final int track = i+1;
+				final int freeSectors = data[ entryOffset ] & 0xff;
+				System.out.println("Track "+track+": "+freeSectors+" free");
+				for (int j = 0 ; j < 3 ; j++ ) 
+				{
+					final int allocation = data[ entryOffset + 1 + j ] & 0xff;
+					for ( int bit = 0 ; bit < 8 ; bit++ ) 
+					{
+						freeSectorsMap[ j*8 + bit ] = ( allocation & (1 << bit) ) == 0;
+					}
+				}
+				result.add( new BAMEntry( track , freeSectors , getSectorsOnTrack( track) , freeSectorsMap ) );
+				entryOffset += 4;
+			}
+			return result;
+		}
+	}
+	
+	public BAM getBAM() {
+		return bam;
 	}
 }
