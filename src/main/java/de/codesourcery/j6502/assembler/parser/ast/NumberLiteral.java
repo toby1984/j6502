@@ -30,13 +30,11 @@ public class NumberLiteral extends ASTNode implements IValueNode {
 	@Override
 	public byte getByteValue()
 	{
-		int v = value;
-		v = v & 0xff;
-		if ( v < -128 || v > 255 )
+		if ( value < -128 || value > 255 )
 		{
 			throw NumberLiteralOutOfRangeException.byteRange( value );
 		}
-		return (byte) v;
+		return (byte) value;
 	}
 
 	@Override

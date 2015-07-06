@@ -1,13 +1,14 @@
 package de.codesourcery.j6502.ui;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.GridLayout;
-import java.awt.Insets;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileWriter;
@@ -19,12 +20,16 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Enumeration;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
-import javax.swing.JEditorPane;
+import javax.swing.JDesktopPane;
 import javax.swing.JFileChooser;
 import javax.swing.JInternalFrame;
 import javax.swing.JList;
@@ -33,10 +38,23 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
+import javax.swing.JTextPane;
 import javax.swing.JToolBar;
+import javax.swing.JTree;
+import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.text.DefaultStyledDocument;
+import javax.swing.text.Style;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyleContext;
+import javax.swing.text.StyledDocument;
+import javax.swing.tree.DefaultTreeCellRenderer;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreeNode;
+
+import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.assembler.Assembler;
 import de.codesourcery.j6502.assembler.exceptions.ParseException;
@@ -44,18 +62,44 @@ import de.codesourcery.j6502.assembler.parser.Lexer;
 import de.codesourcery.j6502.assembler.parser.Parser;
 import de.codesourcery.j6502.assembler.parser.Scanner;
 import de.codesourcery.j6502.assembler.parser.ast.AST;
+import de.codesourcery.j6502.assembler.parser.ast.CommentNode;
+import de.codesourcery.j6502.assembler.parser.ast.IASTNode;
+import de.codesourcery.j6502.assembler.parser.ast.InstructionNode;
+import de.codesourcery.j6502.assembler.parser.ast.NumberLiteral;
+import de.codesourcery.j6502.assembler.parser.ast.Statement;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.ui.WindowLocationHelper.ILocationAware;
 import de.codesourcery.j6502.utils.HexDump;
+import de.codesourcery.j6502.utils.ITextRegion;
 import de.codesourcery.j6502.utils.SourceHelper;
 import de.codesourcery.j6502.utils.SourceHelper.TextLocation;
 
 public abstract class AsmPanel extends JPanel implements ILocationAware 
 {
 	public static final String PANEL_TITLE = "ASM";
+	protected static final int RECOMPILATION_MILLIS = 250;
 	
-	private boolean editorDirtyFlag = false;
-	private JEditorPane editor = new JEditorPane();
+	public static final int INDENT_SPACES = 4;
+	protected static final String INDENT = StringUtils.repeat(" ", INDENT_SPACES );
+	
+	private volatile boolean editorDirtyFlag = false;
+	private volatile boolean documentListenerEnabled = true;
+	
+	protected final StyleContext styleContext = new StyleContext();
+	protected final DefaultStyledDocument styledDocument = new DefaultStyledDocument( styleContext ) 
+	{
+		public void insertString(int offs, String str, javax.swing.text.AttributeSet a) throws javax.swing.text.BadLocationException {
+			
+			final boolean atEndOfText = offs == getLength();
+			if ( str.contains("\n" ) && atEndOfText ) 
+			{
+				super.insertString(offs, str.replace("\t",  INDENT )+INDENT, a);
+			} else {
+				super.insertString(offs, str.replace("\t",  INDENT ), a);
+			}
+		};
+	};
+	private JTextPane editor = new JTextPane(styledDocument);
 	
 	private JToolBar toolbar = new JToolBar();
 
@@ -74,7 +118,160 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 	private File lastLoadedFile;
 	
 	private Emulator emulator;
+	
+	private final JDesktopPane desktop;
+	
+	private final ASTView astView = new ASTView();
+	
+	private final Style LITERAL_STYLE = createStyle("literal" , Color.YELLOW );
+	private final Style INSTRUCTION_STYLE = createStyle("instruction" , Color.BLUE );
+	private final Style COMMENT_STYLE = createStyle("comment" , Color.RED );
+	
+	private final RecompilationThread recompilationThread = new RecompilationThread();
+	
+	protected final class RecompilationThread extends Thread {
+		
+		private final AtomicBoolean recompilationNeeded = new AtomicBoolean(false);
+		private final AtomicInteger timeout = new AtomicInteger(RECOMPILATION_MILLIS);
+		
+		public RecompilationThread() 
+		{
+			setName("recompilation-thread");
+			setDaemon(true);
+		}
+		
+		@Override
+		public void run() 
+		{
+			while( true ) 
+			{
+				try {
+					Thread.sleep( 50 );
+				}
+				catch(Exception e) { /* NOP */ }
+				
+				if ( recompilationNeeded.get() ) 
+				{
+					timeout.set( timeout.get() - 50 );
+					if ( timeout.get() <= 0 ) 
+					{
+						recompilationNeeded.set(false);
+						timeout.set( RECOMPILATION_MILLIS );
+						SwingUtilities.invokeLater( () -> assemble() );
+					}
+				}
+			}
+		}
+		
+		public void textChanged() 
+		{
+			recompilationNeeded.set( true );
+			timeout.set( RECOMPILATION_MILLIS );
+		}
+	}
 
+	protected final class ASTView extends JInternalFrame 
+	{
+		private AST ast;
+		
+		private final DefaultTreeModel treeModel = new DefaultTreeModel( createEmptyTree() );
+
+		private final JTree tree = new JTree(treeModel);
+		
+		public ASTView() 
+		{
+			super("AST view",true);
+			
+			tree.setRootVisible( false );
+			tree.setVisibleRowCount( 5 );
+			tree.setPreferredSize( new Dimension(200,400 ) );
+			tree.setCellRenderer( new DefaultTreeCellRenderer() {
+				@Override
+				public Component getTreeCellRendererComponent(JTree tree,
+						Object value, boolean sel, boolean expanded,
+						boolean leaf, int row, boolean hasFocus) 
+				{
+					final Component result = super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row,hasFocus);
+					if ( value instanceof WrappedASTNode) 
+					{
+						final IASTNode delegate = ((WrappedASTNode) value).delegate;
+						final ITextRegion region = delegate.getClass() == Statement.class ? delegate.getTextRegionIncludingChildren() : delegate.getTextRegion();
+						String label = delegate.getClass().getSimpleName();
+						if ( region != null )
+						{
+							try {
+								label += ": "+editor.getText().substring( region.getStartingOffset() , region.getEndOffset() );
+							} 
+							catch(Exception e) { /* can't help it */ }
+						}
+						setText( label );
+					}
+					return result;
+				}
+			});
+			final JScrollPane pane = new JScrollPane( tree );
+			getContentPane().add( pane );
+			pack();
+		}
+		
+		public void setAST(AST ast) 
+		{
+			this.ast = ast;
+			if ( ast != null ) 
+			{
+				treeModel.setRoot( createTree( null , ast ) ); 
+			} 
+			else 
+			{
+				treeModel.setRoot( createEmptyTree() );
+			}
+		}
+		
+		private WrappedASTNode createEmptyTree() {
+			return createTree( null , new AST() ); 
+		}
+		
+		private WrappedASTNode createTree(final WrappedASTNode parent,IASTNode child) 
+		{
+			final WrappedASTNode result = new WrappedASTNode(child);
+			result.parent = parent;
+			child.getChildren().forEach( kid -> 
+			{
+				result.children.add( createTree( result , kid ) );
+			});
+			return result;
+		}		
+	}
+	
+	protected static final class WrappedASTNode implements TreeNode 
+	{
+		public final IASTNode delegate;
+		public final List<TreeNode> children = new ArrayList<>();
+		public TreeNode parent;
+		
+		public WrappedASTNode(IASTNode node) {
+			this.delegate = node;
+		}
+		
+		@Override public TreeNode getChildAt(int childIndex) { return children.get( childIndex ); }
+		@Override public int getChildCount() { return children.size(); }
+		@Override public TreeNode getParent() { return parent; }
+		@Override public int getIndex(TreeNode child) { return children.indexOf( child ); }
+		@Override public boolean getAllowsChildren() { return true; }
+		@Override public boolean isLeaf() { return getChildCount() == 0; }
+
+		@Override
+		public Enumeration children() 
+		{
+			final Iterator<TreeNode> it = children.iterator();
+			return new Enumeration<TreeNode>() 
+			{
+				@Override public boolean hasMoreElements() { return it.hasNext(); }
+				@Override public TreeNode nextElement() { return it.next(); }
+			};
+		}
+	}
+	
 	protected static enum Severity { INFO,WARN,ERROR }
 
 	protected static final class CompilationMessage 
@@ -83,12 +280,17 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 		public final String message;
 		public final int lineNo;
 		public final int colNo;
+		public final int offset;
 
-		public CompilationMessage(String message, Severity severity,int lineNo, int colNo) {
+		public CompilationMessage(String message, Severity severity) {
+			this(message,severity,-1,-1,-1);
+		}
+		public CompilationMessage(String message, Severity severity,int lineNo, int colNo,int offset) {
 			this.severity = severity;
 			this.message = message;
 			this.lineNo = lineNo;
 			this.colNo = colNo;
+			this.offset = offset;
 		}
 	}
 	
@@ -99,6 +301,10 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 		@Override
 		public int getRowCount() {
 			return modelData.size();
+		}
+		
+		public CompilationMessage getRow(int row) {
+			return modelData.get( row );
 		}
 
 		@Override
@@ -127,7 +333,7 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 		@Override
 		public Object getValueAt(int rowIndex, int columnIndex) 
 		{
-			final CompilationMessage msg = modelData.get(rowIndex);
+			final CompilationMessage msg = getRow(rowIndex);
 			switch(columnIndex) 
 			{
 				case 0: return msg.severity.toString();
@@ -151,8 +357,12 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 		}
 	}
 
-	public AsmPanel() {
+	public AsmPanel(JDesktopPane desktop) {
 
+		this.desktop = desktop;
+		astView.setVisible( false );
+		this.desktop.add( astView );
+		
 		Debugger.setup( this );
 		
 		final JButton compile = new JButton("compile");
@@ -167,33 +377,34 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 		final JButton upload = new JButton("Upload");
 		upload.addActionListener( ev -> upload()  );
 		
+		final JButton astView = new JButton("Toggle AST view");
+		astView.addActionListener( ev -> toggleASTView()  );
+		
 		toolbar.add( compile );		
 		toolbar.add( load );
 		toolbar.add( save );
 		toolbar.add( upload );		
+		toolbar.add( astView );
 		
 		compilationMessages.setFillsViewportHeight( true );
 		generalMessages.setVisibleRowCount( 5 );
 		
 		editor.getDocument().addDocumentListener( new DocumentListener() {
 
-			@Override
-			public void insertUpdate(DocumentEvent e) {
-				setEditorDirty( true );
-				binary = null;
+			private void markDirty() {
+				if ( documentListenerEnabled ) {
+					setEditorDirty( true );
+					binary = null;
+				}
 			}
-
-			@Override
-			public void removeUpdate(DocumentEvent e) {
-				setEditorDirty( true );
-				binary = null;
+			
+			@Override 
+			public void insertUpdate(DocumentEvent e) 
+			{ 
+				markDirty(); 
 			}
-
-			@Override
-			public void changedUpdate(DocumentEvent e) {
-				setEditorDirty( true );
-				binary = null;
-			}
+			@Override public void removeUpdate(DocumentEvent e) { markDirty(); }
+			@Override public void changedUpdate(DocumentEvent e) { markDirty(); }
 		});
 		
 		// add key listener
@@ -215,20 +426,45 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 			}
 		});		
 		
+		compilationMessages.addMouseListener( new MouseAdapter() 
+		{
+			public void mouseClicked(java.awt.event.MouseEvent e) 
+			{
+				if ( e.getClickCount() == 2 && e.getButton() == MouseEvent.BUTTON1 ) {
+					final int row = compilationMessages.rowAtPoint( e.getPoint() );
+					if ( row != -1 ) 
+					{
+						final CompilationMessage entry = compilationMessageModel.getRow( row );
+						if ( entry.offset > 0 ) 
+						{
+							try {
+								editor.setCaretPosition( entry.offset );
+								editor.requestFocusInWindow();
+							} catch(IllegalArgumentException ex) {
+								ex.printStackTrace();
+							}
+						}
+					}
+				}
+			}
+		});
 		Debugger.setColors(toolbar);
 		Debugger.setup(editor);
+		editor.setCaretColor( Color.GREEN );
 		Debugger.setup(compilationMessages);
 		Debugger.setup( generalMessages );
 		
 		setLayout( new GridBagLayout() );
 		
 		// add toolbar
+		final JPanel topPanel = new JPanel();
+		topPanel.setLayout( new GridBagLayout() );
+		
 		GridBagConstraints cnstrs = new GridBagConstraints();
 		cnstrs.gridx = 0; cnstrs.gridy = 0;
-		cnstrs.gridwidth=2;
 		cnstrs.fill = GridBagConstraints.HORIZONTAL;
 		cnstrs.weightx = 1 ; cnstrs.weighty = 0.0;
-		add( toolbar , cnstrs );
+		topPanel.add( toolbar , cnstrs );
 		
 		// add editor
 		editor.setPreferredSize( new Dimension(400,200 ) );
@@ -237,36 +473,61 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 		
 		cnstrs = new GridBagConstraints();
 		cnstrs.gridx = 0; cnstrs.gridy = 1;
-		cnstrs.gridwidth=2;
 		cnstrs.fill = GridBagConstraints.BOTH;
 		cnstrs.weightx = 1 ; cnstrs.weighty = 0.8;
-		add( editorPane , cnstrs );
+		topPanel.add( editorPane , cnstrs );
 		
 		// add compilation and general messages
+		final JPanel messagePanel = new JPanel();
+		messagePanel.setLayout( new GridBagLayout() );
+		
 		final JScrollPane pane1 = new JScrollPane(compilationMessages);
 		Debugger.setup( pane1 );
 		final JScrollPane pane2 = new JScrollPane(generalMessages);
 		Debugger.setup( pane2 );
 		
 		cnstrs = new GridBagConstraints();
-		cnstrs.gridx = 0; cnstrs.gridy = 2;
+		cnstrs.gridx = 0; cnstrs.gridy = 0;
 		cnstrs.fill = GridBagConstraints.BOTH;
-		cnstrs.weightx = 0.5 ; cnstrs.weighty = 0.2;
-		add( pane1 , cnstrs );
+		cnstrs.weightx = 0.5 ; cnstrs.weighty = 0.5;
+		messagePanel.add( pane1 , cnstrs );
 		
 		cnstrs = new GridBagConstraints();
-		cnstrs.gridx = 1; cnstrs.gridy = 2;
+		cnstrs.gridx = 1; cnstrs.gridy = 0;
 		cnstrs.fill = GridBagConstraints.BOTH;
-		cnstrs.weightx = 0.5 ; cnstrs.weighty = 0.2;
-		add( pane2 , cnstrs );
+		cnstrs.weightx = 0.5 ; cnstrs.weighty = 0.5;
+		messagePanel.add( pane2 , cnstrs );
+		
+		// add message panel
+		cnstrs = new GridBagConstraints();
+		cnstrs.gridx = 0; cnstrs.gridy = 2;
+		cnstrs.fill = GridBagConstraints.BOTH;
+		cnstrs.weightx = 1 ; cnstrs.weighty = 0.2;
+		
+		final JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, topPanel , messagePanel );
+		splitPane.setResizeWeight(0.9);
+		messagePanel.setPreferredSize( new Dimension(400,50 ) );
+		
+		add( splitPane , cnstrs );
 
 		setPreferredSize( new Dimension(400,200 ) );
+		
+		recompilationThread.start();		
 	}
 	
+	private void toggleASTView() 
+	{
+		astView.setVisible( !  astView.isVisible() );
+	}
+
 	private void setEditorDirty(boolean dirty) 
 	{
 		final boolean stateChanged = editorDirtyFlag != dirty;
 		editorDirtyFlag = dirty;
+		if ( dirty ) {
+			recompilationThread.textChanged();
+		}
+		
 		if ( stateChanged && locationPeer instanceof JInternalFrame) 
 		{
 			if ( dirty ) {
@@ -283,6 +544,7 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 		{
 			if ( ! assemble() ) 
 			{
+				info("Upload failed due to compilation error");
 				return;
 			}
 		}
@@ -334,8 +596,12 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 	
 	private void info(String message) 
 	{
-		DateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+		final DateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 		generalMessageModel.add(0,df.format( new Date() )+" - "+message);
+		if ( generalMessageModel.size() >= 50 ) 
+		{
+			generalMessageModel.remove( generalMessageModel.size()-1 ); 
+		}
 	}
 	
 	private void error(String message)
@@ -396,6 +662,49 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 		return Optional.of( file );
 	}
 	
+	private void doSyntaxHighlighting(AST ast) 
+	{
+		documentListenerEnabled = false;
+		try {
+			doSyntaxHighlighting( ast , editor.getStyledDocument() );
+		} finally {
+			documentListenerEnabled = true;
+		}
+	}
+	
+	private void doSyntaxHighlighting(IASTNode current,StyledDocument document) 
+	{
+		final ITextRegion region = current.getTextRegion();
+		if ( region != null )
+		{
+			final Class<? extends IASTNode> clazz = current.getClass();
+			final Style style;
+			if ( clazz == NumberLiteral.class ) 
+			{
+				style = LITERAL_STYLE;
+			} else if ( clazz == InstructionNode.class ) {
+				style = INSTRUCTION_STYLE;
+			} else if ( clazz == CommentNode.class ) {
+				style = COMMENT_STYLE;				
+			} else {
+				style = styleContext.getStyle(StyleContext.DEFAULT_STYLE);
+			}
+			document.setCharacterAttributes( region.getStartingOffset() , region.getLength() , style , true );
+		}
+		
+		for ( IASTNode child : current.getChildren() ) {
+			doSyntaxHighlighting( child , document ); 
+		}
+	}
+	
+	private Style createStyle(String name,Color color) 
+	{
+		final Style defaultStyle = styleContext.getStyle(StyleContext.DEFAULT_STYLE);
+		final Style style = styleContext.addStyle( name , defaultStyle);
+		StyleConstants.setForeground( style , color );
+		return style;
+	}
+	
 	private boolean assemble() 
 	{
 		binary = null;
@@ -408,11 +717,15 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 		
 		final Assembler a = new Assembler();
 		final SourceHelper sourceHelper = new SourceHelper(source);
-		try {
+		try 
+		{
 			final AST ast = p.parse();
+			astView.setAST( ast );
+			doSyntaxHighlighting( ast );
+			
 			binary = a.assemble( ast , sourceHelper );
 			binaryStartAddress = a.getOrigin();
-			compilationMessageModel.addMessage( new CompilationMessage("Code compiled ok ("+binary.length+" bytes)", Severity.INFO, 0, 0 ) );
+			compilationMessageModel.addMessage( new CompilationMessage("Code compiled ok ("+binary.length+" bytes)", Severity.INFO ) );
 			info("Compilation finished");
 			return true;
 		} 
@@ -420,15 +733,15 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 			TextLocation location = sourceHelper.getLocation( e.offset );
 			e.printStackTrace();
 			if ( location == null ) {
-				compilationMessageModel.addMessage( new CompilationMessage("Compilation failed: "+e.getMessage() , Severity.ERROR, 0, 0 ) );
+				compilationMessageModel.addMessage( new CompilationMessage(e.getMessage() , Severity.ERROR, -1 , -1  , e.offset ) );
 			} else {
-				compilationMessageModel.addMessage( new CompilationMessage("Compilation failed: "+e.getMessage() , Severity.ERROR, location.lineNumber , location.columnNumber ) );
+				compilationMessageModel.addMessage( new CompilationMessage(e.getMessage() , Severity.ERROR, location.lineNumber , location.columnNumber , e.offset ) );
 			}
 		}
 		catch(Exception e) 
 		{
 			e.printStackTrace();
-			compilationMessageModel.addMessage( new CompilationMessage("Compilation failed: "+e.getMessage() , Severity.ERROR, 0, 0 ) );
+			compilationMessageModel.addMessage( new CompilationMessage(e.getMessage() , Severity.ERROR ) );
 		}
 		info("Compilation FAILED.");
 		return false;

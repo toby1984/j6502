@@ -2,6 +2,7 @@ package de.codesourcery.j6502.assembler.parser.ast;
 
 import de.codesourcery.j6502.assembler.AddressingMode;
 import de.codesourcery.j6502.assembler.ICompilationContext;
+import de.codesourcery.j6502.assembler.exceptions.ParseException;
 import de.codesourcery.j6502.assembler.parser.Opcode;
 import de.codesourcery.j6502.assembler.parser.Register;
 import de.codesourcery.j6502.utils.ITextRegion;
@@ -112,7 +113,17 @@ public class InstructionNode extends ASTNode implements ICompilationContextAware
 	{
 		this.address = context.getCurrentAddress();
 //		context.debug(this,"Generating bytes for instruction @ "+HexDump.toHexBigEndian( (short) address) );
-		opcode.assemble( this , context );
+		
+		try {
+			opcode.assemble( this , context );
+		} 
+		catch( ParseException e) {
+			throw e;
+		}
+		catch(Exception e) 
+		{
+			throw new ParseException( e.getMessage(), getTextRegion().getStartingOffset() );
+		}
 	}
 
 	@Override

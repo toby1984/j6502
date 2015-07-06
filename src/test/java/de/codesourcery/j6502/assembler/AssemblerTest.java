@@ -67,8 +67,13 @@ public class AssemblerTest extends TestCase {
 			a.assemble( p.parse() );
 			fail("Compiling "+s+" should've failed");
 		} catch(final Exception e) {
+			System.out.println("EXPECTED FAILURE: "+e.getMessage());
 			// ok
 		}
+	}
+	
+	public void testImmediateValueOutOfRange() {
+		assertDoesNotCompile("*=$c000\nLDA #1234");
 	}
 
 	public void testJMPAbs() {

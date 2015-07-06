@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.assembler.exceptions;
 
+import de.codesourcery.j6502.utils.ITextRegion;
 import de.codesourcery.j6502.utils.SourceHelper;
 import de.codesourcery.j6502.utils.SourceHelper.TextLocation;
 
@@ -7,6 +8,11 @@ public class ParseException extends RuntimeException implements ITextLocationAwa
 
 	public final int offset;
 
+	public ParseException(String message,ITextRegion region)
+	{
+		this( message ,region == null ? -1 : region.getStartingOffset() );
+	}
+	
 	public ParseException(String message,int offset)
 	{
 		super(message);

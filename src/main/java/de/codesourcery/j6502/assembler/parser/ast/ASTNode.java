@@ -26,6 +26,11 @@ public abstract class ASTNode implements IASTNode {
 	}
 
 	@Override
+	public List<IASTNode> getChildren() {
+		return children;
+	}
+	
+	@Override
 	public ITextRegion getTextRegion() {
 		return textRegion;
 	}

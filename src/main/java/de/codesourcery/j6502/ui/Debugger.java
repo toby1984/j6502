@@ -128,6 +128,8 @@ public class Debugger
 		}
 	};
 
+	private final JDesktopPane desktop = new JDesktopPane();
+	
 	private final List<ILocationAware> locationAware = new ArrayList<>();
 
 	private final BreakpointModel bpModel = new BreakpointModel();
@@ -138,7 +140,7 @@ public class Debugger
 	private final BreakpointsWindow breakpointsWindow = new BreakpointsWindow();
 	private final ScreenPanel screenPanel = new ScreenPanel();
 	private final CalculatorPanel calculatorPanel = new CalculatorPanel();
-	private final AsmPanel asmPanel = new AsmPanel() {
+	private final AsmPanel asmPanel = new AsmPanel(desktop) {
 
 		@Override
 		protected void binaryUploadedToEmulator() 
@@ -166,8 +168,6 @@ public class Debugger
 		driver.addBreakpointListener( disassembly );
 		driver.addBreakpointListener( bpModel );
 		driver.start();
-
-		final JDesktopPane desktop = new JDesktopPane();
 
 		final JInternalFrame toolbarFrame = wrap( "Buttons" , toolbar );
 		desktop.add( toolbarFrame );
@@ -609,10 +609,10 @@ public class Debugger
 				}
 			});
 			
-			input.setColumns( 10 );
-			hexOutput.setColumns( 10 );
-			decOutput.setColumns( 10 );
-			binOutput.setColumns( 10 );
+			input.setColumns( 16 );
+			hexOutput.setColumns( 16 );
+			decOutput.setColumns( 16 );
+			binOutput.setColumns( 16 );
 			
 			setup(input,"To convert");
 			setup(hexOutput,"Hexadecimal");

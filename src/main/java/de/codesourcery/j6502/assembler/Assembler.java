@@ -2,6 +2,7 @@ package de.codesourcery.j6502.assembler;
 
 import java.util.function.Consumer;
 
+import de.codesourcery.j6502.assembler.exceptions.ParseException;
 import de.codesourcery.j6502.assembler.exceptions.ValueUnavailableException;
 import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.assembler.parser.ast.IASTNode;
@@ -77,7 +78,16 @@ public class Assembler
 				}
 				value = (byte) 0xff;
 			} else {
-				value = lit.getByteValue();
+				try {
+					value = lit.getByteValue();
+				} 
+				catch(ParseException e) {
+					throw e;
+				}				
+				catch(Exception e) 
+				{
+					throw new ParseException(e.getMessage(),lit.getTextRegion());
+				}
 			}
 			writeByte( value );
 		}
@@ -110,7 +120,16 @@ public class Assembler
 				}
 				value = (short) 0xffff;
 			} else {
-				value = lit.getWordValue();
+				try {
+					value = lit.getWordValue();
+				}
+				catch(ParseException e) {
+					throw e;
+				}
+				catch(Exception e) 
+				{
+					throw new ParseException(e.getMessage(),lit.getTextRegion());
+				}					
 			}
 			writeWord( value );
 		}

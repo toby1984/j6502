@@ -28,6 +28,8 @@ public interface  IASTNode extends Iterable<IASTNode> {
 	public int getChildCount();
 
 	public boolean hasNoChildren();
+	
+	public List<IASTNode> getChildren();
 
 	public void addChild(IASTNode child);
 
