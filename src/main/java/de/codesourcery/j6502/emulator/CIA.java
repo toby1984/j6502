@@ -14,7 +14,8 @@ import de.codesourcery.j6502.utils.Misc;
  */
 public class CIA extends Memory
 {
-	private static final boolean DEBUG = false;
+	private static final boolean DEBUG = true;
+	private static final boolean DEBUG_VERBOSE = false;
 
 	public static final int CIA1_PRA        = 0x00;
 	public static final int CIA1_PRB        = 0x01;
@@ -525,6 +526,9 @@ ende     rts             ; back to BASIC
 					int mask = (value & 0b11111);
 					irqMask |= mask;
 				}
+				if ( DEBUG ) {
+					System.out.println( this+" ICR = "+Integer.toBinaryString( value ) );
+				}
 				break;
 			case CIA1_TALO:
 				timerALatch = ( timerALatch & 0xff00) | (value & 0xff);
@@ -557,7 +561,7 @@ ende     rts             ; back to BASIC
 				 */
 				boolean oldState = timerARunning;
 				timerARunning = ( value & 1) != 0;
-				if ( DEBUG ) {
+				if ( DEBUG_VERBOSE ) {
 					if ( oldState != timerARunning ) {
 						System.out.println( this+" , timer A running: "+timerARunning);
 					}
@@ -585,7 +589,7 @@ ende     rts             ; back to BASIC
 				 */
 				oldState = timerBRunning;
 				timerBRunning = ( value & 1) != 0;
-				if ( DEBUG ) {
+				if ( DEBUG_VERBOSE ) {
 					if ( oldState != timerBRunning ) {
 						System.out.println( this+" , timer B running: "+timerBRunning);
 					}
@@ -710,9 +714,9 @@ ende     rts             ; back to BASIC
 		}
 		if ( (crb & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
 			timerBRunning = false;
-			timerAValue = 0xffff;
+			timerBValue = 0xffff;
 		} else { // // bit 3 = 0 => Timer-restart after underflow (latch will be reloaded)
-			if ( DEBUG ) {
+			if ( DEBUG_VERBOSE ) {
 				System.out.println(this+" , loading timer B latch = "+timerBLatch);
 			}
 			timerBValue = timerBLatch;
@@ -734,7 +738,7 @@ ende     rts             ; back to BASIC
 			timerARunning = false;
 			timerAValue = 0xffff;
 		} else { // // bit 3 = 0 => Timer-restart after underflow (latch will be reloaded)
-			if ( DEBUG ) {
+			if ( DEBUG_VERBOSE ) {
 				System.out.println(this+" , loading timer A latch = "+timerALatch);
 			}
 			timerAValue = timerALatch;
