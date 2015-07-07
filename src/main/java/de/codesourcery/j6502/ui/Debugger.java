@@ -157,6 +157,8 @@ public class Debugger
 	
 	private volatile boolean busPanelEnabled = IECBus.CAPTURE_BUS_SNAPSHOTS;
 	private BusPanel busPanel;
+	
+	private final List<ILocationAware> panels = new ArrayList<>();
 
 	public static void main(String[] args)
 	{
@@ -227,12 +229,10 @@ public class Debugger
 			}
 		});
 
-		final JMenuBar menuBar = new JMenuBar();
-		menuBar.add( createMenu() );
-		frame.setJMenuBar( menuBar );
-		
-		final ILocationAware loc = new ILocationAware() {
-
+		final ILocationAware loc = new ILocationAware() 
+		{
+			private boolean isDisplayed;
+			
 			@Override
 			public void setLocationPeer(Component frame) {
 				throw new UnsupportedOperationException("setLocationPeer not implemented yet");
@@ -242,10 +242,23 @@ public class Debugger
 			public Component getLocationPeer() {
 				return frame;
 			}
+
+			@Override
+			public boolean isDisplayed() {
+				return isDisplayed;
+			}
+
+			@Override
+			public void setDisplayed(boolean yesNo) {
+				this.isDisplayed = yesNo;
+			}
 		};
 		locationAware.add( loc );
 		locationHelper.applyLocation( loc );
 
+		// add menu
+		frame.setJMenuBar( createMenu() );
+		
 		frame.pack();
 		frame.setContentPane( desktop );
 		frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
@@ -258,9 +271,13 @@ public class Debugger
 		bamPanel.setDisk( current.orElse( null ) );
 	}
 
-	private JMenu createMenu() {
-		JMenu menu = new JMenu("File");
-
+	private JMenuBar createMenu()
+	{
+		final JMenuBar menuBar = new JMenuBar();
+		
+		final JMenu menu = new JMenu("File");
+		menuBar.add( menu );
+		
 		JMenuItem item = new JMenuItem("Insert disk...");
 		item.addActionListener( event -> insertDisk() );
 		menu.add( item );
@@ -269,15 +286,30 @@ public class Debugger
 		item.addActionListener( event -> ejectDisk() );
 		menu.add( item );
 		
-		final JCheckBoxMenuItem checkItem = new JCheckBoxMenuItem("Capture IEC bus traces",IECBus.CAPTURE_BUS_SNAPSHOTS);
-		checkItem.setEnabled( IECBus.CAPTURE_BUS_SNAPSHOTS );
-		checkItem.addActionListener( ev -> 
-		{
-			busPanelEnabled = checkItem.isSelected();
-		});
-		menu.add(checkItem );
+		// add 'Views' menu
+		final JMenu views = new JMenu("Views");
+		menuBar.add( views );
 		
-		return menu;
+		panels.sort( (a,b) -> 
+		{
+			final String title1 = ((JInternalFrame) a.getLocationPeer()).getTitle();
+			final String title2 = ((JInternalFrame) b.getLocationPeer()).getTitle();
+			return title1.compareTo( title2 );
+		});
+		panels.forEach( loc -> 
+		{
+			final JInternalFrame peer = (JInternalFrame) loc.getLocationPeer();
+			final JCheckBoxMenuItem viewItem = new JCheckBoxMenuItem( peer.getTitle() , loc.isDisplayed() );
+			viewItem.addActionListener( ev -> 
+			{
+				loc.setDisplayed( viewItem.isSelected() );
+				peer.setVisible( viewItem.isSelected() );
+				peer.toFront();
+			});
+			views.add(viewItem );
+		});
+		
+		return menuBar;
 	}
 
 	private void ejectDisk() 
@@ -395,21 +427,27 @@ public class Debugger
 	private JInternalFrame wrap(String title,JPanel panel)
 	{
 		setup( panel );
-
+		
 		final JInternalFrame frame = new JInternalFrame( title );
 
 		if ( panel instanceof ILocationAware)
 		{
 			final ILocationAware loc = (ILocationAware) panel;
+			panels.add( loc );
 			loc.setLocationPeer( frame );
-			locationAware.add( (ILocationAware) panel );
+			locationAware.add( loc );
 			locationHelper.applyLocation( loc );
 		}
 
 		frame.setResizable( true );
 		frame.getContentPane().add( panel );
 		frame.pack();
-		frame.setVisible( true );
+		if ( panel instanceof ILocationAware) 
+		{
+			frame.setVisible( ((ILocationAware) panel).isDisplayed() );
+		} else {
+			frame.setVisible( true );
+		}
 
 		return frame;
 	}
@@ -424,6 +462,7 @@ public class Debugger
 		public final JButton loadButton = new JButton("Load");
 
 		private Component peer;
+		private boolean isDisplayed;
 
 		@Override
 		public void setLocationPeer(Component frame) {
@@ -433,6 +472,16 @@ public class Debugger
 		@Override
 		public Component getLocationPeer() {
 			return peer;
+		}
+		
+		@Override
+		public boolean isDisplayed() {
+			return isDisplayed;
+		}
+		
+		@Override
+		public void setDisplayed(boolean yesNo) {
+			this.isDisplayed = yesNo;
 		}
 
 		private void prepareTest()
@@ -572,6 +621,7 @@ public class Debugger
 	protected final class CalculatorPanel extends JPanel implements ILocationAware {
 
 		private Component peer;
+		private boolean isDisplayed;
 
 		private JTextField input = new JTextField();
 		private JTextField hexOutput = new JTextField();
@@ -657,12 +707,23 @@ public class Debugger
 		public Component getLocationPeer() {
 			return peer;
 		}
+		
+		@Override
+		public void setDisplayed(boolean yesNo) {
+			this.isDisplayed = yesNo;
+		}
+		
+		@Override
+		public boolean isDisplayed() {
+			return isDisplayed;
+		}		
 	}
 
 	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.ILocationAware {
 
 		private Component frame;
-
+		private boolean isDisplayed;
+		
 		public ScreenPanel()
 		{
 			setFocusable(true);
@@ -744,6 +805,16 @@ public class Debugger
 		}
 
 		@Override
+		public void setDisplayed(boolean yesNo) {
+			this.isDisplayed = yesNo;
+		}
+		
+		@Override
+		public boolean isDisplayed() {
+			return isDisplayed;
+		}
+		
+		@Override
 		protected void paintComponent(Graphics g)
 		{
 			super.paintComponent(g);
@@ -755,6 +826,7 @@ public class Debugger
 	protected final class CPUStatusPanel extends JPanel implements WindowLocationHelper.ILocationAware
 	{
 		private Component peer;
+		private boolean isDisplayed;
 
 		@Override
 		public void setLocationPeer(Component frame) {
@@ -765,6 +837,16 @@ public class Debugger
 		public Component getLocationPeer() {
 			return peer;
 		}
+		
+		@Override
+		public void setDisplayed(boolean yesNo) {
+			this.isDisplayed = yesNo;
+		}
+		
+		@Override
+		public boolean isDisplayed() {
+			return isDisplayed;
+		}		
 
 		public CPUStatusPanel()
 		{
@@ -843,6 +925,7 @@ public class Debugger
 	{
 		private final int bytesToDisplay = 25*40;
 
+		private boolean isDisplayed;
 		private Component peer;
 
 		private short startAddress = 0;
@@ -920,6 +1003,16 @@ public class Debugger
 		public Component getLocationPeer() {
 			return this.peer;
 		}
+		
+		@Override
+		public void setDisplayed(boolean yesNo) {
+			this.isDisplayed = yesNo;
+		}
+		
+		@Override
+		public boolean isDisplayed() {
+			return isDisplayed;
+		}		
 	}
 
 	protected final class DisassemblyPanel extends JPanel implements WindowLocationHelper.ILocationAware , IBreakpointLister
@@ -936,6 +1029,7 @@ public class Debugger
 
 		private final List<LineWithBounds> lines = new ArrayList<>();
 
+		private boolean isDisplayed;
 		private Component peer;
 
 		@Override
@@ -947,6 +1041,16 @@ public class Debugger
 		public Component getLocationPeer() {
 			return peer;
 		}
+		
+		@Override
+		public void setDisplayed(boolean yesNo) {
+			this.isDisplayed = yesNo;
+		}
+		
+		@Override
+		public boolean isDisplayed() {
+			return isDisplayed;
+		}		
 
 		public DisassemblyPanel()
 		{
@@ -1153,6 +1257,7 @@ public class Debugger
 
 	public final class BreakpointsWindow extends JPanel implements ILocationAware {
 
+		private boolean isDisplayed;
 		private Component peer;
 
 		public BreakpointsWindow()
@@ -1208,7 +1313,6 @@ public class Debugger
 					}
 				}
 			});
-
 		}
 
 		@Override
@@ -1220,6 +1324,16 @@ public class Debugger
 		public Component getLocationPeer() {
 			return peer;
 		}
+		
+		@Override
+		public void setDisplayed(boolean yesNo) {
+			this.isDisplayed = yesNo;
+		}
+		
+		@Override
+		public boolean isDisplayed() {
+			return isDisplayed;
+		}		
 	}
 
 	protected final class BreakpointModel extends AbstractTableModel implements IBreakpointLister

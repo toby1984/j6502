@@ -40,6 +40,7 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 	private final List<Lane> lanes = new ArrayList<>();
 
 	private Component peer;
+	private boolean isDisplayed;
 
 	private DisplayRange displayRange = null;
 
@@ -370,6 +371,16 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 	@Override
 	public Component getLocationPeer() {
 		return peer;
+	}
+	
+	@Override
+	public boolean isDisplayed() {
+		return isDisplayed;
+	}
+	
+	@Override
+	public void setDisplayed(boolean yesNo) {
+		this.isDisplayed = yesNo;
 	}
 
 	@Override

@@ -18,5 +18,7 @@ public enum TokenType
 	WHITESPACE,
 	EOF,
 	STAR,
-	EQUALS;
+	EQUALS,
+	META_BYTE,
+	META_EQU;
 }

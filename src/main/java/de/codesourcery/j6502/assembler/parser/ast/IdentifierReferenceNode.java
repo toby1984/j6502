@@ -118,6 +118,7 @@ public class IdentifierReferenceNode extends ASTNode implements IValueNode , ICo
 			context.debug( this , "Resolved identifier to "+symbol);
 			switch( symbol.getType() )
 			{
+				case EQU:
 				case LABEL:
 					context.debug( this , "Identifier "+this.identifier+" resolves to: "+symbol);
 					this.symbol = (ISymbol<? extends Number>) symbol;

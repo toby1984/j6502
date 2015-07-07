@@ -132,11 +132,6 @@ public class Lexer {
 					start = scanner.currentOffset();
 					addToken(TokenType.SEMICOLON, scanner.next() , start );
 					return;
-				case '.':
-					parseBuffer(start);
-					start = scanner.currentOffset();
-					addToken(TokenType.DOT, scanner.next() , start );
-					return;
 				case '*':
 					parseBuffer(start);
 					start = scanner.currentOffset();
@@ -208,7 +203,7 @@ public class Lexer {
 
 	private void parseBuffer(int bufferStartOffset) {
 
-		final String s = buffer.toString();
+		String s = buffer.toString();
 		if ( s.length() == 0 ) {
 			return;
 		}
@@ -224,7 +219,42 @@ public class Lexer {
 			addToken(TokenType.DIGITS , s , bufferStartOffset );
 			return;
 		}
-		addToken(TokenType.CHARACTERS, s , bufferStartOffset );
+		
+		if ( ".byte".equalsIgnoreCase( s ) ) {
+			addToken(TokenType.META_BYTE , s , bufferStartOffset );
+			return;
+		}
+		if ( ".equ".equalsIgnoreCase( s ) ) 
+		{
+			addToken(TokenType.META_EQU, s , bufferStartOffset );
+			return;
+		}
+		
+		boolean gotDots = false;
+		for ( int i = 0 ; i < s.length() ; i++ ) 
+		{
+			if ( s.charAt(i) == '.' )
+			{
+				gotDots = true;
+				addToken(TokenType.DOT , '.' , bufferStartOffset+i );
+			}
+		}
+		if ( gotDots ) 
+		{
+			final StringBuilder buffer = new StringBuilder(s);
+			while ( buffer.length() > 0 ) 
+			{
+				final int idx = buffer.indexOf(".");
+				if ( idx == -1 ) {
+					break;
+				}
+				buffer.delete( idx,  idx+1 );
+			}
+			s= buffer.toString();
+		}
+		if ( s.length() > 0 ) {
+			addToken(TokenType.CHARACTERS, s , bufferStartOffset );
+		}
 	}
 
 	private void addToken(TokenType t,char c,int offset) {

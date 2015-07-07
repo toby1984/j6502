@@ -5,7 +5,7 @@ import de.codesourcery.j6502.assembler.parser.Identifier;
 public interface ISymbol<T> {
 
 	public static enum Type {
-		LABEL;
+		LABEL,EQU;
 	}
 
 	public Identifier getIdentifier();

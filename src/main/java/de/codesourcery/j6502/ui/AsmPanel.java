@@ -85,6 +85,8 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 	private volatile boolean editorDirtyFlag = false;
 	private volatile boolean documentListenerEnabled = true;
 	
+	private boolean isShown = true;
+	
 	protected final StyleContext styleContext = new StyleContext();
 	protected final DefaultStyledDocument styledDocument = new DefaultStyledDocument( styleContext ) 
 	{
@@ -110,6 +112,7 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 	private final JList<String> generalMessages = new JList<String>(generalMessageModel);
 
 	private Component locationPeer;
+	private boolean displayed;
 	
 	private int binaryStartAddress;
 	private byte[] binary;
@@ -128,6 +131,7 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 	private final Style COMMENT_STYLE = createStyle("comment" , Color.RED );
 	
 	private final RecompilationThread recompilationThread = new RecompilationThread();
+
 	
 	protected final class RecompilationThread extends Thread {
 		
@@ -755,6 +759,16 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 	@Override
 	public Component getLocationPeer() {
 		return this.locationPeer;
+	}
+	
+	@Override
+	public boolean isDisplayed() {
+		return displayed;
+	}
+	
+	@Override
+	public void setDisplayed(boolean yesNo) {
+		this.displayed = yesNo;
 	}
 
 	public void setEmulator(Emulator emulator) {

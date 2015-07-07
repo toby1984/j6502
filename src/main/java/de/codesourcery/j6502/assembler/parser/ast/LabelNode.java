@@ -2,6 +2,8 @@ package de.codesourcery.j6502.assembler.parser.ast;
 
 import de.codesourcery.j6502.assembler.ICompilationContext;
 import de.codesourcery.j6502.assembler.Label;
+import de.codesourcery.j6502.assembler.exceptions.DuplicateSymbolException;
+import de.codesourcery.j6502.assembler.exceptions.ParseException;
 import de.codesourcery.j6502.assembler.parser.Identifier;
 import de.codesourcery.j6502.utils.ITextRegion;
 
@@ -55,7 +57,12 @@ public class LabelNode extends ASTNode implements ICompilationContextAware
 		if ( context.getPassNo() == 0 )
 		{
 			context.debug( this , "Defined "+symbol);
-			context.getSymbolTable().defineSymbol( symbol );
+			
+			try {
+				context.getSymbolTable().defineSymbol( symbol );
+			} catch(DuplicateSymbolException e) {
+				throw new ParseException( e.getMessage() , getTextRegion() , e );
+			}
 		}
 	}
 

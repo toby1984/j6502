@@ -9,6 +9,7 @@ import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.assembler.parser.ast.ASTNode;
 import de.codesourcery.j6502.assembler.parser.ast.AbsoluteOperand;
 import de.codesourcery.j6502.assembler.parser.ast.CommentNode;
+import de.codesourcery.j6502.assembler.parser.ast.EquNode;
 import de.codesourcery.j6502.assembler.parser.ast.IASTNode;
 import de.codesourcery.j6502.assembler.parser.ast.IdentifierReferenceNode;
 import de.codesourcery.j6502.assembler.parser.ast.ImmediateOperand;
@@ -108,8 +109,6 @@ public class Parser
 	{
 		currentNode = new Statement();
 
-		boolean gotLocalLabel = false;
-
 		if ( skipComment() ) {
 			return;
 		}
@@ -117,7 +116,8 @@ public class Parser
 		int startOffset = lexer.currentOffset();
 
 		// handle *=
-		if ( lexer.peek(TokenType.STAR ) ) {
+		if ( lexer.peek(TokenType.STAR ) ) 
+		{
 			final Token tok = lexer.next();
 			if ( lexer.peek(TokenType.EQUALS ) ) // *=
 			{
@@ -137,36 +137,26 @@ public class Parser
 			}
 		}
 
+		boolean gotLocalLabel = false;
 		if ( lexer.peek(TokenType.DOT) ) { // .localLabel or meta
 
-			final Token dot = lexer.next(); // consume dot
-
-			//
-			if ( lexer.peek(TokenType.CHARACTERS ) ) 
+			if ( parseMeta() ) 
 			{
-				switch( lexer.peek().text.toLowerCase() )
-				{
-					case "byte":
-						final Token keyword = lexer.next();
-
-						final InitializedMemoryNode node = new InitializedMemoryNode( dot.toRegion().merge( keyword.toRegion() ) , InitializedMemoryNode.Type.BYTES );
-						node.addChildren( parseMemInitList() );
-						currentNode.addChild( node );
-						return;
-					default:
-						// $$FALL-THROUGH$$
-				}
+				skipComment();
+				return;
 			}
 
 			// ok, not a meta
 			if ( previousGlobalLabel == null ) {
 				fail("Local label without previous global label");
 			}
+			final Token dot = lexer.next();
 			if ( lexer.peek(TokenType.CHARACTERS ) )
 			{
-				if ( Identifier.isValidIdentifier( lexer.peek().text ) ) {
+				if ( Identifier.isValidIdentifier( lexer.peek().text ) ) 
+				{
 					final Identifier identifier = new Identifier( lexer.next().text );
-					final TextRegion region = new TextRegion( startOffset , lexer.currentOffset() - startOffset );
+					final ITextRegion region = dot.toRegion().merge( new TextRegion( startOffset , lexer.currentOffset() - startOffset ) );
 					currentNode.addChild( new LabelNode( identifier , previousGlobalLabel , region ) );
 					gotLocalLabel = true;
 				} else {
@@ -181,23 +171,42 @@ public class Parser
 			return;
 		}
 
+		if ( parseMeta() ) 
+		{
+			skipComment();
+			return;
+		}
+
 		startOffset = lexer.currentOffset();
-		if ( lexer.peek(TokenType.CHARACTERS ) )  { // label or opcode
+		if ( lexer.peek(TokenType.CHARACTERS ) ) // label or opcode  
+		{ 
 			final Token tok = lexer.next(); // consume token so we can peek at the next one
 			if ( ! gotLocalLabel && lexer.peek(TokenType.COLON ) )
 			{
-				lexer.next(); // consume colon
+				final Token colon = lexer.next(); // consume colon
 				if ( ! Identifier.isValidIdentifier( tok.text ) ) {
 					fail("Not a valid label identifier: "+tok.text);
 				}
-				final TextRegion region = new TextRegion( startOffset , lexer.currentOffset() - startOffset );
-				previousGlobalLabel = new LabelNode( new Identifier( tok.text ) , region );
-				currentNode.addChild( previousGlobalLabel );
+				final ITextRegion region = tok.toRegion().merge( colon.toRegion() );
+				
+				if ( lexer.peek(TokenType.META_EQU ) ) 
+				{
+					parseEQU( new Identifier( tok.text ) , tok.toRegion().merge( colon.toRegion() ) );  
+				} else {
+					previousGlobalLabel = new LabelNode( new Identifier( tok.text ) , region );
+					currentNode.addChild( previousGlobalLabel );
+				}
 			} 
 			else 
 			{
 				// push back token, most likely an opcode
 				lexer.push( tok );
+			}
+
+			if ( parseMeta() ) 
+			{
+				skipComment();
+				return;
 			}
 
 			if ( skipComment() ) {
@@ -219,6 +228,66 @@ public class Parser
 		{
 			fail("Expected label or opcode");
 		}
+	}
+
+	private boolean parseLabel() 
+	{
+		if ( lexer.peek(TokenType.DOT) ) { // .localLabel
+
+			if ( previousGlobalLabel == null ) {
+				fail("Local label without previous global label");
+			}
+			final Token dot = lexer.next();
+			if ( lexer.peek(TokenType.CHARACTERS ) )
+			{
+				if ( Identifier.isValidIdentifier( lexer.peek().text ) ) 
+				{
+					final Token labelText = lexer.next();
+					final Identifier identifier = new Identifier( labelText.text );
+					final ITextRegion region = dot.toRegion().merge( labelText.toRegion() );
+					currentNode.addChild( new LabelNode( identifier , previousGlobalLabel , region ) );
+					return true;
+				} 
+			}
+			lexer.push( dot );
+			return false;
+		}
+
+		// global: label
+		if ( lexer.peek(TokenType.CHARACTERS ) ) {
+
+		}		
+		return false;
+	}
+
+	private boolean parseMeta() 
+	{
+		if ( lexer.peek(TokenType.META_BYTE ) ) 
+		{
+			final Token token = lexer.next();
+			final InitializedMemoryNode node = new InitializedMemoryNode( token.toRegion() , InitializedMemoryNode.Type.BYTES );
+			node.addChildren( parseMemInitList() );
+			currentNode.addChild( node );
+			return true;
+		}
+		return false;
+	}
+
+	private void parseEQU(Identifier label,ITextRegion region) 
+	{
+		if ( ! lexer.peek(TokenType.META_EQU ) ) 
+		{
+			fail("Expected .equ");
+		}
+		
+		final Token token = lexer.next();
+		final IASTNode astNode = parseExpression();
+		if ( astNode == null ) {
+			fail("expected an expression");
+		}
+		final EquNode node = new EquNode( label , token.toRegion() );
+		node.addChild( astNode );
+		currentNode.addChild( node );
 	}
 
 	private List<IASTNode> parseMemInitList()

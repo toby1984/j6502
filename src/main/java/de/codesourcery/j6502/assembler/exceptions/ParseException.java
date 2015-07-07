@@ -13,9 +13,19 @@ public class ParseException extends RuntimeException implements ITextLocationAwa
 		this( message ,region == null ? -1 : region.getStartingOffset() );
 	}
 	
+	public ParseException(String message,ITextRegion region,Throwable t)
+	{
+		this( message ,region == null ? -1 : region.getStartingOffset() , t  );
+	}
+	
 	public ParseException(String message,int offset)
 	{
-		super(message);
+		this(message,offset,null);
+	}
+	
+	public ParseException(String message,int offset,Throwable t)
+	{
+		super(message,t);
 		this.offset = offset;
 	}
 

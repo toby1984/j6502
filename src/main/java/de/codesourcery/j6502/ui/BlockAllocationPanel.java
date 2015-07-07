@@ -17,6 +17,7 @@ import de.codesourcery.j6502.utils.CharsetConverter;
 public class BlockAllocationPanel extends JPanel implements ILocationAware {
 
 	private Component peer;
+	private boolean isDisplayed;
 	private D64File disk;
 	
 	public BlockAllocationPanel() 
@@ -32,6 +33,16 @@ public class BlockAllocationPanel extends JPanel implements ILocationAware {
 	@Override
 	public Component getLocationPeer() {
 		return peer;
+	}
+	
+	@Override
+	public boolean isDisplayed() {
+		return isDisplayed;
+	}
+	
+	@Override
+	public void setDisplayed(boolean yesNo) {
+		this.isDisplayed = yesNo;
 	}
 	
 	public void setDisk(D64File disk) {

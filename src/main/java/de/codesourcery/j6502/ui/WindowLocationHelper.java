@@ -18,6 +18,7 @@ public class WindowLocationHelper
 {
 	protected static final String SIZE_PREFIX = "size.";
 	protected static final String LOCATION_PREFIX = "loc.";
+	protected static final String IS_SHOWN_PREFIX = "enabled.";
 	private Map<String,SizeAndLocation> locations = null;
 
 	private final File file;
@@ -27,33 +28,41 @@ public class WindowLocationHelper
 		public void setLocationPeer(Component frame);
 
 		public Component getLocationPeer();
+		
+		public boolean isDisplayed();
+		
+		public void setDisplayed(boolean yesNo);
 	}
 
 	protected static final class SizeAndLocation
 	{
 		public final Point location;
 		public final Dimension size;
+		public final boolean isShown;
 
-		public SizeAndLocation(Point location, Dimension size) {
+		public SizeAndLocation(Point location, Dimension size,boolean isShown) {
 			this.location = location;
 			this.size = size;
+			this.isShown = isShown; 
 		}
 
 		public static SizeAndLocation valueOf(ILocationAware loc)
 		{
 			final Component frame = loc.getLocationPeer();
-			return new SizeAndLocation( new Point( frame.getLocation() ) , new Dimension( frame.getSize() ) );
+			return new SizeAndLocation( new Point( frame.getLocation() ) , new Dimension( frame.getSize() ) , loc.isDisplayed() );
 		}
 
 		public void apply(ILocationAware loc)
 		{
 			loc.getLocationPeer().setLocation( new Point( location ) );
 			loc.getLocationPeer().setPreferredSize( new Dimension( this.size ) );
+			loc.setDisplayed( this.isShown );
 		}
 
 		public void write(String clazz,BufferedWriter writer) throws IOException {
 			writer.write( LOCATION_PREFIX+clazz+"="+location.x+","+location.y+"\n");
 			writer.write( SIZE_PREFIX+clazz+"="+size.width+","+size.height+"\n");
+			writer.write( IS_SHOWN_PREFIX+clazz+"="+isShown+"\n");
 		}
 
 		@Override
@@ -74,6 +83,7 @@ public class WindowLocationHelper
 			return;
 		}
 
+		final Map<String,Boolean> isShown = new HashMap<>();
 		final Map<String,Point> locs = new HashMap<>();
 		final Map<String,Point> dims = new HashMap<>();
 
@@ -86,7 +96,18 @@ public class WindowLocationHelper
 				String line;
 				while ( ( line = reader.readLine()) != null )
 				{
-					if ( line.startsWith( LOCATION_PREFIX ) )
+					if ( line.startsWith( IS_SHOWN_PREFIX ) )
+					{
+						line = line.substring( IS_SHOWN_PREFIX.length() );
+						String[] split = line.split("=");
+						if ( split.length == 2 )
+						{
+							String clazz = split[0];
+							boolean state = Boolean.valueOf( split[1] );
+							isShown.put( clazz ,  state );
+						}						
+					} 
+					else  if ( line.startsWith( LOCATION_PREFIX ) )
 					{
 						line = line.substring( LOCATION_PREFIX.length() );
 						String[] split = line.split("=");
@@ -123,8 +144,12 @@ public class WindowLocationHelper
 		for ( String key : allKeys ) {
 			Point l = locs.get( key );
 			Point d = dims.get(key);
+			Boolean state = isShown.get(key);
+			if ( state == null ) {
+				state = true;
+			}
 			if ( l != null && d != null ) {
-				tmp.put( key , new SizeAndLocation(l, new Dimension(d.x , d.y ) ) );
+				tmp.put( key , new SizeAndLocation(l, new Dimension(d.x , d.y ) , state ) );
 			}
 		}
 		locations = tmp;
