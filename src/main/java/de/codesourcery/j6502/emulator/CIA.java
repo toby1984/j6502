@@ -663,11 +663,11 @@ ende     rts             ; back to BASIC
 			if ( ( cra & (1<<5) ) == 0 ) // timer counts system cycles
 			{
 				timerAValue--;
-				if ( timerAValue < 0 )
+				if ( timerAValue == 0 )
 				{
 					if ( timerBRunning && (crb & 0b1100000) == 0b1000000) { // timerB counts timerA underflow
 						timerBValue--;
-						if ( timerBValue < 0 ) {
+						if ( timerBValue == 0 ) {
 							handleTimerBUnderflow( crb , cpu );
 						}
 					}
@@ -697,7 +697,7 @@ ende     rts             ; back to BASIC
 			final int mode = (crb >> 5) & 0b11;
 			if ( mode == 0b00 ) { // Timer B counts System cycles
 				timerBValue--;
-				if ( timerBValue < 0 )
+				if ( timerBValue == 0 )
 				{
 					handleTimerBUnderflow(crb,cpu);
 				}
@@ -714,13 +714,12 @@ ende     rts             ; back to BASIC
 		}
 		if ( (crb & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
 			timerBRunning = false;
-			timerBValue = 0xffff;
-		} else { // // bit 3 = 0 => Timer-restart after underflow (latch will be reloaded)
-			if ( DEBUG_VERBOSE ) {
-				System.out.println(this+" , loading timer B latch = "+timerBLatch);
-			}
-			timerBValue = timerBLatch;
+		} 
+		
+		if ( DEBUG_VERBOSE ) {
+			System.out.println(this+" , loading timer B latch = "+timerBLatch);
 		}
+		timerBValue = timerBLatch;
 	}
 
 	private void handleTimerAUnderflow(int cra,CPU cpu)
@@ -736,13 +735,11 @@ ende     rts             ; back to BASIC
 		}
 		if ( (cra & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
 			timerARunning = false;
-			timerAValue = 0xffff;
-		} else { // // bit 3 = 0 => Timer-restart after underflow (latch will be reloaded)
-			if ( DEBUG_VERBOSE ) {
-				System.out.println(this+" , loading timer A latch = "+timerALatch);
-			}
-			timerAValue = timerALatch;
 		}
+		if ( DEBUG_VERBOSE ) {
+			System.out.println(this+" , loading timer A latch = "+timerALatch);
+		}
+		timerAValue = timerALatch;
 	}
 
 	private boolean isSetRTCAlarmTime()

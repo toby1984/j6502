@@ -88,12 +88,11 @@ public class Emulator
 		} 
 		else 
 		{
+
 			if ( cpu.isInterruptQueued() && ! cpu.isSet(CPU.Flag.IRQ_DISABLE ) )
 			{
 				cpu.performInterrupt(memory);
 			}
-
-			final int oldPc = cpu.pc();
 
 			if ( PRINT_DISASSEMBLY )
 			{
@@ -115,6 +114,7 @@ public class Emulator
 				});
 			}
 			
+			final int oldPc = cpu.pc();
 			doSingleStep();
 			
 			if ( PRINT_DISASSEMBLY ) {
