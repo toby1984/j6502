@@ -2,6 +2,7 @@ package de.codesourcery.j6502.parser;
 
 import junit.framework.TestCase;
 import de.codesourcery.j6502.assembler.AddressingMode;
+import de.codesourcery.j6502.assembler.parser.Identifier;
 import de.codesourcery.j6502.assembler.parser.Lexer;
 import de.codesourcery.j6502.assembler.parser.Opcode;
 import de.codesourcery.j6502.assembler.parser.Parser;
@@ -9,6 +10,7 @@ import de.codesourcery.j6502.assembler.parser.Scanner;
 import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.assembler.parser.ast.AbsoluteOperand;
 import de.codesourcery.j6502.assembler.parser.ast.CommentNode;
+import de.codesourcery.j6502.assembler.parser.ast.EquNode;
 import de.codesourcery.j6502.assembler.parser.ast.IValueNode;
 import de.codesourcery.j6502.assembler.parser.ast.ImmediateOperand;
 import de.codesourcery.j6502.assembler.parser.ast.IndirectOperandX;
@@ -17,6 +19,7 @@ import de.codesourcery.j6502.assembler.parser.ast.InitializedMemoryNode;
 import de.codesourcery.j6502.assembler.parser.ast.InstructionNode;
 import de.codesourcery.j6502.assembler.parser.ast.NumberLiteral;
 import de.codesourcery.j6502.assembler.parser.ast.NumberLiteral.Notation;
+import de.codesourcery.j6502.assembler.parser.ast.OperatorNode;
 import de.codesourcery.j6502.assembler.parser.ast.SetOriginNode;
 import de.codesourcery.j6502.assembler.parser.ast.Statement;
 
@@ -118,6 +121,51 @@ public class ParserTest extends TestCase {
 		assertEquals( Notation.DECIMAL , lit.notation );
 	}
 
+	public void testParseEquWithNumber() {
+
+		parse("label: .equ $0a");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof NumberLiteral);
+
+		EquNode node = (EquNode) ast.child(0).child(0);
+		assertEquals( new Identifier("label") , node.getIdentifier() );
+		NumberLiteral num = (NumberLiteral) ast.child(0).child(0).child(0);
+		assertEquals( 10 , num.getWordValue() );
+	}
+
+	public void testParseEquWithExpression1()
+	{
+		parse("label: .equ 1+2*3");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof OperatorNode);
+
+		assertEquals( 7 ,  ((OperatorNode) ast.child(0).child(0).child(0)).evaluate() );
+	}
+
+	public void testParseEquWithExpression2()
+	{
+		parse("label: .equ (1+2)*3");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof OperatorNode);
+
+		assertEquals( 9 ,  ((OperatorNode) ast.child(0).child(0).child(0)).evaluate() );
+	}
+
 	public void testParseLDAImmediateHexadecimal()
 	{
 		parse("LDA #$ff");
@@ -173,7 +221,7 @@ public class ParserTest extends TestCase {
 		assertEquals( Opcode.LDA, ins.opcode );
 
 		final NumberLiteral lit = (NumberLiteral) ast.child(0).child(0).child(0).child(0);
-		assertEquals( (short) 0xda00 , lit.value );
+		assertEquals( 0xda00 , lit.value );
 		assertEquals( Notation.HEXADECIMAL , lit.notation );
 	}
 

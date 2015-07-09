@@ -12,4 +12,11 @@ public interface IValueNode extends IASTNode
 	 * @return
 	 */
 	public boolean isValueAvailable();
+
+	/**
+	 *
+	 * @return
+	 * @throws IllegalStateException if {@link #isValueAvailable()} returned <code>false</code> and you called this method regardless
+	 */
+	public int evaluate() throws IllegalStateException;
 }

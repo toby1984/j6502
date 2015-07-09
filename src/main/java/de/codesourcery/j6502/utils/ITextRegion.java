@@ -28,6 +28,13 @@ public interface ITextRegion extends Serializable
     public int getEndOffset();
 
     /**
+     * Returns an independent copy of this instance.
+     *
+     * @return
+     */
+    public ITextRegion createCopy();
+
+    /**
      * Returns the length of this text region in characters.
      *
      * @return

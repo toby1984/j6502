@@ -21,18 +21,33 @@ public abstract class ASTNode implements IASTNode {
 	}
 
 	@Override
-	public IASTNode getParent() {
+	public final IASTNode getParent() {
 		return parent;
 	}
 
 	@Override
-	public List<IASTNode> getChildren() {
+	public final void insertChild(int index, IASTNode child) {
+		this.children.add( index, child );
+		child.setParent( this );
+	}
+
+	@Override
+	public final List<IASTNode> getChildren() {
 		return children;
 	}
-	
+
 	@Override
-	public ITextRegion getTextRegion() {
+	public final ITextRegion getTextRegion() {
 		return textRegion;
+	}
+
+	@Override
+	public final void mergeRegion(ITextRegion region) {
+		if ( this.textRegion == null ) {
+			this.textRegion = region.createCopy();
+		} else {
+			this.textRegion.merge( region );
+		}
 	}
 
 	@Override
@@ -105,6 +120,14 @@ public abstract class ASTNode implements IASTNode {
 	{
 		for ( final IASTNode child : children) {
 			addChild(child);
+		}
+	}
+
+	@Override
+	public void removeChild(IASTNode child)
+	{
+		if( ! children.remove( child ) ) {
+			throw new IllegalArgumentException( "Failed to remove child node, node "+child+" is no child of "+this);
 		}
 	}
 

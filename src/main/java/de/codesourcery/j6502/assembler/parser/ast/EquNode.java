@@ -12,34 +12,35 @@ import de.codesourcery.j6502.utils.ITextRegion;
 public class EquNode extends ASTNode implements ICompilationContextAware
 {
 	private Identifier identifier;
-	
-	public EquNode(Identifier identifier,ITextRegion region) 
+
+	public EquNode(Identifier identifier,ITextRegion region)
 	{
 		super(region);
 		Validate.notNull(identifier, "identifier must not be NULL");
 		this.identifier = identifier;
 	}
-	
+
 	public Identifier getIdentifier() {
 		return identifier;
 	}
 
 	@Override
-	public void visit(ICompilationContext context) 
+	public void visit(ICompilationContext context)
 	{
-		if ( context.getPassNo() == 0 ) 
+		if ( context.getPassNo() == 0 )
 		{
-			try {
+			try
+			{
 				context.getSymbolTable().defineSymbol( new Equ( identifier ) );
 			} catch(DuplicateSymbolException e) {
-				throw new ParseException( e.getMessage() , getTextRegion() ,e ); 
+				throw new ParseException( e.getMessage() , getTextRegion() ,e );
 			}
-		} 
-		else 
+		}
+		else
 		{
 			final Equ equ = (Equ) context.getSymbolTable().getSymbol( identifier , null );
 			final int value = ((IValueNode) child(0)).getWordValue();
-			equ.setValue( value ); 
+			equ.setValue( value );
 		}
 	}
 

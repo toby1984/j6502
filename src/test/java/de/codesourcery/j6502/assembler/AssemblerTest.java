@@ -71,7 +71,7 @@ public class AssemblerTest extends TestCase {
 			// ok
 		}
 	}
-	
+
 	public void testImmediateValueOutOfRange() {
 		assertDoesNotCompile("*=$c000\nLDA #1234");
 	}
@@ -85,17 +85,17 @@ public class AssemblerTest extends TestCase {
 		final String s = "ASL  $ff9e , X; 005a:  1e 9e 5a ..Z";
 		assertCompilesTo(s , 0x1e , 0x9e , 0xff );
 	}
-	
+
 	public void testASL32() {
 		final String s = "label: ASL  $ff9e , X; 005a:  1e 9e 5a ..Z";
 		assertCompilesTo(s , 0x1e , 0x9e , 0xff );
-	}	
+	}
 
 	public void testORA2() {
 		final String s = "ORA  $e1; 000f:  05 e1    ..";
 		assertCompilesTo(s , 0x05 , 0xe1 );
 	}
-	
+
 	public void testSTA2() {
 		final String s = "STA $01,Y";
 		assertCompilesTo(s , 0x99 , 0x01 , 0x00 );
@@ -138,21 +138,21 @@ public class AssemblerTest extends TestCase {
 	public void testByteInitializedMemory() {
 		assertCompilesTo(".byte $01,2,3,$4" , 1 , 2, 3, 4 );
 	}
-	
-	public void testEQU1() 
+
+	public void testEQU1()
 	{
 		assertCompilesTo("reg: .equ $12\n.byte reg" , 0x12 );
-	}	
-	
-	public void testEQU2() 
+	}
+
+	public void testEQU2()
 	{
 		assertCompilesTo("CIA2_PRA: .equ $d000\nSTA CIA2_PRA" , 0x8d , 0x00, 0xd0 );
-	}	
+	}
 
 	public void testByteInitializedMemoryWithLabel() {
 		assertCompilesTo("label: .byte $01,2,3,$4" , 1 , 2, 3, 4 );
 	}
-	
+
 	public void testSetOriginForwards()
 	{
 		final String s = "*= $0a\n"
@@ -1282,6 +1282,10 @@ public class AssemblerTest extends TestCase {
 	public void testRTS()
 	{
 		// MODE           SYNTAX         HEX LEN TIM
+		// # Accumulator   RTS A         $A9  1   2
+		assertCompilesTo( "RTS" , 0x60 );
+
+		// MODE           SYNTAX         HEX LEN TIM
 		// # Immediate     RTS #$44      $A9  2   2
 		assertDoesNotCompile( "RTS #$44" );
 
@@ -1308,10 +1312,6 @@ public class AssemblerTest extends TestCase {
 		// MODE           SYNTAX         HEX LEN TIM
 		// Zero Page,Y   RTS $44,X     $B5  2   4
 		assertDoesNotCompile( "RTS $44,Y" );
-
-		// MODE           SYNTAX         HEX LEN TIM
-		// # Accumulator   RTS A         $A9  1   2
-		assertCompilesTo( "RTS" , 0x60 );
 
 		// MODE           SYNTAX         HEX LEN TIM
 		// Indirect,X      RTS ($44,X)   $A1  2   6

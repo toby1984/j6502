@@ -6,12 +6,14 @@ import java.util.function.Consumer;
 
 import de.codesourcery.j6502.utils.ITextRegion;
 
-public interface  IASTNode extends Iterable<IASTNode> {
+public interface IASTNode extends Iterable<IASTNode> {
 
 	@Override
 	public Iterator<IASTNode> iterator();
 
 	public ITextRegion getTextRegion();
+
+	public void mergeRegion(ITextRegion region);
 
 	public ITextRegion getTextRegionIncludingChildren();
 
@@ -25,13 +27,17 @@ public interface  IASTNode extends Iterable<IASTNode> {
 
 	public void addChildren(List<IASTNode> children);
 
+	public void insertChild(int index,IASTNode child);
+
 	public int getChildCount();
 
 	public boolean hasNoChildren();
-	
+
 	public List<IASTNode> getChildren();
 
 	public void addChild(IASTNode child);
+
+	public void removeChild(IASTNode child);
 
 	public void setParent(IASTNode parent);
 

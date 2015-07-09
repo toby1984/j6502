@@ -21,7 +21,8 @@ public class Lexer {
 		this.scanner = scanner;
 	}
 
-	public int currentOffset() {
+	public int currentOffset()
+	{
 		if ( eof() ) {
 			return scanner.currentOffset();
 		}
@@ -74,7 +75,6 @@ public class Lexer {
 
 	private void parse()
 	{
-
 		int start = scanner.currentOffset();
 		buffer.setLength(0);
 
@@ -101,17 +101,41 @@ public class Lexer {
 		start = scanner.currentOffset();
 		while( ! scanner.eof() )
 		{
-			/*
-	NUMBER,
-	CHARACTERS,
-	SINGLE_QUOTE,
-	DOUBLE_QUOTE,
-	EOL,
-	EOF
-			 */
 			final char c = scanner.peek();
+
+			if ( buffer.length() == 0 )
+			{
+				if ( Operator.isValidOperator( Character.toString( c ) ) )
+				{
+					buffer.append( scanner.next() );
+					continue;
+				}
+			}
+			else if ( Operator.isValidOperator( buffer.toString() ) )
+			{
+				if ( Operator.isValidOperator( buffer.toString()+Character.toString( c ) ) )
+				{
+					buffer.append( scanner.next() );
+					continue;
+				}
+				// buffer contains a valid operator but <buffer+current char> no longer yields a valid operator
+				parseBuffer(start);
+				return;
+			}
+			else if ( Operator.isValidOperator( Character.toString( c ) ) )
+			{
+				// buffer.length >0 but no valid operator already in buffer
+				parseBuffer(start);
+				return;
+			}
+
 			switch( c )
 			{
+				case '%':
+					parseBuffer(start);
+					start = scanner.currentOffset();
+					addToken(TokenType.PERCENTAGE, scanner.next() , start );
+					return;
 				case '\r':
 					scanner.next(); // consume CR
 					if ( ! scanner.eof() && scanner.peek() == '\n' ) {
@@ -131,11 +155,6 @@ public class Lexer {
 					parseBuffer(start);
 					start = scanner.currentOffset();
 					addToken(TokenType.SEMICOLON, scanner.next() , start );
-					return;
-				case '*':
-					parseBuffer(start);
-					start = scanner.currentOffset();
-					addToken(TokenType.STAR, scanner.next() , start );
 					return;
 				case '=':
 					parseBuffer(start);
@@ -207,6 +226,17 @@ public class Lexer {
 		if ( s.length() == 0 ) {
 			return;
 		}
+
+		if ( Operator.isValidOperator( s ) )
+		{
+			final List<Operator> operators = Operator.getMatchingOperators( s );
+			if ( operators.size() != 1 ) {
+				throw new RuntimeException("Internal error,expected exactly 1 operator for symbol '"+s+"' but got "+operators);
+			}
+			addToken(TokenType.OPERATOR , s , bufferStartOffset );
+			return;
+		}
+
 		boolean isNumber = true;
 		for ( int i = 0 , len = s.length() ; i < len ; i++ ) {
 			if ( ! Character.isDigit( s.charAt(i) ) )
@@ -219,19 +249,19 @@ public class Lexer {
 			addToken(TokenType.DIGITS , s , bufferStartOffset );
 			return;
 		}
-		
+
 		if ( ".byte".equalsIgnoreCase( s ) ) {
 			addToken(TokenType.META_BYTE , s , bufferStartOffset );
 			return;
 		}
-		if ( ".equ".equalsIgnoreCase( s ) ) 
+		if ( ".equ".equalsIgnoreCase( s ) )
 		{
 			addToken(TokenType.META_EQU, s , bufferStartOffset );
 			return;
 		}
-		
+
 		boolean gotDots = false;
-		for ( int i = 0 ; i < s.length() ; i++ ) 
+		for ( int i = 0 ; i < s.length() ; i++ )
 		{
 			if ( s.charAt(i) == '.' )
 			{
@@ -239,10 +269,10 @@ public class Lexer {
 				addToken(TokenType.DOT , '.' , bufferStartOffset+i );
 			}
 		}
-		if ( gotDots ) 
+		if ( gotDots )
 		{
 			final StringBuilder buffer = new StringBuilder(s);
-			while ( buffer.length() > 0 ) 
+			while ( buffer.length() > 0 )
 			{
 				final int idx = buffer.indexOf(".");
 				if ( idx == -1 ) {

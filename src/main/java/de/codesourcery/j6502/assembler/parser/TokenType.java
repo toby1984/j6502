@@ -2,12 +2,12 @@ package de.codesourcery.j6502.assembler.parser;
 
 public enum TokenType
 {
+	// single character tokens
 	COLON,
 	COMMA,
 	DOLLAR,
 	HASH,
-	DIGITS,
-	CHARACTERS,
+	PERCENTAGE,
 	SINGLE_QUOTE,
 	DOUBLE_QUOTE,
 	SEMICOLON,
@@ -15,10 +15,13 @@ public enum TokenType
 	PARENS_CLOSE,
 	DOT,
 	EOL,
-	WHITESPACE,
 	EOF,
-	STAR,
 	EQUALS,
+	// multi-character tokens
+	DIGITS,
+	CHARACTERS,
+	WHITESPACE,
+	OPERATOR,
 	META_BYTE,
 	META_EQU;
 }

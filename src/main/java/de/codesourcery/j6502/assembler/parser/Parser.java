@@ -2,9 +2,11 @@ package de.codesourcery.j6502.assembler.parser;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 import de.codesourcery.j6502.assembler.exceptions.ParseException;
+import de.codesourcery.j6502.assembler.parser.ExpressionToken.ExpressionTokenType;
 import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.assembler.parser.ast.ASTNode;
 import de.codesourcery.j6502.assembler.parser.ast.AbsoluteOperand;
@@ -21,6 +23,7 @@ import de.codesourcery.j6502.assembler.parser.ast.InstructionNode;
 import de.codesourcery.j6502.assembler.parser.ast.LabelNode;
 import de.codesourcery.j6502.assembler.parser.ast.NumberLiteral;
 import de.codesourcery.j6502.assembler.parser.ast.NumberLiteral.Notation;
+import de.codesourcery.j6502.assembler.parser.ast.OperatorNode;
 import de.codesourcery.j6502.assembler.parser.ast.RegisterReference;
 import de.codesourcery.j6502.assembler.parser.ast.SetOriginNode;
 import de.codesourcery.j6502.assembler.parser.ast.Statement;
@@ -33,6 +36,7 @@ public class Parser
 
 	private final AST ast = new AST();
 
+	private LabelNode labelOnCurrentLine = null;
 	private LabelNode previousGlobalLabel = null;
 	private ASTNode currentNode = null;
 
@@ -44,82 +48,170 @@ public class Parser
 	{
 		while ( ! lexer.peek( TokenType.EOF ) )
 		{
-			skipNewLines();
-
-			parseStatement();
-
-			skipComment();
-
+			// skip newlines
 			while ( lexer.peek(TokenType.EOL ) ) {
 				lexer.next();
 			}
 
-			if ( currentNode.hasChildren() )
-			{
+			if ( parseStatement() ) {
 				ast.addChild( currentNode );
 			}
-			currentNode = null;
 		}
 		lexer.next(TokenType.EOF);
 		return ast;
+	}
+
+	private void fail(String msg,int offset)
+	{
+		throw new ParseException( msg , offset);
 	}
 
 	private void fail(String msg) {
 		throw new ParseException( msg ,lexer.currentOffset());
 	}
 
-	private boolean skipComment() {
+	private boolean parseComment() {
 
-		if ( lexer.peek( TokenType.EOL ) ) {
-			lexer.next();
-			return true;
-		}
-		if ( lexer.peek(TokenType.EOF) ) {
-			return true;
-		}
-
-		if ( ! lexer.peek(TokenType.SEMICOLON ) ) {
-			return false;
-		}
-
-		final int startOffset = lexer.next( TokenType.SEMICOLON ).offset;
-
-		final StringBuffer buffer = new StringBuffer();
-		try
+		if ( lexer.peek(TokenType.SEMICOLON ) )
 		{
-			do {
-				final Token t = lexer.peek();
-				if ( t.hasType(TokenType.EOL ) || t.hasType(TokenType.EOF ) ) {
-					break;
-				}
-				lexer.setSkipWhitespace( false );
-				buffer.append( lexer.next().text );
-			} while ( true );
-		}
-		finally {
-			lexer.setSkipWhitespace(true);
-		}
+			final int startOffset = lexer.next( TokenType.SEMICOLON ).offset;
 
-		final TextRegion region = new TextRegion( startOffset , lexer.currentOffset() - startOffset );
-		currentNode.addChild( new CommentNode( buffer.toString() , region ) );
-		return true;
+			final StringBuffer buffer = new StringBuffer();
+			try
+			{
+				do {
+					final Token t = lexer.peek();
+					if ( t.hasType(TokenType.EOL ) || t.hasType(TokenType.EOF ) ) {
+						break;
+					}
+					lexer.setSkipWhitespace( false );
+					buffer.append( lexer.next().text );
+				} while ( true );
+			}
+			finally {
+				lexer.setSkipWhitespace(true);
+			}
+
+			final TextRegion region = new TextRegion( startOffset , lexer.currentOffset() - startOffset );
+			currentNode.addChild( new CommentNode( buffer.toString() , region ) );
+			return true;
+		}
+		return false;
 	}
 
-	private void parseStatement()
+	private boolean parseStatement()
 	{
+		labelOnCurrentLine = null;
+
 		currentNode = new Statement();
 
-		if ( skipComment() ) {
-			return;
+		if ( ! ( lexer.peek( TokenType.EOF ) || lexer.peek( TokenType.EOL ) ) )
+		{
+			final boolean gotLabel = parseLabel();
+
+			final boolean gotInstruction = parseInstructionOrMeta();
+
+			final boolean gotComment = parseComment();
+
+			if ( ! gotLabel && ! gotInstruction && ! gotComment ) {
+				fail("Syntax error");
+			}
+			return true;
+		}
+		return false;
+	}
+
+	private boolean parseInstructionOrMeta()
+	{
+		if ( parseMeta() ) { // *=  .byte   .equ
+			return true;
 		}
 
-		int startOffset = lexer.currentOffset();
+		final Token insToken = lexer.peek();
+		if ( insToken.hasType(TokenType.CHARACTERS ) )
+		{
+			final Opcode op = Opcode.getOpcode( insToken.text );
+			if ( op != null )
+			{
+				lexer.next(); // consume instruction token
 
-		// handle *=
-		if ( lexer.peek(TokenType.STAR ) ) 
+				final InstructionNode ins = new InstructionNode( op , insToken.region() );
+				if ( ! ( lexer.peek(TokenType.EOF) || lexer.peek(TokenType.EOL) || lexer.peek( TokenType.SEMICOLON ) ) )
+				{
+					final IASTNode left = parseLeftArgument( op );
+					if ( left != null )
+					{
+						ins.addChild( left );
+						if ( lexer.peek(TokenType.COMMA ) )
+						{
+							lexer.next();
+							final IASTNode right = parseRightArgument();
+							if ( right != null ) {
+								ins.addChild( right );
+							} else {
+								fail("Missing right operand");
+							}
+						}
+					}
+				}
+				currentNode.addChild( ins );
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean parseLabel() {
+
+		Token localLabelDot = null;
+		if ( lexer.peek( TokenType.DOT ) )
+		{
+			localLabelDot = lexer.next();
+		}
+
+		if ( lexer.peek( TokenType.CHARACTERS ) && Identifier.isValidIdentifier( lexer.peek().text ) )
+		{
+			if ( localLabelDot != null || Opcode.getOpcode( lexer.peek().text ) == null )
+			{
+				final Token idToken = lexer.next();
+				final Identifier id = new Identifier( idToken.text );
+				if( localLabelDot != null ) // local label
+				{
+					if ( previousGlobalLabel == null )
+					{
+						throw new ParseException( "Local label '"+lexer.peek().text+" without preceding global label", lexer.peek() );
+					}
+					labelOnCurrentLine = new LabelNode( id , previousGlobalLabel , localLabelDot.region().merge( idToken.region() ));
+					currentNode.addChild( labelOnCurrentLine );
+				}
+				else // global label
+				{
+					ITextRegion region = idToken.region();
+					if ( lexer.peek( TokenType.COLON ) )
+					{
+						final Token colonToken = lexer.next();
+						region = region.merge( colonToken.region() );
+					}
+
+					labelOnCurrentLine = previousGlobalLabel = new LabelNode( id , region );
+					currentNode.addChild( previousGlobalLabel  );
+				}
+				return true;
+			}
+		}
+
+		if( localLabelDot != null ) {
+			lexer.push( localLabelDot );
+		}
+		return false;
+	}
+
+	private boolean parseMeta()
+	{
+		if ( lexer.peek( TokenType.OPERATOR ) && lexer.peek().operator().symbol.equals("*") ) // *=
 		{
 			final Token tok = lexer.next();
-			if ( lexer.peek(TokenType.EQUALS ) ) // *=
+			if ( lexer.peek(TokenType.EQUALS ) )
 			{
 				final Token tok2 = lexer.next();
 				final IASTNode expr = parseExpression();
@@ -128,166 +220,47 @@ public class Parser
 					final SetOriginNode node = new SetOriginNode( new TextRegion(tok.offset , tok2.offset - tok.offset ) );
 					node.addChild( expr );
 					currentNode.addChild( node );
-					return;
-				} else {
-					lexer.push(tok);
-				}
-			} else {
-				lexer.push( tok );
-			}
-		}
-
-		boolean gotLocalLabel = false;
-		if ( lexer.peek(TokenType.DOT) ) { // .localLabel or meta
-
-			if ( parseMeta() ) 
-			{
-				skipComment();
-				return;
-			}
-
-			// ok, not a meta
-			if ( previousGlobalLabel == null ) {
-				fail("Local label without previous global label");
-			}
-			final Token dot = lexer.next();
-			if ( lexer.peek(TokenType.CHARACTERS ) )
-			{
-				if ( Identifier.isValidIdentifier( lexer.peek().text ) ) 
-				{
-					final Identifier identifier = new Identifier( lexer.next().text );
-					final ITextRegion region = dot.toRegion().merge( new TextRegion( startOffset , lexer.currentOffset() - startOffset ) );
-					currentNode.addChild( new LabelNode( identifier , previousGlobalLabel , region ) );
-					gotLocalLabel = true;
-				} else {
-					fail("Not a valid label identifier: "+lexer.peek().text );
-				}
-			} else {
-				fail("Expected valid local label identifier");
-			}
-		}
-
-		if ( skipComment() ) {
-			return;
-		}
-
-		if ( parseMeta() ) 
-		{
-			skipComment();
-			return;
-		}
-
-		startOffset = lexer.currentOffset();
-		if ( lexer.peek(TokenType.CHARACTERS ) ) // label or opcode  
-		{ 
-			final Token tok = lexer.next(); // consume token so we can peek at the next one
-			if ( ! gotLocalLabel && lexer.peek(TokenType.COLON ) )
-			{
-				final Token colon = lexer.next(); // consume colon
-				if ( ! Identifier.isValidIdentifier( tok.text ) ) {
-					fail("Not a valid label identifier: "+tok.text);
-				}
-				final ITextRegion region = tok.toRegion().merge( colon.toRegion() );
-				
-				if ( lexer.peek(TokenType.META_EQU ) ) 
-				{
-					parseEQU( new Identifier( tok.text ) , tok.toRegion().merge( colon.toRegion() ) );  
-				} else {
-					previousGlobalLabel = new LabelNode( new Identifier( tok.text ) , region );
-					currentNode.addChild( previousGlobalLabel );
-				}
-			} 
-			else 
-			{
-				// push back token, most likely an opcode
-				lexer.push( tok );
-			}
-
-			if ( parseMeta() ) 
-			{
-				skipComment();
-				return;
-			}
-
-			if ( skipComment() ) {
-				return;
-			}
-
-			// parse opCode
-			final IASTNode instruction = parseInstruction();
-			if ( instruction != null ) {
-				currentNode.addChild(instruction);
-			} 
-			else 
-			{
-				// not a valid opcode
-				fail("Expected an instruction, got "+tok);
-			}
-		}
-		else if ( ! lexer.peek(TokenType.EOL) && ! lexer.peek(TokenType.EOF ) )
-		{
-			fail("Expected label or opcode");
-		}
-	}
-
-	private boolean parseLabel() 
-	{
-		if ( lexer.peek(TokenType.DOT) ) { // .localLabel
-
-			if ( previousGlobalLabel == null ) {
-				fail("Local label without previous global label");
-			}
-			final Token dot = lexer.next();
-			if ( lexer.peek(TokenType.CHARACTERS ) )
-			{
-				if ( Identifier.isValidIdentifier( lexer.peek().text ) ) 
-				{
-					final Token labelText = lexer.next();
-					final Identifier identifier = new Identifier( labelText.text );
-					final ITextRegion region = dot.toRegion().merge( labelText.toRegion() );
-					currentNode.addChild( new LabelNode( identifier , previousGlobalLabel , region ) );
 					return true;
-				} 
+				}
+				lexer.push(tok2);
 			}
-			lexer.push( dot );
-			return false;
+			lexer.push( tok );
 		}
 
-		// global: label
-		if ( lexer.peek(TokenType.CHARACTERS ) ) {
-
-		}		
-		return false;
-	}
-
-	private boolean parseMeta() 
-	{
-		if ( lexer.peek(TokenType.META_BYTE ) ) 
+		if ( lexer.peek(TokenType.META_BYTE ) ) // .byte
 		{
 			final Token token = lexer.next();
-			final InitializedMemoryNode node = new InitializedMemoryNode( token.toRegion() , InitializedMemoryNode.Type.BYTES );
+			final InitializedMemoryNode node = new InitializedMemoryNode( token.region() , InitializedMemoryNode.Type.BYTES );
 			node.addChildren( parseMemInitList() );
 			currentNode.addChild( node );
 			return true;
 		}
-		return false;
-	}
 
-	private void parseEQU(Identifier label,ITextRegion region) 
-	{
-		if ( ! lexer.peek(TokenType.META_EQU ) ) 
+		if ( lexer.peek(TokenType.META_EQU ) && labelOnCurrentLine != null ) // .equ
 		{
-			fail("Expected .equ");
+			final Token token = lexer.next();
+			final IASTNode exprNode = parseExpression();
+			if ( exprNode == null ) {
+				fail("expected an expression");
+			}
+
+			final EquNode node = new EquNode( labelOnCurrentLine.identifier , new TextRegion( labelOnCurrentLine.getTextRegion() ).merge( token.region() ) );
+
+			// 'labelOnCurrentLine' has already been registered as a LabelNode, remove it from the AST
+			// since the label identifier is actually part of the EQU node.
+			// Failing to remove the label node here will trigger a 'duplicate symbol' execution later on
+			currentNode.removeChild( labelOnCurrentLine );
+			if ( previousGlobalLabel == labelOnCurrentLine ) {
+				previousGlobalLabel = null;
+			}
+			labelOnCurrentLine = null;
+
+			node.addChild( exprNode );
+			currentNode.addChild( node );
+			return true;
 		}
-		
-		final Token token = lexer.next();
-		final IASTNode astNode = parseExpression();
-		if ( astNode == null ) {
-			fail("expected an expression");
-		}
-		final EquNode node = new EquNode( label , token.toRegion() );
-		node.addChild( astNode );
-		currentNode.addChild( node );
+
+		return false;
 	}
 
 	private List<IASTNode> parseMemInitList()
@@ -306,47 +279,6 @@ public class Parser
 			lexer.next(); // consume comma
 		} while ( true );
 		return result;
-	}
-
-	private void skipNewLines() {
-		while ( lexer.peek(TokenType.EOL ) ) {
-			lexer.next();
-		}
-	}
-
-	private IASTNode parseInstruction() {
-
-		final Token token = lexer.peek();
-		if ( token.hasType(TokenType.CHARACTERS ) )
-		{
-			final Opcode op = Opcode.getOpcode( token.text );
-			if ( op != null )
-			{
-				lexer.next(); // read opcode
-				final InstructionNode ins = new InstructionNode( op , new TextRegion(token.offset, lexer.currentOffset() - token.offset ) );
-
-				if ( ! (lexer.peek(TokenType.EOF) || lexer.peek( TokenType.EOF) || lexer.peek( TokenType.SEMICOLON ) ) )
-				{
-					final IASTNode left = parseLeftArgument( op );
-					if ( left != null )
-					{
-						ins.addChild( left );
-						if ( lexer.peek(TokenType.COMMA ) )
-						{
-							lexer.next();
-							final IASTNode right = parseRightArgument();
-							if ( right != null ) {
-								ins.addChild( right );
-							} else {
-								fail("Missing right operand");
-							}
-						}
-					}
-				}
-				return ins;
-			}
-		}
-		return null;
 	}
 
 	/*
@@ -422,7 +354,8 @@ public class Parser
 			result.addChild( value );
 		} else if ( lexer.peek(TokenType.DOLLAR) || lexer.peek(TokenType.DIGITS ) ) { // absolute addressing
 			result = new AbsoluteOperand();
-			result.addChild( parseExpression() );
+			final IASTNode expression = parseExpression();
+			result.addChild( expression );
 		}
 		else if ( lexer.peek(TokenType.CHARACTERS ) && Identifier.isValidIdentifier( lexer.peek().text ) ) // absolute addressing: reference to label
 		{
@@ -457,65 +390,125 @@ public class Parser
 		return null;
 	}
 
-	public IASTNode parseExpression()
+	private IASTNode parseExpression()
 	{
-		final Notation notation;
-		final StringBuilder buffer = new StringBuilder();
-		final long value;
-		final ITextRegion region;
-		if ( lexer.peek(TokenType.DOLLAR ) )
+		final ShuntingYard yard = new ShuntingYard();
+
+		final int offset = lexer.currentOffset();
+		int openingParensCount=0;
+		while(true)
 		{
-			final int startOffset = lexer.currentOffset();
-
-			notation = Notation.HEXADECIMAL;
-			lexer.next(); // consume '$'
-
-			while ( true)
+			final IASTNode value = parseValue();
+			if ( value != null )
 			{
-				if ( lexer.peek(TokenType.DIGITS ) || ( lexer.peek( TokenType.CHARACTERS ) && isValidHexCharacters( lexer.peek().text ) ) ) {
-					buffer.append( lexer.next().text );
-				} else {
-					break;
+				yard.pushValue( value );
+				continue;
+			}
+
+			if ( lexer.peek( TokenType.OPERATOR ) )
+			{
+				final List<Operator> operators = Operator.getMatchingOperators( lexer.peek().text );
+				if ( operators.size() == 1 )
+				{
+					final OperatorNode opNode = new OperatorNode( operators.get(0), lexer.next().region() );
+					yard.pushOperator( new ExpressionToken( ExpressionTokenType.OPERATOR, opNode ) );
+					continue;
 				}
+				throw new RuntimeException("Internal error, lexer returned token that lex'ed to "+operators.size()+" operators ? "+lexer.peek());
 			}
-			if ( buffer.length() == 0 ) {
-				fail("Expected a hexadecimal number");
+
+			if ( lexer.peek( TokenType.PARENS_OPEN ) )
+			{
+				openingParensCount++;
+				yard.pushOperator( new ExpressionToken( ExpressionTokenType.PARENS_OPEN , lexer.next() ) );
+				continue;
 			}
-			region = new TextRegion( startOffset , lexer.currentOffset() - startOffset );
-			value = Long.valueOf( buffer.toString().toLowerCase() , 16 );
-		}
-		else if ( lexer.peek(TokenType.DIGITS ) )
-		{
-			notation = Notation.DECIMAL;
-			final Token token = lexer.next();
-			buffer.append( token.text );
 
-			region = new TextRegion( token.offset , lexer.currentOffset() - token.offset );
-			value = Long.parseLong( buffer.toString() );
-
+			if ( openingParensCount > 0 && lexer.peek( TokenType.PARENS_CLOSE)  )
+			{
+				openingParensCount--;
+				yard.pushOperator( new ExpressionToken( ExpressionTokenType.PARENS_CLOSE , lexer.next() ) );
+				continue;
+			}
+			break;
 		}
-		else if ( lexer.peek(TokenType.CHARACTERS ) )
+		return yard.getResult( new TextRegion( offset , lexer.currentOffset() - offset ) );
+	}
+
+	private IASTNode parseValue()
+	{
+		final IASTNode result = parseNumber();
+		if ( result != null ) {
+			return result;
+		}
+		return parseIdentifier();
+	}
+
+	private IASTNode parseIdentifier()
+	{
+		if ( lexer.peek(TokenType.CHARACTERS ) )
 		{
 			final Token tok = lexer.peek();
 			if ( Identifier.isValidIdentifier( tok.text ) ) {
 				lexer.next();
-				return new IdentifierReferenceNode( new Identifier( tok.text ) , new TextRegion(tok.offset, lexer.currentOffset() - tok.offset ) );
+				return new IdentifierReferenceNode( new Identifier( tok.text ) , tok.region() );
 			}
-			return null;
-		} else {
-			return null;
 		}
-
-		if ( value < -127 || value > 65535 ) {
-			fail("Number of or range: "+buffer+" ("+value+")");
-		}
-		return new NumberLiteral((short) value, notation , region );
+		return null;
 	}
 
-	private static final Pattern VALID_HEX_NUMBER = Pattern.compile("[0-9a-fA-F]+");
-
-	private boolean isValidHexCharacters(String text)
+	private IASTNode parseNumber()
 	{
-		return VALID_HEX_NUMBER.matcher(text).matches();
+		final int startOffset = lexer.currentOffset();
+
+		final Function<String,Integer> conversion;
+		final Predicate<Token> isValid;
+		final Notation notation;
+		Token prefix = null;
+		switch( lexer.peek().type )
+		{
+			case PERCENTAGE:
+				prefix = lexer.next();
+				notation = Notation.BINARY;
+				isValid = token-> token.hasType( TokenType.DIGITS ) && NumberLiteral.isValidBinaryNumber( token.text );
+				conversion = s -> Integer.parseInt( s , 2 );
+				break;
+			case DOLLAR:
+				prefix = lexer.next();
+				notation = Notation.HEXADECIMAL;
+				isValid = token-> ( token.hasType( TokenType.DIGITS ) || token.hasType( TokenType.CHARACTERS) ) && NumberLiteral.isValidHexString( token.text );
+				conversion = s -> Integer.parseInt( s.toLowerCase() , 16 );
+				break;
+			case DIGITS:
+				isValid = token -> token.hasType( TokenType.DIGITS ) && NumberLiteral.isValidDecimalNumber( token.text );
+				notation = Notation.DECIMAL;
+				conversion = s -> Integer.parseInt( s.toLowerCase() );
+				break;
+			default:
+				return null;
+		}
+
+		final StringBuilder buffer = new StringBuilder();
+		while( true )
+		{
+			if ( ! isValid.test( lexer.peek() ) ) {
+				break;
+			}
+			buffer.append( lexer.next().text );
+		}
+
+		if ( buffer.length() == 0 )
+		{
+			if ( prefix != null ) {
+				lexer.push( prefix );
+			}
+			return null;
+		}
+
+		final int value = conversion.apply( buffer.toString() );
+		if ( value < Short.MIN_VALUE || value > 65535 ) {
+			fail("Number of or range: "+buffer+" ("+value+")" , startOffset );
+		}
+		return new NumberLiteral( value, notation , new TextRegion( startOffset , lexer.currentOffset() - startOffset ) );
 	}
 }

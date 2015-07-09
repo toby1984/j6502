@@ -22,16 +22,22 @@ public class IdentifierReferenceNode extends ASTNode implements IValueNode , ICo
 	}
 
 	@Override
-	public byte getByteValue()
+	public int evaluate() throws IllegalStateException
 	{
 		if ( ! isValueAvailable() ) {
 			throw new IllegalStateException("getByte() called on unresolved symbol "+this);
 		}
-		final short value = symbol.getValue().shortValue();
+		return symbol.getValue().intValue();
+	}
+
+	@Override
+	public byte getByteValue()
+	{
+		final int value = symbol.getValue().intValue();
 
 		if ( value < -128 || value > 255 )
 		{
-			throw NumberLiteralOutOfRangeException.byteRange( value );
+			throw NumberLiteralOutOfRangeException.byteRange( (short) value );
 		}
 		return (byte) value;
 	}
@@ -39,10 +45,7 @@ public class IdentifierReferenceNode extends ASTNode implements IValueNode , ICo
 	@Override
 	public short getWordValue()
 	{
-		if ( ! isValueAvailable() ) {
-			throw new IllegalStateException("getByte() called on unresolved symbol "+this);
-		}
-		final int value = symbol.getValue().intValue();
+		final int value = evaluate();
 
 		if ( value < -32768 || value > 65535 )
 		{

@@ -1,5 +1,7 @@
 package de.codesourcery.j6502.assembler.parser;
 
+import java.util.List;
+
 import de.codesourcery.j6502.utils.ITextRegion;
 import de.codesourcery.j6502.utils.TextRegion;
 
@@ -26,12 +28,24 @@ public final class Token {
 		return t.equals( this.type );
 	}
 
-	public ITextRegion toRegion() {
+	public ITextRegion region() {
 		return new TextRegion(offset,text.length());
 	}
 
 	@Override
 	public String toString() {
 		return "Token[ "+type+" , text: >"+text+"< , offset: "+offset+" ]";
+	}
+
+	public Operator operator()
+	{
+		if ( ! hasType(TokenType.OPERATOR ) ) {
+			throw new UnsupportedOperationException("You may not invoke operator() on a token of type "+type+",offending token: "+this);
+		}
+		final List<Operator> operators = Operator.getMatchingOperators( this.text );
+		if ( operators.size() != 1 ) {
+			throw new RuntimeException("Internal error, expected exactly one operator for token "+this+" but got "+operators);
+		}
+		return operators.get(0);
 	}
 }

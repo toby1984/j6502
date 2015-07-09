@@ -219,4 +219,9 @@ public class TextRegion implements ITextRegion
 			merge( r );
 		}
 	}
+
+	@Override
+	public ITextRegion createCopy() {
+		return new TextRegion(this);
+	}
 }

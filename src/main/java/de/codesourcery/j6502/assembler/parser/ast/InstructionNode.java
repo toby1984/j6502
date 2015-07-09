@@ -113,16 +113,16 @@ public class InstructionNode extends ASTNode implements ICompilationContextAware
 	{
 		this.address = context.getCurrentAddress();
 //		context.debug(this,"Generating bytes for instruction @ "+HexDump.toHexBigEndian( (short) address) );
-		
+
 		try {
 			opcode.assemble( this , context );
-		} 
+		}
 		catch( ParseException e) {
 			throw e;
 		}
-		catch(Exception e) 
+		catch(Exception e)
 		{
-			throw new ParseException( e.getMessage(), getTextRegion().getStartingOffset() );
+			throw new ParseException( e.getMessage(), getTextRegion().getStartingOffset() , e );
 		}
 	}
 
