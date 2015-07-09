@@ -85,8 +85,6 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 	private volatile boolean editorDirtyFlag = false;
 	private volatile boolean documentListenerEnabled = true;
 	
-	private boolean isShown = true;
-	
 	protected final StyleContext styleContext = new StyleContext();
 	protected final DefaultStyledDocument styledDocument = new DefaultStyledDocument( styleContext ) 
 	{
@@ -176,8 +174,6 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 
 	protected final class ASTView extends JInternalFrame 
 	{
-		private AST ast;
-		
 		private final DefaultTreeModel treeModel = new DefaultTreeModel( createEmptyTree() );
 
 		private final JTree tree = new JTree(treeModel);
@@ -220,7 +216,6 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 		
 		public void setAST(AST ast) 
 		{
-			this.ast = ast;
 			if ( ast != null ) 
 			{
 				treeModel.setRoot( createTree( null , ast ) ); 
@@ -608,6 +603,7 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 		}
 	}
 	
+	@SuppressWarnings("unused")
 	private void error(String message)
 	{
 		error(message,null);

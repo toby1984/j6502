@@ -2347,7 +2347,7 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 
 		boolean m7 = (a & 0b1000_0000) != 0;
 		boolean n7 = (b & 0b1000_0000) != 0;
-		boolean s7 = (result & 0x80) != 0;
+//		boolean s7 = (result & 0x80) != 0;
 
 		cpu.setFlag( Flag.CARRY , ((result & 0x100) != 0) );
 		cpu.setFlag( Flag.OVERFLOW, (!m7&!n7&c6) | (m7&n7&!c6));

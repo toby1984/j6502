@@ -175,7 +175,7 @@ public class AssemblerTest extends TestCase {
 
 		final Assembler a = new Assembler();
 		try {
-			final byte[] actual = a.assemble( p.parse() );
+			a.assemble( p.parse() );
 			fail("Should've failed");
 		} catch(final Exception e) {
 			e.printStackTrace();

@@ -94,6 +94,7 @@ public class IdentifierReferenceNode extends ASTNode implements IValueNode , ICo
 	{
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
 	public void passFinished(ICompilationContext context)
 	{

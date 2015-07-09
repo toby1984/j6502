@@ -466,6 +466,7 @@ public class VIC extends Memory
 	 *                          Bit 2..0: Offset in Rasterzeilen vom oberen Bildschirmrand	 
 	 */
 	
+	@SuppressWarnings("unused")
 	private int getRowCount() {
 		int result = readByte( VIC_CTRL1 );
 		return ( result & 1<<3) == 0 ? 24: 25; 
@@ -479,6 +480,7 @@ public class VIC extends Memory
 	 *                          Bit 2..0: Offset in Pixeln vom linken Bildschirmrand	 
 	 */
 	
+	@SuppressWarnings("unused")
 	private int getColumnCount() {
 		int result = readByte( VIC_CTRL2 );
 		return ( result & 1<<3) == 0 ? 38 : 40; 

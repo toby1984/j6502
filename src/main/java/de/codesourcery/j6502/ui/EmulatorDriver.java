@@ -186,7 +186,8 @@ public abstract class EmulatorDriver extends Thread
 		boolean justStarted = true;
 		boolean isRunnable = false;
 
-		float dummy = 0;
+		@SuppressWarnings("unused")
+		float dummy = 0; // used to prevent the compiler from optimizing away the delay loop
 		long startTime = System.currentTimeMillis();
 		long cyclesRemaining = CALLBACK_INVOKE_CYCLES;
 		while( true )

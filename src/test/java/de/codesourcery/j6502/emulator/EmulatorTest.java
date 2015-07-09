@@ -39,30 +39,32 @@ public class EmulatorTest  extends TestCase
 
 	public static final int PRG_LOAD_ADDRESS = MemorySubsystem.Bank.BANK1.range.getStartAddress();
 
+	public static final boolean TEST_PERFORMANCE = false;
+	
 	public void testPerformance() {
 
-		if ( 1 == 2 ) {
-		long time = -System.currentTimeMillis();
+		if ( TEST_PERFORMANCE ) {
+			long time = -System.currentTimeMillis();
 
-		Helper helper = execute( "loop: LDA #$11\n BNE loop");
-		helper.run(20000000);
-		time += System.currentTimeMillis();
+			Helper helper = execute( "loop: LDA #$11\n BNE loop");
+			helper.run(20000000);
+			time += System.currentTimeMillis();
 
-		// 985.2484444 kHz [1] (PAL)
-		time = -System.currentTimeMillis();
-		helper = execute( "loop: LDA #$11\n BNE loop");
-		helper.run(20000000);
-		time += System.currentTimeMillis();
+			// 985.2484444 kHz [1] (PAL)
+			time = -System.currentTimeMillis();
+			helper = execute( "loop: LDA #$11\n BNE loop");
+			helper.run(20000000);
+			time += System.currentTimeMillis();
 
-		final double msTimePerCycle = time/ (double) helper.emulator.getCPU().cycles;
-		final double cyclesPerSecond = 1000.0d / msTimePerCycle;
-		final double mhz = cyclesPerSecond / 1000000;
-		System.out.println( "Executed "+helper.emulator.getCPU().cycles+" CPU cycles in "+time+" ms ( = "+mhz+" Mhz )");
+			final double msTimePerCycle = time/ (double) helper.emulator.getCPU().cycles;
+			final double cyclesPerSecond = 1000.0d / msTimePerCycle;
+			final double mhz = cyclesPerSecond / 1000000;
+			System.out.println( "Executed "+helper.emulator.getCPU().cycles+" CPU cycles in "+time+" ms ( = "+mhz+" Mhz )");
 		}
 	}
 
 	public void testCMP() {
-/*
+		/*
 MODE           SYNTAX       HEX LEN TIM
 Immediate     CMP #$44      $C9  2   2
 Zero Page     CMP $44       $C5  2   3
@@ -77,7 +79,7 @@ Indirect,Y    CMP ($44),Y   $D1  2   5+
   P.N = t.7
   P.C = (A>=M) ? 1:0
   P.Z = (t==0) ? 1:0
- */
+		 */
 
 		execute("LDA #$01\n CMP #$02").assertFlags(CPU.Flag.NEGATIVE);
 		execute("LDA #$02\n CMP #$01").assertFlags(CPU.Flag.CARRY);
@@ -156,7 +158,7 @@ M7 	N7 	C6 	    C7 	S7 	V	Carry / Overflow	                    Hex	            U
 		execute("CLC\n LDA #208\n ADC #208\n").assertA( 416 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.NEGATIVE);
 	}
 
-//	public void testADCDecimalMode() {
+	//	public void testADCDecimalMode() {
 	/* TAKEN FROM http://visual6502.org/wiki/index.php?title=6502DecimalMode
     00 + 00 and C=0 gives 00 and N=0 V=0 Z=1 C=0 (simulate)
     79 + 00 and C=1 gives 80 and N=1 V=1 Z=0 C=0 (simulate)
@@ -170,18 +172,18 @@ M7 	N7 	C6 	    C7 	S7 	V	Carry / Overflow	                    Hex	            U
 
     6f + 00 and C=1 gives 76 and N=0 V=0 Z=0 C=0 (simulate)
 	 */
-//		execute("SED\n CLC\n LDA #$0\n ADC #0\n").assertA( 0 ).assertFlags(CPU.Flag.ZERO);
-//		execute("SED\n SEC\n LDA #$79\n ADC #0\n").assertA( 0x80 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW);
-//		execute("SED\n CLC\n LDA #$24\n ADC #$56\n").assertA( 0x80 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW);
-//		execute("SED\n CLC\n LDA #$93\n ADC #$82\n").assertA( 0x75 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.CARRY);
-//		execute("SED\n CLC\n LDA #$89\n ADC #$76\n").assertA( 0x65 ).assertFlags(CPU.Flag.CARRY);
-//		execute("SED\n SEC\n LDA #$89\n ADC #$76\n").assertA( 0x66 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY);
-//		execute("SED\n CLC\n LDA #$80\n ADC #$f0\n").assertA( 0xd0 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.CARRY);
-//		execute("SED\n CLC\n LDA #$80\n ADC #$fa\n").assertA( 0xe0 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.CARRY);
-//
-//		execute("SED\n CLC\n LDA #$2f\n ADC #$4f\n").assertA( 0x74 ).assertFlags();
-//		execute("SED\n SEC\n LDA #$6f\n ADC #$00\n").assertA( 0x76 ).assertFlags();
-//	}
+	//		execute("SED\n CLC\n LDA #$0\n ADC #0\n").assertA( 0 ).assertFlags(CPU.Flag.ZERO);
+	//		execute("SED\n SEC\n LDA #$79\n ADC #0\n").assertA( 0x80 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW);
+	//		execute("SED\n CLC\n LDA #$24\n ADC #$56\n").assertA( 0x80 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW);
+	//		execute("SED\n CLC\n LDA #$93\n ADC #$82\n").assertA( 0x75 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.CARRY);
+	//		execute("SED\n CLC\n LDA #$89\n ADC #$76\n").assertA( 0x65 ).assertFlags(CPU.Flag.CARRY);
+	//		execute("SED\n SEC\n LDA #$89\n ADC #$76\n").assertA( 0x66 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY);
+	//		execute("SED\n CLC\n LDA #$80\n ADC #$f0\n").assertA( 0xd0 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.CARRY);
+	//		execute("SED\n CLC\n LDA #$80\n ADC #$fa\n").assertA( 0xe0 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.CARRY);
+	//
+	//		execute("SED\n CLC\n LDA #$2f\n ADC #$4f\n").assertA( 0x74 ).assertFlags();
+	//		execute("SED\n SEC\n LDA #$6f\n ADC #$00\n").assertA( 0x76 ).assertFlags();
+	//	}
 
 	public void testADC() {
 		// b4( %10110100 ) = 180
@@ -275,7 +277,7 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
 	}
 
 	public void testROL() {
-/*
+		/*
  Affects Flags: S Z C
 
 MODE           SYNTAX       HEX LEN TIM
@@ -286,7 +288,7 @@ Absolute      ROL $4400     $2E  3   6
 Absolute,X    ROL $4400,X   $3E  3   7
 
 ROL shifts all bits left one position. The Carry is shifted into bit 0 and the original bit 7 is shifted into the Carry.
- */
+		 */
 		final byte pattern1         = 0b0101_0101;
 		final byte pattern2 = (byte) 0b1010_1010;
 		execute("CLC\n LDA #"+hex(pattern1)+"\n ROL").assertA( pattern2 ).assertFlagsNotSet(CPU.Flag.CARRY);
@@ -303,7 +305,7 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 	}
 
 	public void testASL() {
-/*
+		/*
  Affects Flags: S Z C
 
 MODE           SYNTAX       HEX LEN TIM
@@ -314,7 +316,7 @@ Absolute      ASL $4400     $2E  3   6
 Absolute,X    ASL $4400,X   $3E  3   7
 
 ASL shifts all bits left one position. The Carry is shifted into bit 0 and the original bit 7 is shifted into the Carry.
- */
+		 */
 		final byte pattern1         = 0b0101_0101;
 		final byte pattern2 = (byte)  0b1010_1010;
 		final byte pattern2s = (byte) 0b0101_0100;
@@ -341,32 +343,32 @@ ASL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 	}
 
 	public void testShift2() {
-		 final String source="LDA #$b4\n"+ // 10110100
-           "STA $70  \n"+
-           "LDX $70  \n"+
-           "ORA #$03 \n"+ // 10110111
-           "STA $0C,X\n"+
-           "ROL $C0  \n"+
-           "ROR $C0  \n"+
-           "ROR $C0  \n"+
-           "LDA $0C,X";
+		final String source="LDA #$b4\n"+ // 10110100
+				"STA $70  \n"+
+				"LDX $70  \n"+
+				"ORA #$03 \n"+ // 10110111
+				"STA $0C,X\n"+
+				"ROL $C0  \n"+
+				"ROR $C0  \n"+
+				"ROR $C0  \n"+
+				"LDA $0C,X";
 
-		 	final int[] pc = { 0 };
-			execute(source)
-			.beforeEachStep( emulator -> {
-				pc[0] = emulator.getCPU().pc();
-			})
-			.afterEachStep(emulator ->
-			{
-				System.out.println("------------");
-				final int end = emulator.getCPU().pc();
-				Disassembler dis = new Disassembler();
-				dis.disassemble( emulator.getMemory() , pc[0] , end - pc[0] , line -> System.out.println(line) );
-				final byte value = (byte) emulator.getMemory().readByte( 0xc0 );
-				System.out.println( emulator.getCPU() );
-				System.out.println("$c0 = $"+HexDump.byteToString( value )+" %"+HexDump.toBinaryString( value) );
-			})
-			.assertMemoryContains( 0xc0 ,  0b01011011 ).assertFlags(CPU.Flag.CARRY);
+		final int[] pc = { 0 };
+		execute(source)
+		.beforeEachStep( emulator -> {
+			pc[0] = emulator.getCPU().pc();
+		})
+		.afterEachStep(emulator ->
+		{
+			System.out.println("------------");
+			final int end = emulator.getCPU().pc();
+			Disassembler dis = new Disassembler();
+			dis.disassemble( emulator.getMemory() , pc[0] , end - pc[0] , line -> System.out.println(line) );
+			final byte value = (byte) emulator.getMemory().readByte( 0xc0 );
+			System.out.println( emulator.getCPU() );
+			System.out.println("$c0 = $"+HexDump.byteToString( value )+" %"+HexDump.toBinaryString( value) );
+		})
+		.assertMemoryContains( 0xc0 ,  0b01011011 ).assertFlags(CPU.Flag.CARRY);
 	}
 
 	public void testLSR() {
@@ -381,7 +383,7 @@ ASL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 		Absolute,X    LSR $4400,X   $5E  3   7
 
 		LSR shifts all bits right one position. 0 is shifted into bit 7 and the original bit 0 is shifted into the Carry.
-				 */
+		 */
 
 		final byte pattern1                = 0b01010101;
 		final byte pattern1_shifted = (byte) 0b00101010;
@@ -401,7 +403,7 @@ ASL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 	}
 
 	public void testROR() {
-/*
+		/*
  Affects Flags: S Z C
 
 MODE           SYNTAX       HEX LEN TIM
@@ -412,7 +414,7 @@ Absolute      ROR $4400     $6E  3   6
 Absolute,X    ROR $4400,X   $7E  3   7
 
 ROR shifts all bits right one position. The Carry is shifted into bit 7 and the original bit 0 is shifted into the Carry.
- */
+		 */
 		final byte pattern1        = 0b0101_0101;
 		final byte pattern2 = (byte) 0b1010_1010;
 		execute("CLC\n LDA #"+hex(pattern2)+"\n ROR").assertA( pattern1 ).assertFlagsNotSet(CPU.Flag.CARRY);
@@ -563,7 +565,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 	{
 		int value = (byte) 0x8e;
 		System.out.println("result: "+(value+value));
-//		fail("abort");
+		//		fail("abort");
 
 		final String source = loadTestProgram( "/test.asm");
 
@@ -714,7 +716,7 @@ Absolute,X    DEC $4400,X   $DE  3   7
 
 	public void testInc() {
 
-/*
+		/*
  		 Affects Flags: S Z
 
 MODE           SYNTAX       HEX LEN TIM
@@ -723,7 +725,7 @@ Zero Page,X   INC $44,X     $F6  2   6
 Absolute      INC $4400     $EE  3   6
 Absolute,X    INC $4400,X   $FE  3   7
 
- */
+		 */
 		// zero page
 		execute("LDA #$02\n STA $02\n INC $02").assertMemoryContains( 0x02 , 0x03 ).assertFlagsNotSet( CPU.Flag.ZERO,CPU.Flag.NEGATIVE );
 		execute("LDA #$ff\n STA $02\n INC $02").assertMemoryContains( 0x02 , 0x00 ).assertFlags( CPU.Flag.ZERO );
@@ -760,14 +762,14 @@ Absolute,X    INC $4400,X   $FE  3   7
 		final byte flags = CPU.Flag.CARRY.set((byte)0);
 
 		final String source = "LDX #$00\n"+ // 2 bytes , clear X so we are sure that its value was set by the subroutine
-		        "LDA #"+hex(hi)+"\nPHA\n"+ // 3 bytes , push return address hi
+				"LDA #"+hex(hi)+"\nPHA\n"+ // 3 bytes , push return address hi
 				"LDA #"+hex(lo)+"\nPHA\n"+ // 3 bytes , push return address lo
 				"LDA #"+hex(flags)+"\n PHA\n"+ // 3 bytes , push processor flags
 				"CLC\n"+ // 1 byte , clear carry so we know that processor flags got restored by RTI
-                "RTI\n"+ // 1 byte , return , invokes our subroutine
-                ILLEGAL_OPCODE+ // 1 byte
-	            "sub: LDX #$11\n"+ // set X so we know the sub routine got executed
-	            ILLEGAL_OPCODE;
+				"RTI\n"+ // 1 byte , return , invokes our subroutine
+				ILLEGAL_OPCODE+ // 1 byte
+				"sub: LDX #$11\n"+ // set X so we know the sub routine got executed
+				ILLEGAL_OPCODE;
 
 		execute(source).assertX(0x11).assertFlags( CPU.Flag.CARRY );
 	}
@@ -775,23 +777,23 @@ Absolute,X    INC $4400,X   $FE  3   7
 	public void testRTS()
 	{
 		final String source = "JSR sub\n"+
-		                       "LDA #$12\n"+
-		                       ILLEGAL_OPCODE+
-				               "sub: LDX #$11\n"+
-				               "     RTS";
+				"LDA #$12\n"+
+				ILLEGAL_OPCODE+
+				"sub: LDX #$11\n"+
+				"     RTS";
 		execute(source).assertA(0x12).assertX(0x11);
 	}
 
 	public void testStackOperations() {
 
-/*
+		/*
  		TXS (Transfer X to Stack ptr)   $9A  2
 TSX (Transfer Stack ptr to X)   $BA  2
 PHA (PusH Accumulator)          $48  3
 PLA (PuLl Accumulator)          $68  4
 PHP (PusH Processor status)     $08  3
 PLP (PuLl Processor status)     $28  4
- */
+		 */
 
 		execute("LDX #$12\n TXS").assertSP( 0x12 );
 		execute("LDX #$12\n TXS\n LDX #$00\n TSX").assertSP( 0x12 ).assertX( 0x12 ).assertFlags();

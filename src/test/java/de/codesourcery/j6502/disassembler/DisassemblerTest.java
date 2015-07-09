@@ -7,11 +7,8 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.Random;
 
-import junit.framework.TestCase;
-
 import org.apache.commons.lang.StringUtils;
 
-import sun.misc.IOUtils;
 import de.codesourcery.j6502.assembler.Assembler;
 import de.codesourcery.j6502.assembler.AssemblerTest;
 import de.codesourcery.j6502.assembler.exceptions.ITextLocationAware;
@@ -23,7 +20,10 @@ import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.SourceHelper;
 import de.codesourcery.j6502.utils.SourceHelper.TextLocation;
+import junit.framework.TestCase;
+import sun.misc.IOUtils;
 
+@SuppressWarnings("restriction")
 public class DisassemblerTest extends TestCase {
 
 	public void testSTX1() {

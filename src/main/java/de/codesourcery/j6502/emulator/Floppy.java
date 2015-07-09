@@ -246,11 +246,11 @@ public class Floppy extends AbstractSerialDevice
 		driveMessage = new DriveMessage( code , 0 , 0 );
 	}	
 	
-	private void error(MessageCode code,int track,int sector) {
+	protected void error(MessageCode code,int track,int sector) {
 		driveMessage = new DriveMessage( code , track , sector );
 	}
 	
-	private void clearError() 
+	protected void clearError() 
 	{
 		driveMessage=new DriveMessage( MessageCode.OK );
 	}

@@ -26,8 +26,6 @@ import de.codesourcery.j6502.assembler.parser.ast.Statement;
 
 public class ParserTest extends TestCase {
 
-	private Parser parser;
-
 	private AST ast;
 
 	private void parse(String s) {
