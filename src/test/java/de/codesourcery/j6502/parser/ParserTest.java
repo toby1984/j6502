@@ -5,6 +5,7 @@ import de.codesourcery.j6502.assembler.AddressingMode;
 import de.codesourcery.j6502.assembler.parser.Identifier;
 import de.codesourcery.j6502.assembler.parser.Lexer;
 import de.codesourcery.j6502.assembler.parser.Opcode;
+import de.codesourcery.j6502.assembler.parser.Operator;
 import de.codesourcery.j6502.assembler.parser.Parser;
 import de.codesourcery.j6502.assembler.parser.Scanner;
 import de.codesourcery.j6502.assembler.parser.ast.AST;
@@ -120,6 +121,23 @@ public class ParserTest extends TestCase {
 		assertEquals( (short) 123 , lit.value );
 		assertEquals( Notation.DECIMAL , lit.notation );
 	}
+	
+	public void testParseEquWithLocalLabel() {
+
+		parse("global\n.local .equ $0a");
+
+		assertNotNull(ast);
+		assertEquals(2,ast.children.size());
+
+		assertTrue( ast.child(1) instanceof Statement);
+		assertTrue( ast.child(1).child(0) instanceof EquNode);
+		assertTrue( ast.child(1).child(0).child(0) instanceof NumberLiteral);
+
+		EquNode node = (EquNode) ast.child(1).child(0);
+		assertEquals( new Identifier("local") , node.getIdentifier() );
+		NumberLiteral num = (NumberLiteral) ast.child(1).child(0).child(0);
+		assertEquals( 10 , num.getWordValue() );
+	}	
 
 	public void testParseEquWithNumber() {
 
@@ -137,6 +155,166 @@ public class ParserTest extends TestCase {
 		NumberLiteral num = (NumberLiteral) ast.child(0).child(0).child(0);
 		assertEquals( 10 , num.getWordValue() );
 	}
+	
+	public void testParseEquWithUnaryMinus()
+	{
+		parse("label: .equ -3");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof OperatorNode);
+
+		final OperatorNode op = (OperatorNode) ast.child(0).child(0).child(0);
+		assertEquals( Operator.UNARY_MINUS , op.operator );
+		assertEquals( -3 ,  op.evaluate() );
+	}	
+	
+	public void testParseEquWithUnaryPlus()
+	{
+		parse("label: .equ +3");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof OperatorNode);
+
+		final OperatorNode op = (OperatorNode) ast.child(0).child(0).child(0);
+		assertEquals( Operator.UNARY_PLUS , op.operator );
+		assertEquals( 3 ,  op.evaluate() );
+	}	
+	
+	public void testParseEquWithLeftShift()
+	{
+		parse("label: .equ 1 << 1");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof OperatorNode);
+
+		final OperatorNode op = (OperatorNode) ast.child(0).child(0).child(0);
+		assertEquals( Operator.SHIFT_LEFT, op.operator );
+		assertEquals( 2 ,  op.evaluate() );
+	}	
+	
+	public void testParseEquWithRightShift()
+	{
+		parse("label: .equ 2 >> 1");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof OperatorNode);
+
+		final OperatorNode op = (OperatorNode) ast.child(0).child(0).child(0);
+		assertEquals( Operator.SHIFT_RIGHT , op.operator );
+		assertEquals( 1 ,  op.evaluate() );
+	}		
+	
+	public void testParseEquWithBitwiseNegation()
+	{
+		parse("label: .equ ~ 0");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof OperatorNode);
+
+		final OperatorNode op = (OperatorNode) ast.child(0).child(0).child(0);
+		assertEquals( Operator.BITWISE_NEGATION , op.operator );
+		assertEquals( -1 ,  op.evaluate() );
+	}	
+	
+	public void testParseEquWithBitwiseAND()
+	{
+		parse("label: .equ  %111 & 2");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof OperatorNode);
+
+		final OperatorNode op = (OperatorNode) ast.child(0).child(0).child(0);
+		assertEquals( Operator.BITWISE_AND, op.operator );
+		assertEquals( 2 ,  op.evaluate() );
+	}	
+	
+	public void testParseEquWithBitwiseOR()
+	{
+		parse("label: .equ  %101 | 2");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof OperatorNode);
+
+		final OperatorNode op = (OperatorNode) ast.child(0).child(0).child(0);
+		assertEquals( Operator.BITWISE_OR , op.operator );
+		assertEquals( 7 ,  op.evaluate() );
+	}		
+	
+	public void testParseEquWithLowerByte()
+	{
+		parse("label: .equ  < $abcd ");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof OperatorNode);
+
+		final OperatorNode op = (OperatorNode) ast.child(0).child(0).child(0);
+		assertEquals( Operator.LOWER_BYTE, op.operator );
+		assertEquals( 0xcd ,  op.evaluate() );
+	}	
+	
+	public void testParseEquWithUpperByte()
+	{
+		parse("label: .equ  > $abcd ");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof OperatorNode);
+
+		final OperatorNode op = (OperatorNode) ast.child(0).child(0).child(0);
+		assertEquals( Operator.UPPER_BYTE, op.operator );
+		assertEquals( 0xab ,  op.evaluate() );
+	}		
+	
+	public void testParseEquDivide()
+	{
+		parse("label .equ  12 / 3 ");
+
+		assertNotNull(ast);
+		assertEquals(1,ast.children.size());
+
+		assertTrue( ast.child(0) instanceof Statement);
+		assertTrue( ast.child(0).child(0) instanceof EquNode);
+		assertTrue( ast.child(0).child(0).child(0) instanceof OperatorNode);
+
+		final OperatorNode op = (OperatorNode) ast.child(0).child(0).child(0);
+		assertEquals( Operator.DIVIDE , op.operator );
+		assertEquals( 4 ,  op.evaluate() );
+	}	
 
 	public void testParseEquWithExpression1()
 	{

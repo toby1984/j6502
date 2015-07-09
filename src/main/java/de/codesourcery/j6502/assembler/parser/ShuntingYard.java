@@ -99,6 +99,8 @@ When there are no more tokens to read:
     		final OperatorNode op = (OperatorNode) tok1.getNode();
     		if ( op.operator == Operator.BINARY_MINUS ) {
     			op.setType( Operator.UNARY_MINUS );
+    		} else if ( op.operator == Operator.BINARY_PLUS ) {
+    			op.setType( Operator.UNARY_PLUS );
     		}
     	}
     	this.expectingValue = true; // TODO: Does not properly handle postfix operators

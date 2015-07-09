@@ -100,7 +100,7 @@ public class LexerTest extends TestCase
 
 	public void testLexPlus() {
 		lex( "+" );
-		assertOperator( Operator.PLUS , 0 );
+		assertOperator( Operator.BINARY_PLUS , 0 );
 		assertToken(TokenType.EOF,"",1);
 		assertTrue( lexer.eof() );
 	}

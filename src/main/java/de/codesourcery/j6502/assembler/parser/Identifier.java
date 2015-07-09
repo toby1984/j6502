@@ -16,8 +16,20 @@ public final class Identifier {
 		this.value = s;
 	}
 
-	public static final boolean isValidIdentifier(String s) {
-		return s != null && PATTERN.matcher( s ).matches();
+	public static final boolean isValidIdentifier(String s) 
+	{
+		if ( s != null && PATTERN.matcher( s ).matches() ) 
+		{
+			switch ( s.toLowerCase() ) // avoid identifiers that might get mixed up with registers 
+			{
+				case "x":
+				case "y":
+					return false;
+				default:
+					return true;
+			}
+		}
+		return false;
 	}
 
 	@Override

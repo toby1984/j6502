@@ -5,22 +5,22 @@ import java.util.List;
 
 public enum Operator
 {
-	PLUS("+",2,1) {
+	BINARY_PLUS("+",2,4) { // ok
 		@Override
 		public int evaluate(int op1, int op2) {
 			return op1+op2;
 		}
 	},
-	BINARY_MINUS("-",2,1) {
+	BINARY_MINUS("-",2,4) { //ok
 		@Override
 		public int evaluate(int op1, int op2) {
 			return op1 - op2;
 		}
 	},
-	UNARY_MINUS("-",1,1) {
+	UNARY_MINUS("-",1,6) { // ok
 		@Override
-		public int evaluate(int op1, int op2) {
-			return op1 - op2;
+		public int evaluate(int op1) {
+			return -op1;
 		}
 
 		@Override
@@ -33,35 +33,88 @@ public enum Operator
 			return false;
 		}
 	},
-	MULTIPLY("*",2,2) {
+	UNARY_PLUS("-",1,6) { // ok
+		@Override
+		public int evaluate(int op1) {
+			return op1;
+		}
+
+		@Override
+		public boolean isLeftAssociative() {
+			return false;
+		}
+
+		@Override
+		protected boolean canBeParsed() {
+			return false;
+		}
+	},	
+	BITWISE_NEGATION("~",1,6) { // ok
+		@Override
+		public int evaluate(int op1) {
+			return ~op1;
+		}
+	},
+	BITWISE_AND("&",2,2) // ok
+	{
+		@Override
+		public int evaluate(int op1,int op2) {
+			return op1 & op2;
+		}
+	},	
+	BITWISE_OR("|",2,1) // ok 
+	{
+		@Override
+		public int evaluate(int op1,int op2) {
+			return op1 | op2;
+		}
+	},	
+	SHIFT_LEFT("<<",2,3) // ok
+	{
+		@Override
+		public int evaluate(int op1,int op2) {
+			return op1 << op2;
+		}
+	},	
+	SHIFT_RIGHT(">>",2,3) // ok
+	{
+		@Override
+		public int evaluate(int op1,int op2) {
+			return op1 >> op2;
+		}
+	},		
+	MULTIPLY("*",2,5) { // ok
 		@Override
 		public int evaluate(int op1, int op2) {
 			return op1*op2;
 		}
 	},
-	DIVIDE("/",2,2)	{
+	DIVIDE("/",2, 5 )	{ // ok
 		@Override
-			public int evaluate(int op1, int op2) {
-				return op1 / op2;
-			}
+		public int evaluate(int op1, int op2) {
+			return op1 / op2;
+		}
+	},
+	LOWER_BYTE("<",1, 6 )	{ // ok
+		@Override
+		public int evaluate(int op1) {
+			return op1 & 0xff;
+		}
+		@Override
+		public boolean isLeftAssociative() {
+			return false;
+		}
+	},
+	UPPER_BYTE(">",1, 6 )	{ // ok
+		@Override
+		public int evaluate(int op1) {
+			return ( op1 >> 8 ) & 0xff;
+		}
+		@Override
+		public boolean isLeftAssociative() {
+			return false;
+		}		
 	};
-//	PARENS_OPEN("(",1,2)
-//	{
-//		@Override
-//		public int evaluate(int value1) {
-//			return value1;
-//		}
-//
-//		@Override
-//		public boolean isLeftAssociative() {
-//			return false;
-//		}
-//
-//		@Override
-//		protected boolean canBeParsed() {
-//			return false;
-//		}
-//	};
 
 	public final int operandCount;
 	public final String symbol;
