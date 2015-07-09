@@ -10,11 +10,12 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
 import de.codesourcery.j6502.emulator.D64File;
+import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.D64File.BAMEntry;
-import de.codesourcery.j6502.ui.WindowLocationHelper.ILocationAware;
+import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.CharsetConverter;
 
-public class BlockAllocationPanel extends JPanel implements ILocationAware {
+public class BlockAllocationPanel extends JPanel implements IDebuggerView {
 
 	private Component peer;
 	private boolean isDisplayed;
@@ -55,6 +56,15 @@ public class BlockAllocationPanel extends JPanel implements ILocationAware {
 			SwingUtilities.invokeLater( () -> frame.setTitle( title ) );
 		}
 		repaint();
+	}
+	
+	@Override
+	public void refresh(Emulator emulator) {
+	}
+	
+	@Override
+	public boolean isRefreshAfterTick() {
+		return false;
 	}
 	
 	@Override

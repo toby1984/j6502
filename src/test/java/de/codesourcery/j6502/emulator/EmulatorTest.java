@@ -26,10 +26,8 @@ import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.CPU.Flag;
+import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
-import de.codesourcery.j6502.ui.Breakpoint;
-import de.codesourcery.j6502.ui.EmulatorDriver;
-import de.codesourcery.j6502.ui.EmulatorDriver.Mode;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.SourceHelper;
 

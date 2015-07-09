@@ -68,13 +68,13 @@ import de.codesourcery.j6502.assembler.parser.ast.InstructionNode;
 import de.codesourcery.j6502.assembler.parser.ast.NumberLiteral;
 import de.codesourcery.j6502.assembler.parser.ast.Statement;
 import de.codesourcery.j6502.emulator.Emulator;
-import de.codesourcery.j6502.ui.WindowLocationHelper.ILocationAware;
+import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.ITextRegion;
 import de.codesourcery.j6502.utils.SourceHelper;
 import de.codesourcery.j6502.utils.SourceHelper.TextLocation;
 
-public abstract class AsmPanel extends JPanel implements ILocationAware 
+public abstract class AsmPanel extends JPanel implements IDebuggerView 
 {
 	public static final String PANEL_TITLE = "ASM";
 	protected static final int RECOMPILATION_MILLIS = 250;
@@ -769,6 +769,16 @@ public abstract class AsmPanel extends JPanel implements ILocationAware
 
 	public void setEmulator(Emulator emulator) {
 		this.emulator = emulator;
+	}
+	
+	@Override
+	public void refresh(Emulator emulator) {
+		repaint();
+	}
+	
+	@Override
+	public boolean isRefreshAfterTick() {
+		return false;
 	}
 	
 	protected abstract void binaryUploadedToEmulator();

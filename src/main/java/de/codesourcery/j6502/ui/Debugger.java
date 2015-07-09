@@ -64,13 +64,16 @@ import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
+import de.codesourcery.j6502.emulator.Breakpoint;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.D64File;
 import de.codesourcery.j6502.emulator.Emulator;
+import de.codesourcery.j6502.emulator.EmulatorDriver;
+import de.codesourcery.j6502.emulator.EmulatorDriver.IBreakpointLister;
+import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
 import de.codesourcery.j6502.emulator.EmulatorTest;
 import de.codesourcery.j6502.emulator.Floppy;
-import de.codesourcery.j6502.emulator.IECBus;
 import de.codesourcery.j6502.emulator.IECBus.StateSnapshot;
 import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
@@ -78,9 +81,7 @@ import de.codesourcery.j6502.emulator.Keyboard;
 import de.codesourcery.j6502.emulator.Keyboard.Key;
 import de.codesourcery.j6502.emulator.Keyboard.KeyLocation;
 import de.codesourcery.j6502.emulator.Keyboard.Modifier;
-import de.codesourcery.j6502.ui.EmulatorDriver.IBreakpointLister;
-import de.codesourcery.j6502.ui.EmulatorDriver.Mode;
-import de.codesourcery.j6502.ui.WindowLocationHelper.ILocationAware;
+import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class Debugger
@@ -88,7 +89,7 @@ public class Debugger
 	/**
 	 * Time between consecutive UI updates while trying to run emulation at full speed.
 	 */
-	public static final int UI_REFRESH_MILLIS = 500;
+	public static final int UI_REFRESH_MILLIS = 250;
 
 	protected final Emulator emulator = new Emulator();
 
@@ -107,12 +108,12 @@ public class Debugger
 
 		@Override
 		protected void onStopHook(Throwable t) {
-			SwingUtilities.invokeLater( () -> updateWindows() );
+			SwingUtilities.invokeLater( () -> updateWindows(false) );
 		}
 
 		@Override
 		protected void onStartHook() {
-			SwingUtilities.invokeLater( () -> updateWindows() );
+			SwingUtilities.invokeLater( () -> updateWindows(false) );
 		}
 
 		@Override
@@ -123,14 +124,20 @@ public class Debugger
 			if ( age > UI_REFRESH_MILLIS ) // do not post more than 60 events / second to not overload the Swing Event handling queue
 			{
 				lastTick = now;
-				SwingUtilities.invokeLater( () -> updateWindows() );
+				try 
+				{
+					SwingUtilities.invokeAndWait( () -> updateWindows(true) );
+				} 
+				catch (Exception e) {
+					e.printStackTrace();
+				}
 			}
 		}
 	};
 
 	private final JDesktopPane desktop = new JDesktopPane();
-	
-	private final List<ILocationAware> locationAware = new ArrayList<>();
+
+	private final List<IDebuggerView> views = new ArrayList<>();
 
 	private final BreakpointModel bpModel = new BreakpointModel();
 	private final ButtonToolbar toolbar = new ButtonToolbar();
@@ -141,24 +148,23 @@ public class Debugger
 	private final ScreenPanel screenPanel = new ScreenPanel();
 	private final BlockAllocationPanel bamPanel = new BlockAllocationPanel();
 	private final CalculatorPanel calculatorPanel = new CalculatorPanel();
-	
+
 	private final AsmPanel asmPanel = new AsmPanel(desktop) {
 
 		@Override
 		protected void binaryUploadedToEmulator() 
 		{
 			if ( SwingUtilities.isEventDispatchThread() ) {
-				updateWindows();
+				updateWindows(false);
 			} else {
-				SwingUtilities.invokeLater( () -> updateWindows() );
+				SwingUtilities.invokeLater( () -> updateWindows(false) );
 			}
 		}
 	};
-	
-	private volatile boolean busPanelEnabled = IECBus.CAPTURE_BUS_SNAPSHOTS;
+
 	private BusPanel busPanel;
-	
-	private final List<ILocationAware> panels = new ArrayList<>();
+
+	private final List<IDebuggerView> panels = new ArrayList<>();
 
 	public static void main(String[] args)
 	{
@@ -190,13 +196,13 @@ public class Debugger
 
 		final JInternalFrame screenPanelFrame = wrap( "Screen" , screenPanel );
 		desktop.add( screenPanelFrame  );
-		
+
 		final JInternalFrame calculatorPanelFrame = wrap( "Calculator" , calculatorPanel );
 		desktop.add( calculatorPanelFrame  );		
-		
+
 		final JInternalFrame bamPanelFrame = wrap( "BAM" , bamPanel );
 		desktop.add( bamPanelFrame  );			
-		
+
 		final JInternalFrame asmPanelFrame = wrap( AsmPanel.PANEL_TITLE , asmPanel );
 		asmPanel.setEmulator( emulator );
 		desktop.add( asmPanelFrame  );		
@@ -229,10 +235,10 @@ public class Debugger
 			}
 		});
 
-		final ILocationAware loc = new ILocationAware() 
+		final IDebuggerView loc = new IDebuggerView() 
 		{
 			private boolean isDisplayed;
-			
+
 			@Override
 			public void setLocationPeer(Component frame) {
 				throw new UnsupportedOperationException("setLocationPeer not implemented yet");
@@ -249,24 +255,33 @@ public class Debugger
 			}
 
 			@Override
+			public void refresh(Emulator emulator) {
+			}
+
+			@Override
 			public void setDisplayed(boolean yesNo) {
 				this.isDisplayed = yesNo;
 			}
+
+			@Override
+			public boolean isRefreshAfterTick() {
+				return false;
+			}
 		};
-		locationAware.add( loc );
+		views.add( loc );
 		locationHelper.applyLocation( loc );
 
 		// add menu
 		frame.setJMenuBar( createMenu() );
-		
+
 		frame.pack();
 		frame.setContentPane( desktop );
 		frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 
 		frame.setVisible(true);
 
-		updateWindows();
-		
+		updateWindows(false);
+
 		final Optional<D64File> current = doWithFloppyAndReturn( floppy -> floppy.getDisk() );
 		bamPanel.setDisk( current.orElse( null ) );
 	}
@@ -274,10 +289,10 @@ public class Debugger
 	private JMenuBar createMenu()
 	{
 		final JMenuBar menuBar = new JMenuBar();
-		
+
 		final JMenu menu = new JMenu("File");
 		menuBar.add( menu );
-		
+
 		JMenuItem item = new JMenuItem("Insert disk...");
 		item.addActionListener( event -> insertDisk() );
 		menu.add( item );
@@ -285,11 +300,11 @@ public class Debugger
 		item = new JMenuItem("Eject disk...");
 		item.addActionListener( event -> ejectDisk() );
 		menu.add( item );
-		
+
 		// add 'Views' menu
 		final JMenu views = new JMenu("Views");
 		menuBar.add( views );
-		
+
 		panels.sort( (a,b) -> 
 		{
 			final String title1 = ((JInternalFrame) a.getLocationPeer()).getTitle();
@@ -308,7 +323,7 @@ public class Debugger
 			});
 			views.add(viewItem );
 		});
-		
+
 		return menuBar;
 	}
 
@@ -417,7 +432,7 @@ public class Debugger
 	private void onApplicationShutdown()
 	{
 		try {
-			locationAware.forEach( locationHelper::saveLocation);
+			views.forEach( locationHelper::saveLocation);
 			locationHelper.saveAll();
 		} catch (IOException e1) {
 			e1.printStackTrace();
@@ -427,24 +442,24 @@ public class Debugger
 	private JInternalFrame wrap(String title,JPanel panel)
 	{
 		setup( panel );
-		
+
 		final JInternalFrame frame = new JInternalFrame( title );
 
-		if ( panel instanceof ILocationAware)
+		if ( panel instanceof IDebuggerView)
 		{
-			final ILocationAware loc = (ILocationAware) panel;
+			final IDebuggerView loc = (IDebuggerView) panel;
 			panels.add( loc );
 			loc.setLocationPeer( frame );
-			locationAware.add( loc );
+			views.add( loc );
 			locationHelper.applyLocation( loc );
 		}
 
 		frame.setResizable( true );
 		frame.getContentPane().add( panel );
 		frame.pack();
-		if ( panel instanceof ILocationAware) 
+		if ( panel instanceof IDebuggerView) 
 		{
-			frame.setVisible( ((ILocationAware) panel).isDisplayed() );
+			frame.setVisible( ((IDebuggerView) panel).isDisplayed() );
 		} else {
 			frame.setVisible( true );
 		}
@@ -452,7 +467,7 @@ public class Debugger
 		return frame;
 	}
 
-	protected final class ButtonToolbar extends JPanel implements WindowLocationHelper.ILocationAware
+	protected final class ButtonToolbar extends JPanel implements WindowLocationHelper.IDebuggerView
 	{
 		public final JButton singleStepButton = new JButton("Step");
 		public final JButton runButton = new JButton("Run");
@@ -473,15 +488,21 @@ public class Debugger
 		public Component getLocationPeer() {
 			return peer;
 		}
-		
+
 		@Override
 		public boolean isDisplayed() {
 			return isDisplayed;
 		}
-		
+
 		@Override
 		public void setDisplayed(boolean yesNo) {
 			this.isDisplayed = yesNo;
+		}
+
+		@Override
+		public void refresh(Emulator emulator) {
+			updateButtons();			
+			repaint();
 		}
 
 		private void prepareTest()
@@ -522,7 +543,12 @@ public class Debugger
 			driver.addBreakpoint( new Breakpoint( (short) 0x45bf , false ) );
 			driver.addBreakpoint( new Breakpoint( (short) 0x40cb , false ) );
 			hexPanel.setAddress( (short) 0x210 );
-			updateWindows();
+			updateWindows(false);
+		}
+
+		@Override
+		public boolean isRefreshAfterTick() {
+			return true;
 		}
 
 		private String loadTestProgram()
@@ -560,7 +586,7 @@ public class Debugger
 				{
 					t.printStackTrace();
 				} finally {
-					updateWindows();
+					updateWindows(false);
 				}
 			});
 
@@ -570,7 +596,7 @@ public class Debugger
 				synchronized(emulator) {
 					emulator.reset();
 				}
-				updateWindows();
+				updateWindows(false);
 			});
 
 			runButton.addActionListener( ev -> driver.setMode(Mode.CONTINOUS) );
@@ -600,25 +626,31 @@ public class Debugger
 		}
 	}
 
-	protected void updateWindows()
+	protected void updateWindows(boolean isTick)
 	{
-		toolbar.repaint();
-		toolbar.updateButtons();
-		int pc;
-		synchronized( emulator ) {
-			pc = emulator.getCPU().pc();
-		}
-		disassembly.setAddress( (short) pc , (short) pc );
-		screenPanel.repaint();
-		cpuPanel.repaint();
-		hexPanel.repaint();
-		
-		if ( busPanelEnabled ) {
-			busPanel.repaint();
+		if ( isTick ) 
+		{
+			for ( int i = 0, len = views.size() ; i < len ; i++ ) 
+			{
+				final IDebuggerView view = views.get(i);
+				if ( view.isDisplayed() && view.isRefreshAfterTick() ) {
+					view.refresh( emulator );
+				}
+			}
+		} 
+		else 
+		{
+			for ( int i = 0, len = views.size() ; i < len ; i++ ) 
+			{
+				final IDebuggerView view = views.get(i);
+				if ( view.isDisplayed()  ) {
+					view.refresh( emulator );
+				}
+			}
 		}
 	}
-	
-	protected final class CalculatorPanel extends JPanel implements ILocationAware {
+
+	protected final class CalculatorPanel extends JPanel implements IDebuggerView {
 
 		private Component peer;
 		private boolean isDisplayed;
@@ -627,11 +659,11 @@ public class Debugger
 		private JTextField hexOutput = new JTextField();
 		private JTextField decOutput = new JTextField();
 		private JTextField binOutput = new JTextField();
-		
+
 		public CalculatorPanel() 
 		{
 			setLayout( new FlowLayout() );
-			
+
 			input.addActionListener( ev -> 
 			{
 				String text = input.getText();
@@ -667,17 +699,17 @@ public class Debugger
 					binOutput.setText("No/invalid input");
 				}
 			});
-			
+
 			input.setColumns( 16 );
 			hexOutput.setColumns( 16 );
 			decOutput.setColumns( 16 );
 			binOutput.setColumns( 16 );
-			
+
 			setup(input,"To convert");
 			setup(hexOutput,"Hexadecimal");
 			setup(decOutput,"Decimal");
 			setup( binOutput , "Binary" );
-			
+
 			add( input );
 			add( hexOutput);
 			add( decOutput);
@@ -685,10 +717,19 @@ public class Debugger
 			hexOutput.setEditable( false );
 			decOutput.setEditable( false );
 			binOutput.setEditable( false );
-			
+
 			setPreferredSize( new Dimension(200,100 ) );
 		}
-		
+
+		@Override
+		public void refresh(Emulator emulator) {
+		}
+
+		@Override
+		public boolean isRefreshAfterTick() {
+			return false;
+		}
+
 		private void setup(JComponent c,String label) 
 		{
 			TitledBorder border = BorderFactory.createTitledBorder( label );
@@ -697,7 +738,7 @@ public class Debugger
 			c.setBackground( Color.BLACK );
 			c.setForeground( Color.GREEN );
 		}
-		
+
 		@Override
 		public void setLocationPeer(Component frame) {
 			this.peer = frame;
@@ -707,23 +748,23 @@ public class Debugger
 		public Component getLocationPeer() {
 			return peer;
 		}
-		
+
 		@Override
 		public void setDisplayed(boolean yesNo) {
 			this.isDisplayed = yesNo;
 		}
-		
+
 		@Override
 		public boolean isDisplayed() {
 			return isDisplayed;
 		}		
 	}
 
-	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.ILocationAware {
+	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.IDebuggerView {
 
 		private Component frame;
 		private boolean isDisplayed;
-		
+
 		public ScreenPanel()
 		{
 			setFocusable(true);
@@ -795,6 +836,16 @@ public class Debugger
 		}
 
 		@Override
+		public boolean isRefreshAfterTick() {
+			return true;
+		}		
+
+		@Override
+		public void refresh(Emulator emulator) {
+			repaint();
+		}
+
+		@Override
 		public void setLocationPeer(Component frame) {
 			this.frame = frame;
 		}
@@ -808,12 +859,12 @@ public class Debugger
 		public void setDisplayed(boolean yesNo) {
 			this.isDisplayed = yesNo;
 		}
-		
+
 		@Override
 		public boolean isDisplayed() {
 			return isDisplayed;
 		}
-		
+
 		@Override
 		protected void paintComponent(Graphics g)
 		{
@@ -823,7 +874,7 @@ public class Debugger
 	}
 
 	// CPU status
-	protected final class CPUStatusPanel extends JPanel implements WindowLocationHelper.ILocationAware
+	protected final class CPUStatusPanel extends JPanel implements WindowLocationHelper.IDebuggerView
 	{
 		private Component peer;
 		private boolean isDisplayed;
@@ -837,12 +888,12 @@ public class Debugger
 		public Component getLocationPeer() {
 			return peer;
 		}
-		
+
 		@Override
 		public void setDisplayed(boolean yesNo) {
 			this.isDisplayed = yesNo;
 		}
-		
+
 		@Override
 		public boolean isDisplayed() {
 			return isDisplayed;
@@ -851,6 +902,16 @@ public class Debugger
 		public CPUStatusPanel()
 		{
 			setPreferredSize( new Dimension(200,150 ) );
+		}
+
+		@Override
+		public boolean isRefreshAfterTick() {
+			return true;
+		}
+
+		@Override
+		public void refresh(Emulator emulator) {
+			repaint();
 		}
 
 		@Override
@@ -879,10 +940,10 @@ public class Debugger
 			}
 		}
 	}
-	
+
 	public static void setup(JComponent c1,JComponent... other) {
 		setup(c1);
-		
+
 		if ( other != null ) 
 		{
 			for ( JComponent c : other ) {
@@ -921,7 +982,7 @@ public class Debugger
 		}
 	}
 
-	protected final class HexDumpPanel extends JPanel implements WindowLocationHelper.ILocationAware
+	protected final class HexDumpPanel extends JPanel implements WindowLocationHelper.IDebuggerView
 	{
 		private final int bytesToDisplay = 25*40;
 
@@ -958,6 +1019,16 @@ public class Debugger
 					}
 				}
 			});
+		}
+
+		@Override
+		public boolean isRefreshAfterTick() {
+			return true;
+		}		
+
+		@Override
+		public void refresh(Emulator emulator) {
+			repaint();
 		}
 
 		public void setAddress(short adr) {
@@ -1003,19 +1074,19 @@ public class Debugger
 		public Component getLocationPeer() {
 			return this.peer;
 		}
-		
+
 		@Override
 		public void setDisplayed(boolean yesNo) {
 			this.isDisplayed = yesNo;
 		}
-		
+
 		@Override
 		public boolean isDisplayed() {
 			return isDisplayed;
 		}		
 	}
 
-	protected final class DisassemblyPanel extends JPanel implements WindowLocationHelper.ILocationAware , IBreakpointLister
+	protected final class DisassemblyPanel extends JPanel implements WindowLocationHelper.IDebuggerView , IBreakpointLister
 	{
 		private final Disassembler dis = new Disassembler().setAnnotate(true);
 
@@ -1041,16 +1112,29 @@ public class Debugger
 		public Component getLocationPeer() {
 			return peer;
 		}
-		
+
 		@Override
 		public void setDisplayed(boolean yesNo) {
 			this.isDisplayed = yesNo;
 		}
-		
+
 		@Override
 		public boolean isDisplayed() {
 			return isDisplayed;
 		}		
+
+		@Override
+		public boolean isRefreshAfterTick() {
+			return true;
+		}
+
+		@Override
+		public void refresh(Emulator emulator) 
+		{
+			final int pc = emulator.getCPU().pc();
+			setAddress( (short) pc , (short) pc );
+			repaint();
+		}
 
 		public DisassemblyPanel()
 		{
@@ -1255,7 +1339,7 @@ public class Debugger
 		return (short) Integer.valueOf( s ,  16 ).intValue();
 	}
 
-	public final class BreakpointsWindow extends JPanel implements ILocationAware {
+	public final class BreakpointsWindow extends JPanel implements IDebuggerView {
 
 		private boolean isDisplayed;
 		private Component peer;
@@ -1263,14 +1347,14 @@ public class Debugger
 		public BreakpointsWindow()
 		{
 			setColors(this);
-			
+
 			final JTable breakpointTable = new JTable( bpModel );
 			setColors( breakpointTable );
 			breakpointTable.setFillsViewportHeight( true );
-			
+
 			breakpointTable.getTableHeader().setForeground( FG_COLOR );
 			breakpointTable.getTableHeader().setBackground( BG_COLOR );
-			
+
 			setup( breakpointTable );
 			final JScrollPane scrollPane = new JScrollPane( breakpointTable );
 			setup( scrollPane );
@@ -1316,6 +1400,16 @@ public class Debugger
 		}
 
 		@Override
+		public boolean isRefreshAfterTick() {
+			return false;
+		}
+
+		@Override
+		public void refresh(Emulator emulator) {
+			repaint();
+		}
+
+		@Override
 		public void setLocationPeer(Component frame) {
 			this.peer = frame;
 		}
@@ -1324,12 +1418,12 @@ public class Debugger
 		public Component getLocationPeer() {
 			return peer;
 		}
-		
+
 		@Override
 		public void setDisplayed(boolean yesNo) {
 			this.isDisplayed = yesNo;
 		}
-		
+
 		@Override
 		public boolean isDisplayed() {
 			return isDisplayed;
@@ -1361,10 +1455,10 @@ public class Debugger
 		@Override
 		public String getColumnName(int column) {
 			switch(column) {
-			case 0: return "Address";
-			case 1: return "Required CPU flags";
-			default:
-				return "unknown";
+				case 0: return "Address";
+				case 1: return "Required CPU flags";
+				default:
+					return "unknown";
 			}
 		}
 
@@ -1410,15 +1504,15 @@ public class Debugger
 		{
 			Breakpoint bp = getBreakpoints().get(rowIndex);
 			switch( columnIndex ) {
-			case 0:
-				return HexDump.toAdr( bp.address );
-			case 1:
-				if ( bp.checkCPUFlags ) {
-					return CPU.Flag.toFlagString( bp.cpuFlagsMask );
-				}
-				return "<unconditional breakpoint>";
-			default:
-				throw new RuntimeException("Unreachable code reached");
+				case 0:
+					return HexDump.toAdr( bp.address );
+				case 1:
+					if ( bp.checkCPUFlags ) {
+						return CPU.Flag.toFlagString( bp.cpuFlagsMask );
+					}
+					return "<unconditional breakpoint>";
+				default:
+					throw new RuntimeException("Unreachable code reached");
 			}
 		}
 

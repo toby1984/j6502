@@ -1,6 +1,5 @@
-package de.codesourcery.j6502.ui;
+package de.codesourcery.j6502.emulator;
 
-import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.utils.HexDump;
 
 public final class Breakpoint {

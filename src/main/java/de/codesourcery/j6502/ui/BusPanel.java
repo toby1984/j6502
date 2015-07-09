@@ -26,10 +26,12 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 
+import de.codesourcery.j6502.emulator.Emulator;
+import de.codesourcery.j6502.emulator.IECBus;
 import de.codesourcery.j6502.emulator.IECBus.StateSnapshot;
-import de.codesourcery.j6502.ui.WindowLocationHelper.ILocationAware;
+import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 
-public abstract class BusPanel extends JPanel implements ILocationAware
+public abstract class BusPanel extends JPanel implements IDebuggerView
 {
 	protected static final Stroke DASHED_FAT = new BasicStroke(3, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{9}, 0);
 	protected static final Stroke DASHED_SLIM = new BasicStroke(1, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{9}, 0);
@@ -374,8 +376,9 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 	}
 	
 	@Override
-	public boolean isDisplayed() {
-		return isDisplayed;
+	public boolean isDisplayed() 
+	{
+		return isDisplayed && IECBus.CAPTURE_BUS_SNAPSHOTS;
 	}
 	
 	@Override
@@ -533,6 +536,16 @@ public abstract class BusPanel extends JPanel implements ILocationAware
 				break;
 			default:
 		}
+	}
+	
+	@Override
+	public void refresh(Emulator emulator) {
+		repaint();
+	}
+	
+	@Override
+	public boolean isRefreshAfterTick() {
+		return IECBus.CAPTURE_BUS_SNAPSHOTS;
 	}
 
 	protected abstract List<StateSnapshot> getBusSnapshots();

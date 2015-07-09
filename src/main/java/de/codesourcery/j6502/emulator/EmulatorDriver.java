@@ -1,4 +1,4 @@
-package de.codesourcery.j6502.ui;
+package de.codesourcery.j6502.emulator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -7,8 +7,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import de.codesourcery.j6502.assembler.SourceMap;
-import de.codesourcery.j6502.emulator.CPU;
-import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.utils.SourceHelper;
 
 public abstract class EmulatorDriver extends Thread

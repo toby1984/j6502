@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import de.codesourcery.j6502.emulator.Emulator;
+
 public class WindowLocationHelper
 {
 	protected static final String SIZE_PREFIX = "size.";
@@ -23,7 +25,7 @@ public class WindowLocationHelper
 
 	private final File file;
 
-	public interface ILocationAware
+	public interface IDebuggerView
 	{
 		public void setLocationPeer(Component frame);
 
@@ -32,6 +34,14 @@ public class WindowLocationHelper
 		public boolean isDisplayed();
 		
 		public void setDisplayed(boolean yesNo);
+		
+		public void refresh(Emulator emulator);
+		
+		public boolean isRefreshAfterTick();
+		
+		public default boolean canBeDisplayed() {
+			return true;
+		}
 	}
 
 	protected static final class SizeAndLocation
@@ -46,13 +56,13 @@ public class WindowLocationHelper
 			this.isShown = isShown; 
 		}
 
-		public static SizeAndLocation valueOf(ILocationAware loc)
+		public static SizeAndLocation valueOf(IDebuggerView loc)
 		{
 			final Component frame = loc.getLocationPeer();
 			return new SizeAndLocation( new Point( frame.getLocation() ) , new Dimension( frame.getSize() ) , loc.isDisplayed() );
 		}
 
-		public void apply(ILocationAware loc)
+		public void apply(IDebuggerView loc)
 		{
 			loc.getLocationPeer().setLocation( new Point( location ) );
 			loc.getLocationPeer().setPreferredSize( new Dimension( this.size ) );
@@ -164,7 +174,7 @@ public class WindowLocationHelper
 		return null;
 	}
 
-	public void applyLocation(ILocationAware window)
+	public void applyLocation(IDebuggerView window)
 	{
 		loadLocations();
 		final SizeAndLocation loc = locations.get( window.getClass().getName() );
@@ -174,7 +184,7 @@ public class WindowLocationHelper
 		}
 	}
 
-	public void saveLocation(ILocationAware window)
+	public void saveLocation(IDebuggerView window)
 	{
 		loadLocations();
 		SizeAndLocation valueOf = SizeAndLocation.valueOf(window);
