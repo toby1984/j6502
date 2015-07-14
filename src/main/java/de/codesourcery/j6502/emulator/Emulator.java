@@ -36,7 +36,7 @@ public class Emulator
 		}
 	}
 
-	public VIC getVIC() {
+	public NewVIC getVIC() {
 		return memory.getIOArea().getVIC();
 	}
 

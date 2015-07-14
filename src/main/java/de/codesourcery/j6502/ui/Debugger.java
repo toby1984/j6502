@@ -869,7 +869,7 @@ public class Debugger
 		protected void paintComponent(Graphics g)
 		{
 			super.paintComponent(g);
-			emulator.getVIC().render( emulator.getMemory() , (Graphics2D) g , getWidth() , getHeight() );
+			emulator.getVIC().render( (Graphics2D) g , getWidth() , getHeight() );
 		}
 	}
 

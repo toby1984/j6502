@@ -345,7 +345,6 @@ public class VIC extends Memory
 
 		final int colorRAM = 0xD800;
 		int videoRAM = bankAdr+videoRAMOffset;
-		// int glyphRAM = bankAdr+glyphRAMOffset;
 
 		BufferedImage buffer = getBuffer(g);
 		Graphics2D bufferGraphics = getBufferGraphics(g);

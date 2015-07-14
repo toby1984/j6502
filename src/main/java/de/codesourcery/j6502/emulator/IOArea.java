@@ -11,7 +11,7 @@ import de.codesourcery.j6502.emulator.Keyboard.Key;
  */
 public class IOArea extends Memory
 {
-	private final VIC vic;
+	private final NewVIC vic;
 	private final IECBus iecBus;
 
 	private final CIA cia1 = new CIA("CIA #1" , AddressRange.range( 0xdc00, 0xdd00 ) ) {
@@ -202,7 +202,7 @@ public class IOArea extends Memory
 		};
 		this.iecBus = new IECBus("default bus" , cpuDevice );
 		this.mainMemory = mainMemory;
-		this.vic = new VIC("VIC", AddressRange.range( 0xd000, 0xd02f));
+		this.vic = new NewVIC("VIC", AddressRange.range( 0xd000, 0xd02f) , mainMemory );
 	}
 
 	private final int[] keyboardColumns = new int[] {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff}; // 8 keyboard columns, bits are low-active
@@ -289,7 +289,7 @@ public class IOArea extends Memory
 	{
 		cia1.tick( cpu , clockHigh );
 		cia2.tick(cpu , clockHigh );
-		vic.tick( cpu , clockHigh );
+		vic.tick( clockHigh );
 		iecBus.tick(clockHigh);
 	}
 
@@ -297,7 +297,7 @@ public class IOArea extends Memory
 		return cia1;
 	}
 
-	public VIC getVIC() {
+	public NewVIC getVIC() {
 		return vic;
 	}
 

@@ -4,6 +4,8 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 
+import de.codesourcery.j6502.utils.HexDump;
+
 public class NewVIC extends Memory
 {
 	public  static final Color Black 	     = color( 0, 0, 0); // 0
@@ -232,19 +234,32 @@ public class NewVIC extends Memory
 	public  static final int VIC_SPRITE5_COLOR10 = 0x2c;
 	public  static final int VIC_SPRITE6_COLOR10 = 0x2d;
 	public  static final int VIC_SPRITE7_COLOR10 = 0x2e;
-
+	
+	protected static final int DISPLAY_WIDTH= 504;
+	protected static final int DISPLAY_HEIGHT = 312;
+	
 	private BufferedImage frontBuffer;
 	private BufferedImage backBuffer;
-
+	
 	private WriteOnceMemory characterROM;
-
-	private volatile int screenWidth; // total width in pixels
-	private volatile int screenHeight;// total height in pixels
+	
+	protected static final int colorRAM = 0xD800;
+	protected int videoRAM;
+	protected int glyphRAM;
 
 	private volatile int textColumnCount=40;
 	private volatile int textRowCount=25;
 
-	private final MemorySubsystem mainMemory;
+	private final IMemoryRegion mainMemory;
+	
+	protected int leftBorder;
+	protected int rightBorder;
+	protected int topBorder;
+	protected int bottomBorder;
+	
+	protected int backgroundColor;
+	protected int borderColor;
+	
 	private int beamX;
 	private int beamY;
 
@@ -256,13 +271,58 @@ public class NewVIC extends Memory
 	private int xScroll;
 	private int yScroll;
 
-	private boolean mainBorderFlipFlop;
-	private boolean verticalBorderFlipFlop;
+	protected final PixelGenerator textGenerator = new PixelGenerator() 
+	{
+		
+		@Override
+		public int getPixel() {
+			// TODO Auto-generated method stub
+			return 0;
+		}
+	};
 
-	public NewVIC(String identifier, AddressRange range,MemorySubsystem mainMemory)
+	public NewVIC(String identifier, AddressRange range,IMemoryRegion mainMemory)
 	{
 		super(identifier, range);
 		this.mainMemory = mainMemory;
+		
+		/*
+
+		The dimensions of the video display for the different VIC types are as
+		follows:
+
+		          | Video  | # of  | Visible | Cycles/ |  Visible
+		   Type   | system | lines |  lines  |  line   | pixels/line
+		 ---------+--------+-------+---------+---------+------------
+		   6569   |  PAL-B |  312  |   284   |   63    |    403
+
+		          | First  |  Last  |              |   First    |   Last
+		          | vblank | vblank | First X coo. |  visible   |  visible
+		   Type   |  line  |  line  |  of a line   |   X coo.   |   X coo.
+		 ---------+--------+--------+--------------+------------+-----------
+		   6569   |  300   |   15   |  404 ($194)  | 480 ($1e0) | 380 ($17c)
+
+		If you are wondering why the first visible X coordinates seem to come after
+		the last visible ones: This is because for the reference point to mark the
+		beginning of a raster line, the occurrence of the raster IRQ has been
+		chosen, which doesn't coincide with X coordinate 0 but with the coordinate
+		given as "First X coo. of a line". The X coordinates run up to $1ff (only
+		$1f7 on the 6569) within a line, then comes X coordinate 0. This is
+		explained in more detail in the explanation of the structure of a raster
+		line.
+		
+		                                          0
+		        |----------VVVVVVVVVVVVVVVVVVVVVV|VVVVVVVVVVVVVV----| $1f7
+		        ^ $194     ^ $1e0                ^ $1f7        ^$17c
+		 */
+		
+		frontBuffer = new BufferedImage(DISPLAY_WIDTH,DISPLAY_HEIGHT,BufferedImage.TYPE_INT_RGB);
+		backBuffer  = new BufferedImage(DISPLAY_WIDTH,DISPLAY_HEIGHT,BufferedImage.TYPE_INT_RGB);
+	}
+	
+	protected abstract class PixelGenerator 
+	{
+		public abstract int getPixel();
 	}
 
 	public void tick(boolean clockHigh)
@@ -325,35 +385,29 @@ public class NewVIC extends Memory
 				throw new RuntimeException("Unreachable code reached");
 		}
 
-		final int colorRAM = 0xD800;
-		final int videoRAM = bankAdr+videoRAMOffset;
-		final int glyphRAM = bankAdr+glyphRAMOffset;
-
-		final int offset = y * SCREEN_COLS + x;
-
-		final int color = mainMemory.readByte( colorRAM + offset ) % 0b1111;
-		final int character = mainMemory.readByte( videoRAM + offset );
-
-		int xPixel = BORDER_WIDTH_PIXELS  + (x << 3); // *8
-		int yPixel = BORDER_HEIGHT_PIXELS + (y << 3); // *8
-
-		int glyphAdr = character << 3; // *8 bytes per glyph
-
-		for ( int i = 0 ; i < 8 ; i++ )
+		videoRAM = bankAdr+videoRAMOffset;
+		glyphRAM = bankAdr+glyphRAMOffset;
+		
+		// handle the next 8 pixels
+		int tmpBeamX = beamX;
+		int tmpBeamY = beamY;
+		
+		for ( int i = 0 ; i < 4 ; i++ ) 
 		{
-			// FIXME: I assume that the character ROM is always available to the VIC , this is not
-			// FIXME: 100% technically correct since this actually depends on the selected VIC bank (see above)
-			final int word = characterROM.readByte( glyphAdr );
-
-			for (int mask = 0b10000000 , row = 0 ; row <  8 ; row++ , mask = mask >> 1 )
-			{
-				if ( (word & mask) != 0 ) {
-					buffer.setRGB( xPixel+row,yPixel , INT_COLORS[ color ] );
+			backBuffer.setRGB( tmpBeamX , tmpBeamY , getNextPixel(tmpBeamX,tmpBeamY) );
+			tmpBeamX++;
+			if ( tmpBeamX == 504 ) {
+				tmpBeamX = 0;
+				tmpBeamY++;
+				if ( tmpBeamY == 312 ) 
+				{
+					tmpBeamY = 0;
+					swapBuffers();
 				}
 			}
-			glyphAdr++;
-			yPixel++;
 		}
+		beamX = tmpBeamX;
+		beamY = tmpBeamY;
 	}
 
 	@Override
@@ -373,9 +427,10 @@ public class NewVIC extends Memory
 				 *                          Bit 2..0: Offset in Rasterzeilen vom oberen Bildschirmrand
 				 */
 				yScroll= ( value & 0x111);
-				displayEnabled = (value & 0b10000) == 1 ? true : false;
-				textRowCount   = (value & 0b01000) == 1 ? 25 : 24; // RSEL
-				screenHeight = textRowCount == 24 ? 192 : 200;
+				displayEnabled = (value & 0b10000) != 1 ? true : false;
+				textRowCount   = (value & 0b01000) != 0 ? 25 : 24; // RSEL
+				updateBorders();
+				System.out.println("Write to $D011: value="+Integer.toBinaryString( value & 0xff)+" , text columns: "+textColumnCount+" , text rows: "+textRowCount);
 				break;
 			case VIC_CTRL2:
 				/*
@@ -386,54 +441,48 @@ public class NewVIC extends Memory
 				 *                          Bit 2..0: Offset in Pixeln vom linken Bildschirmrand
 				 */
 				xScroll = value & 0b111;
-				textColumnCount = ( value & 0b1000) == 1 ? 40 : 38; // CSEL
-				screenWidth = textColumnCount == 38 ? 304 : 320;
+				textColumnCount = ( value & 0b1000) != 0 ? 40 : 38; // CSEL
+				updateBorders();
+				System.out.println("Write to $D016: value="+Integer.toBinaryString( value & 0xff)+" , text columns: "+textColumnCount+" , text rows: "+textRowCount);
+				break;
+			case VIC_BORDER_COLOR:
+				borderColor = INT_COLORS[ (value & 0xf) ];
+				break;
+			case VIC_BACKGROUND_COLOR:
+				backgroundColor = INT_COLORS[ (value & 0xf ) ];
 				break;
 			default:
 				// $$FALL-THROUGH$$
 		}
 	}
 
-	private Color getNextPixel()
+	private int getNextPixel(int beamX,int beamY)
 	{
-		if ( beamY == 0x30 )
-
-/*
-
-The dimensions of the video display for the different VIC types are as
-follows:
-
-          | Video  | # of  | Visible | Cycles/ |  Visible
-   Type   | system | lines |  lines  |  line   | pixels/line
- ---------+--------+-------+---------+---------+------------
-   6569   |  PAL-B |  312  |   284   |   63    |    403
-
-          | First  |  Last  |              |   First    |   Last
-          | vblank | vblank | First X coo. |  visible   |  visible
-   Type   |  line  |  line  |  of a line   |   X coo.   |   X coo.
- ---------+--------+--------+--------------+------------+-----------
-   6569   |  300   |   15   |  404 ($194)  | 480 ($1e0) | 380 ($17c)
-
-If you are wondering why the first visible X coordinates seem to come after
-the last visible ones: This is because for the reference point to mark the
-beginning of a raster line, the occurrence of the raster IRQ has been
-chosen, which doesn't coincide with X coordinate 0 but with the coordinate
-given as "First X coo. of a line". The X coordinates run up to $1ff (only
-$1f7 on the 6569) within a line, then comes X coordinate 0. This is
-explained in more detail in the explanation of the structure of a raster
-line.
- */
-		beamX++;
-		if ( beamX > 0x1f7 )
+		if ( beamY < topBorder || beamY > bottomBorder || beamX < leftBorder || beamX > rightBorder  ) 
 		{
-			beamX -= 0x1f7;
-			beamY++;
+			return borderColor;
 		}
-		if ( beamY > 312 )
+		// get current character color
+		int x = beamX - leftBorder;
+		int y = beamY - topBorder;
+		
+		final int byteOffset = (y/8) * textColumnCount + (x/8);
+		final int bitOffset = 7 - (x % 8);
+		
+		System.out.println("Video RAM = "+HexDump.toAdr( videoRAM ) );
+
+		final int character = mainMemory.readByte( videoRAM + byteOffset );
+
+		final int glyphAdr = character << 3; // *8 bytes per glyph
+		final int word = characterROM.readByte( glyphAdr );
+//		System.out.println("Offset "+byteOffset+" = "+character);
+		int mask = 1 << bitOffset;
+		if ( (word & mask) != 0 ) 
 		{
-			beamY -= 312;
-			badLinePossible = false;
-		}
+			final int color = mainMemory.readByte( colorRAM + byteOffset ) % 0b1111; // color ram is actually a 4-bit static RAM
+			return INT_COLORS[ color ];
+		}			
+		return backgroundColor;
 	}
 
 	private boolean isBadLine() // Only call this method on the negative clock edge
@@ -451,7 +500,7 @@ line.
 		return beamY >= 0x30 && beamY <= 0xf7 && (beamY & 0b111) == yScroll && badLinePossible;
 	}
 
-	private void updateBorderFlipFlops()
+	private void updateBorders()
 	{
 	/*
 The VIC uses two flip flops to generate the border around the display
@@ -493,88 +542,24 @@ And the vertical ones:
 The flip flops are switched according to the following rules:
 */
 		final boolean csel = textColumnCount == 40 ? true : false;
-		final int left;
-		final int right;
+		
 		if ( csel ) {
-			left = 24;
-			right = 344;
+			leftBorder = 24;
+			rightBorder = 344;
 		} else {
-			left = 31;
-			right = 335;
+			leftBorder = 31;
+			rightBorder = 335;
 		}
 
 		final boolean rsel = textRowCount == 25 ? true : false;
-		final int top;
-		final int bottom;
+
 		if ( rsel ) {
-			top = 51;
-			bottom = 251;
+			topBorder = 51;
+			bottomBorder = 251;
 		} else {
-			top = 55;
-			bottom = 247;
+			topBorder = 55;
+			bottomBorder = 247;
 		}
-
-		if ( textColumnCount == 40 ) { // CSEL == 1
-
-			if ( beamX == 344 ) {
-				mainBorderFlipFlop = true;
-			}
-		} else { // CSEL == 0
-			if ( beamX == 335 ) {
-				mainBorderFlipFlop = true;
-			}
-		}
-/*
-1. If the X coordinate reaches the right comparison value, the main border
-   flip flop is set.
-*/
-		if ( beamX == right ) {
-			mainBorderFlipFlop = true;
-		}
-/*
-2. If the Y coordinate reaches the bottom comparison value in cycle 63, the
-   vertical border flip flop is set.*/
-
-		if ( beamY == bottom && cycleOnCurrentLine == LAST_CPU_CYLE_IN_LINE) {
-			verticalBorderFlipFlop = true;
-		}
-/*
-3. If the Y coordinate reaches the top comparison value in cycle 63 and the
-   DEN bit in register $d011 is set, the vertical border flip flop is
-   reset.
-*/
-	if ( beamY == top && cycleOnCurrentLine == LAST_CPU_CYLE_IN_LINE && displayEnabled ) {
-		verticalBorderFlipFlop = false;
-	}
-
-/*
-	4. If the X coordinate reaches the left comparison value and the Y
-	   coordinate reaches the bottom one, the vertical border flip flop is set.*/
-
-	if ( beamX == left && beamY == bottom ) {
-		verticalBorderFlipFlop = true;
-	}
-
-/*
-5. If the X coordinate reaches the left comparison value and the Y
-   coordinate reaches the top one and the DEN bit in register $d011 is set,
-   the vertical border flip flop is reset.*/
-
-	if ( beamX == left && beamY == top && displayEnabled ) {
-		verticalBorderFlipFlop = false;
-	}
-/*
-6. If the X coordinate reaches the left comparison value and the vertical
-   border flip flop is not set, the main flip flop is reset.
-*/
-	if ( beamX == left && ! verticalBorderFlipFlop ) {
-		mainBorderFlipFlop = false;
-	}
-/*
-By appropriate switching of the CSEL/RSEL bits you can prevent the
-comparison values from being reached and thus turn off the border partly or
-completely (see 3.14.1.).
-	 */
 	}
 
 	@Override
@@ -587,13 +572,11 @@ completely (see 3.14.1.).
 		textColumnCount=40;
 		textRowCount=25;
 
-		screenWidth = 320;
-		screenHeight = 200;
+		cycleOnCurrentLine = 0;
 
-		beamX = beamY = 0;
+		beamX = 0;
+		beamY = 0;
 		badLinePossible = true;
-
-		updateBorderFlipFlops();
 
 		characterROM = MemorySubsystem.loadCharacterROM();
 	}
