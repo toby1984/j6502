@@ -4,7 +4,7 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 
-public class VIC extends Memory
+public class NewVIC extends Memory
 {
 	public  static final Color Black 	     = color( 0, 0, 0); // 0
 	public  static final Color White        = color( 255, 255, 255); // 1
@@ -23,10 +23,8 @@ public class VIC extends Memory
 	public  static final Color Lightblue   = color( 0, 136, 255 ); // 14
 	public  static final Color Lightgrey   = color(  187, 187, 187); // 15
 
-	public long cycleCount;
-	public int rasterLine;
-
-	public short irqOnRaster = -1;
+	private static final int CPU_CLOCK_CYCLES_PER_LINE = 63;
+	private static final int LAST_CPU_CYLE_IN_LINE = CPU_CLOCK_CYCLES_PER_LINE-1;
 
 	private static Color color(int r,int g,int b) {
 		return new Color(r,g,b);
@@ -152,7 +150,14 @@ public class VIC extends Memory
 	 *                          Bit 0: 0 => Slow-Mode (1 MHz), 1 => Fast-Mode (2 MHz)
 	 */
 
-	public static final boolean VIC_PAL_MODE = true;
+
+	public static final int TOTAL_RASTER_LINES = 403; // PAL-B
+	public static final int VISIBLE_RASTER_LINES = 312; // PAL-B
+
+	public static final int VBLANK_FIRST_LINE = 300 ; // PAL-B
+	public static final int VBLANK_LAST_LINE = 15 ; // PAL-B
+
+	public static final int MAX_X = 503;
 
 	// VIC registers
 	public  static final int VIC_SPRITE0_X_COORD = 0;
@@ -228,69 +233,50 @@ public class VIC extends Memory
 	public  static final int VIC_SPRITE6_COLOR10 = 0x2d;
 	public  static final int VIC_SPRITE7_COLOR10 = 0x2e;
 
-	public static final int BORDER_HEIGHT_PIXELS = 15;
-	public static final int BORDER_WIDTH_PIXELS = 15;
-
-	public static final int SCREEN_ROWS = 25;
-	public static final int SCREEN_COLS = 40;
-
-	public static final int VIEWPORT_WIDTH = SCREEN_COLS*8;
-	public static final int VIEWPORT_HEIGHT = SCREEN_ROWS*8;
-
-	public static final int BG_BUFFER_WIDTH = 2*BORDER_WIDTH_PIXELS + VIEWPORT_WIDTH;
-
-	public static final int BG_BUFFER_HEIGHT = 2*BORDER_HEIGHT_PIXELS + VIEWPORT_HEIGHT;
-
-	private BufferedImage buffer;
-	private Graphics2D graphics;
+	private BufferedImage frontBuffer;
+	private BufferedImage backBuffer;
 
 	private WriteOnceMemory characterROM;
 
-	public VIC(String identifier,AddressRange adr) {
-		super(identifier,adr);
+	private volatile int screenWidth; // total width in pixels
+	private volatile int screenHeight;// total height in pixels
+
+	private volatile int textColumnCount=40;
+	private volatile int textRowCount=25;
+
+	private final MemorySubsystem mainMemory;
+	private int beamX;
+	private int beamY;
+
+	private boolean displayEnabled; // aka 'DEN'
+	private boolean badLinePossible;
+
+	private int cycleOnCurrentLine;
+
+	private int xScroll;
+	private int yScroll;
+
+	private boolean mainBorderFlipFlop;
+	private boolean verticalBorderFlipFlop;
+
+	public NewVIC(String identifier, AddressRange range,MemorySubsystem mainMemory)
+	{
+		super(identifier, range);
+		this.mainMemory = mainMemory;
 	}
 
-	private BufferedImage getBuffer(Graphics2D g)
+	public void tick(boolean clockHigh)
 	{
-		if ( buffer == null )
+		if ( clockHigh )
 		{
-			// 8x8 pixel per character
-			// 40x25 characters on screen
-			buffer = g.getDeviceConfiguration().createCompatibleImage( BG_BUFFER_WIDTH , BG_BUFFER_HEIGHT );
+			render(clockHigh);
+			cycleOnCurrentLine++;
+		} else {
+			render(clockHigh);
 		}
-		return buffer;
 	}
 
-	public Graphics2D getBufferGraphics(Graphics2D g) {
-		if ( graphics == null ) {
-			graphics = getBuffer( g ).createGraphics();
-		}
-		return graphics;
-	}
-
-	@Override
-	public void reset()
-	{
-		super.reset();
-
-		this.cycleCount = 0;
-		this.rasterLine = 0;
-		this.irqOnRaster = -1;
-
-		characterROM = MemorySubsystem.loadCharacterROM();
-	}
-
-	private Color getBorderColor() {
-		int borderColor = readByte( VIC_BORDER_COLOR ) & 0b1111;
-		return AWT_COLORS[ borderColor ];
-	}
-
-	private Color getBackgroundColor() {
-		int bgColor = readByte( VIC_BACKGROUND_COLOR ) & 0b1111;
-		return AWT_COLORS[ bgColor ];
-	}
-
-	public void render(MemorySubsystem mainMemory,Graphics2D g,int width,int height)
+	private void render(boolean clockHigh)
 	{
 		// video RAM location
 		/*
@@ -301,13 +287,10 @@ public class VIC extends Memory
 		 *                          Bit 3..1: Basisadresse des Zeichensatzes = 1024*(Bit 3…1).
 		 *
          * When in TEXT SCREEN MODE, the VIC-II looks to 53272 for information on where the character set and text screen character RAM is located:
-         *
-         * The four most significant bits form a 4-bit number in the range 0 thru 15: Multiplied with 1024 this gives the start address for the screen character RAM.
-         * Bits 1 thru 3 (weights 2 thru 8) form a 3-bit number in the range 0 thru 7: Multiplied with 2048 this gives the start address for the character set.
 		 */
 		int value = readByte(VIC_MEMORY_MAPPING);
-		int videoRAMOffset = 1024 * ( ( value & 0b1111_0000) >>4 );
-		int glyphRAMOffset = 2048 * ( ( value & 0b0000_1110) >> 1);
+		int videoRAMOffset = 1024 * ( ( value & 0b1111_0000) >>4 ); // The four most significant bits form a 4-bit number in the range 0 thru 15: Multiplied with 1024 this gives the start address for the screen character RAM.
+		int glyphRAMOffset = 2048 * ( ( value & 0b0000_1110) >> 1); // Bits 1 thru 3 (weights 2 thru 8) form a 3-bit number in the range 0 thru 7: Multiplied with 2048 this gives the start address for the character set.
 
 		/* CIA #2 , $DD00
 		 * Bit 0..1: Select the position of the VIC-memory
@@ -323,7 +306,6 @@ public class VIC extends Memory
          * 0	xxxxxx00	49152–65535	$C000–$FFFF	  No
 		 */
 		final int bankNo = mainMemory.readByte( 0xdd00 ) & 0b11;
-//		System.out.println("Selected VIC bank: "+bankNo);
 
 		int bankAdr;
 		switch( bankNo ) {
@@ -344,147 +326,287 @@ public class VIC extends Memory
 		}
 
 		final int colorRAM = 0xD800;
-		int videoRAM = bankAdr+videoRAMOffset;
-		// int glyphRAM = bankAdr+glyphRAMOffset;
+		final int videoRAM = bankAdr+videoRAMOffset;
+		final int glyphRAM = bankAdr+glyphRAMOffset;
 
-		BufferedImage buffer = getBuffer(g);
-		Graphics2D bufferGraphics = getBufferGraphics(g);
+		final int offset = y * SCREEN_COLS + x;
 
-		// clear screen
-		bufferGraphics.setColor( getBorderColor() );
-		bufferGraphics.fillRect( 0 , 0 , BG_BUFFER_WIDTH , BG_BUFFER_HEIGHT );
+		final int color = mainMemory.readByte( colorRAM + offset ) % 0b1111;
+		final int character = mainMemory.readByte( videoRAM + offset );
 
-		bufferGraphics.setColor( getBackgroundColor() );
-		bufferGraphics.fillRect( BORDER_WIDTH_PIXELS , BORDER_HEIGHT_PIXELS , VIEWPORT_WIDTH , VIEWPORT_HEIGHT );
+		int xPixel = BORDER_WIDTH_PIXELS  + (x << 3); // *8
+		int yPixel = BORDER_HEIGHT_PIXELS + (y << 3); // *8
 
-//		System.out.println("Video RAM = "+HexDump.toAdr( videoRAM ) );
-//		System.out.println("Glyph RAM = "+HexDump.toAdr( glyphRAM ) );
-		for ( int y = 0 ; y < SCREEN_ROWS ; y++ )
+		int glyphAdr = character << 3; // *8 bytes per glyph
+
+		for ( int i = 0 ; i < 8 ; i++ )
 		{
-			for ( int x =0 ; x < SCREEN_COLS ; x++ )
+			// FIXME: I assume that the character ROM is always available to the VIC , this is not
+			// FIXME: 100% technically correct since this actually depends on the selected VIC bank (see above)
+			final int word = characterROM.readByte( glyphAdr );
+
+			for (int mask = 0b10000000 , row = 0 ; row <  8 ; row++ , mask = mask >> 1 )
 			{
-				final int offset = y * SCREEN_COLS + x;
-				final int color = mainMemory.readByte( colorRAM + offset ) % 0b1111;
-				final int character = mainMemory.readByte( videoRAM + offset );
-
-				int xPixel = BORDER_WIDTH_PIXELS  + (x << 3); // *8
-				int yPixel = BORDER_HEIGHT_PIXELS + (y << 3); // *8
-
-				int glyphAdr = character << 3; // *8 bytes per glyph
-
-				for ( int i = 0 ; i < 8 ; i++ )
-				{
-					// FIXME: I assume that the character ROM is always available to the VIC , this is not
-					// FIXME: 100% technically correct since this actually depends on the selected VIC bank (see above)
-					final int word = characterROM.readByte( glyphAdr );
-
-					for (int mask = 0b10000000 , row = 0 ; row <  8 ; row++ , mask = mask >> 1 )
-					{
-						if ( (word & mask) != 0 ) {
-							buffer.setRGB( xPixel+row,yPixel , INT_COLORS[ color ] );
-						}
-					}
-					glyphAdr++;
-					yPixel++;
+				if ( (word & mask) != 0 ) {
+					buffer.setRGB( xPixel+row,yPixel , INT_COLORS[ color ] );
 				}
 			}
+			glyphAdr++;
+			yPixel++;
 		}
-		g.drawImage( buffer , 0 , 0 , width, height , null );
-	}
-
-	public void tick(CPU cpu,boolean clockHigh)
-	{
-		if ( ! clockHigh ) {
-			return;
-		}
-
-		cycleCount++;
-
-		// decrement
-
-		// Increment current scanline position
-
-		if ( VIC_PAL_MODE ) // 312 raster lines , 57 cycles/line
-		{
-			while ( cycleCount >= 57 ) {
-				rasterLine++;
-				cycleCount-=57;
-			}
-			if ( rasterLine >= 312 ) {
-				rasterLine = 0;
-				cycleCount=0;
-			}
-		} else { // NTSC =>  263 rasterlines and 65 cycles/line
-			while ( cycleCount >= 65 ) {
-				rasterLine++;
-				cycleCount-=65;
-			}
-			if ( rasterLine >= 263 ) {
-				rasterLine = 0;
-				cycleCount=0;
-			}
-		}
-
-		final byte lo = (byte) rasterLine;
-		final byte hi = (byte) (rasterLine>>8);
-
-		int hiBit = readByte( VIC.VIC_CTRL1 );
-		if ( hi != 0 ) {
-			hiBit |= 0b1000_0000;
-		} else {
-			hiBit &= 0b0111_1111;
-		}
-		writeByte( VIC.VIC_CTRL1 , (byte) hiBit );
-		writeWord( VIC.VIC_SCANLINE , lo );
 	}
 
 	@Override
 	public void writeByte(int offset, byte value)
 	{
-		if ( offset == VIC.VIC_SCANLINE )
-		{
-			// current scan line, lo-byte
-			irqOnRaster = (short) (irqOnRaster | (value & 0xff) );
+		super.writeByte(offset, value);
+		switch( offset ) {
+			case VIC_CTRL1:
+
+				/*
+				 *    $D011 	53265 	17 	Steuerregister, Einzelbedeutung der Bits (1 = an):
+				 *                          Bit 7: Bit 8 von $D012
+				 *                          Bit 6: Extended Color Modus
+				 *                          Bit 5: Bitmapmodus
+				 *                          Bit 4: Bildausgabe eingeschaltet (Effekt erst beim nächsten Einzelbild)
+				 *                          Bit 3: 25 Zeilen (sonst 24)
+				 *                          Bit 2..0: Offset in Rasterzeilen vom oberen Bildschirmrand
+				 */
+				yScroll= ( value & 0x111);
+				displayEnabled = (value & 0b10000) == 1 ? true : false;
+				textRowCount   = (value & 0b01000) == 1 ? 25 : 24; // RSEL
+				screenHeight = textRowCount == 24 ? 192 : 200;
+				break;
+			case VIC_CTRL2:
+				/*
+				 *    $D016 	53270 	22 	Steuerregister, Einzelbedeutung der Bits (1 = an):
+				 *                          Bit 7..5: unbenutzt
+				 *                          Bit 4: Multicolor-Modus
+				 *                          Bit 3: 40 Spalten (an)/38 Spalten (aus)
+				 *                          Bit 2..0: Offset in Pixeln vom linken Bildschirmrand
+				 */
+				xScroll = value & 0b111;
+				textColumnCount = ( value & 0b1000) == 1 ? 40 : 38; // CSEL
+				screenWidth = textColumnCount == 38 ? 304 : 320;
+				break;
+			default:
+				// $$FALL-THROUGH$$
 		}
-		else if ( offset == VIC.VIC_CTRL1 )
+	}
+
+	private Color getNextPixel()
+	{
+		if ( beamY == 0x30 )
+
+/*
+
+The dimensions of the video display for the different VIC types are as
+follows:
+
+          | Video  | # of  | Visible | Cycles/ |  Visible
+   Type   | system | lines |  lines  |  line   | pixels/line
+ ---------+--------+-------+---------+---------+------------
+   6569   |  PAL-B |  312  |   284   |   63    |    403
+
+          | First  |  Last  |              |   First    |   Last
+          | vblank | vblank | First X coo. |  visible   |  visible
+   Type   |  line  |  line  |  of a line   |   X coo.   |   X coo.
+ ---------+--------+--------+--------------+------------+-----------
+   6569   |  300   |   15   |  404 ($194)  | 480 ($1e0) | 380 ($17c)
+
+If you are wondering why the first visible X coordinates seem to come after
+the last visible ones: This is because for the reference point to mark the
+beginning of a raster line, the occurrence of the raster IRQ has been
+chosen, which doesn't coincide with X coordinate 0 but with the coordinate
+given as "First X coo. of a line". The X coordinates run up to $1ff (only
+$1f7 on the 6569) within a line, then comes X coordinate 0. This is
+explained in more detail in the explanation of the structure of a raster
+line.
+ */
+		beamX++;
+		if ( beamX > 0x1f7 )
 		{
-			// current scan line, hi-byte
-			if ( ( value & 0b1000_0000 ) != 0 ) {
-				irqOnRaster = (short) ( 0b0100 | (irqOnRaster & 0xff) ); // set hi-bit
-			} else {
-				irqOnRaster = (short) (irqOnRaster & 0xff); // clear hi-bit
+			beamX -= 0x1f7;
+			beamY++;
+		}
+		if ( beamY > 312 )
+		{
+			beamY -= 312;
+			badLinePossible = false;
+		}
+	}
+
+	private boolean isBadLine() // Only call this method on the negative clock edge
+	{
+		if ( beamY == 0x30 ) {
+			badLinePossible |= displayEnabled;
+		}
+		/*
+
+ A Bad Line Condition is given at any arbitrary clock cycle, if at the
+ negative edge of �0 at the beginning of the cycle RASTER >= $30 and RASTER
+ <= $f7 and the lower three bits of RASTER are equal to YSCROLL and if the
+ display_enabled (DEN) bit was set during an arbitrary cycle of raster line $30.
+		 */
+		return beamY >= 0x30 && beamY <= 0xf7 && (beamY & 0b111) == yScroll && badLinePossible;
+	}
+
+	private void updateBorderFlipFlops()
+	{
+	/*
+The VIC uses two flip flops to generate the border around the display
+window: A main border flip flop and a vertical border flip flop.
+
+The main border flip flop controls the border display. If it is set, the
+VIC displays the color stored in register $d020, otherwise it displays the
+color that the priority multiplexer switches through from the graphics or
+sprite data sequencer. So the border overlays the text/bitmap graphics as
+well as the sprites. It has the highest display priority.
+
+The vertical border flip flop is for auxiliary control of the upper/lower
+border. If it is set, the main border flip flop cannot be reset. Apart from
+that, the vertical border flip flop controls the output of the graphics
+data sequencer. The sequencer only outputs data if the flip flop is
+not set, otherwise it displays the background color. This was probably done
+to prevent sprite-graphics collisions in the border area.
+
+There are 2�2 comparators belonging to each of the two flip flops. There
+comparators compare the X/Y position of the raster beam with one of two
+hardwired values (depending on the state of the CSEL/RSEL bits) to control
+the flip flops. The comparisons only match if the values are reached
+precisely. There is no comparison with an interval.
+
+The horizontal comparison values:
+
+       |   CSEL=0   |   CSEL=1
+ ------+------------+-----------
+ Left  |  31 ($1f)  |  24 ($18)
+ Right | 335 ($14f) | 344 ($158)
+
+And the vertical ones:
+
+        |   RSEL=0  |  RSEL=1
+ -------+-----------+----------
+ Top    |  55 ($37) |  51 ($33)
+ Bottom | 247 ($f7) | 251 ($fb)
+
+The flip flops are switched according to the following rules:
+*/
+		final boolean csel = textColumnCount == 40 ? true : false;
+		final int left;
+		final int right;
+		if ( csel ) {
+			left = 24;
+			right = 344;
+		} else {
+			left = 31;
+			right = 335;
+		}
+
+		final boolean rsel = textRowCount == 25 ? true : false;
+		final int top;
+		final int bottom;
+		if ( rsel ) {
+			top = 51;
+			bottom = 251;
+		} else {
+			top = 55;
+			bottom = 247;
+		}
+
+		if ( textColumnCount == 40 ) { // CSEL == 1
+
+			if ( beamX == 344 ) {
+				mainBorderFlipFlop = true;
+			}
+		} else { // CSEL == 0
+			if ( beamX == 335 ) {
+				mainBorderFlipFlop = true;
 			}
 		}
-		super.writeByte(offset, value);
+/*
+1. If the X coordinate reaches the right comparison value, the main border
+   flip flop is set.
+*/
+		if ( beamX == right ) {
+			mainBorderFlipFlop = true;
+		}
+/*
+2. If the Y coordinate reaches the bottom comparison value in cycle 63, the
+   vertical border flip flop is set.*/
+
+		if ( beamY == bottom && cycleOnCurrentLine == LAST_CPU_CYLE_IN_LINE) {
+			verticalBorderFlipFlop = true;
+		}
+/*
+3. If the Y coordinate reaches the top comparison value in cycle 63 and the
+   DEN bit in register $d011 is set, the vertical border flip flop is
+   reset.
+*/
+	if ( beamY == top && cycleOnCurrentLine == LAST_CPU_CYLE_IN_LINE && displayEnabled ) {
+		verticalBorderFlipFlop = false;
 	}
 
-	/*
-	 *    $D011 	53265 	17 	Steuerregister, Einzelbedeutung der Bits (1 = an):
-	 *                          Bit 7: Bit 8 von $D012
-	 *                          Bit 6: Extended Color Modus
-	 *                          Bit 5: Bitmapmodus
-	 *                          Bit 4: Bildausgabe eingeschaltet (Effekt erst beim nächsten Einzelbild)
-	 *                          Bit 3: 25 Zeilen (sonst 24)
-	 *                          Bit 2..0: Offset in Rasterzeilen vom oberen Bildschirmrand
-	 */
+/*
+	4. If the X coordinate reaches the left comparison value and the Y
+	   coordinate reaches the bottom one, the vertical border flip flop is set.*/
 
-	@SuppressWarnings("unused")
-	private int getRowCount() {
-		int result = readByte( VIC_CTRL1 );
-		return ( result & 1<<3) == 0 ? 24: 25;
+	if ( beamX == left && beamY == bottom ) {
+		verticalBorderFlipFlop = true;
 	}
 
-	/*
-	 *    $D016 	53270 	22 	Steuerregister, Einzelbedeutung der Bits (1 = an):
-	 *                          Bit 7..5: unbenutzt
-	 *                          Bit 4: Multicolor-Modus
-	 *                          Bit 3: 40 Spalten (an)/38 Spalten (aus)
-	 *                          Bit 2..0: Offset in Pixeln vom linken Bildschirmrand
-	 */
+/*
+5. If the X coordinate reaches the left comparison value and the Y
+   coordinate reaches the top one and the DEN bit in register $d011 is set,
+   the vertical border flip flop is reset.*/
 
-	@SuppressWarnings("unused")
-	private int getColumnCount() {
-		int result = readByte( VIC_CTRL2 );
-		return ( result & 1<<3) == 0 ? 38 : 40;
+	if ( beamX == left && beamY == top && displayEnabled ) {
+		verticalBorderFlipFlop = false;
+	}
+/*
+6. If the X coordinate reaches the left comparison value and the vertical
+   border flip flop is not set, the main flip flop is reset.
+*/
+	if ( beamX == left && ! verticalBorderFlipFlop ) {
+		mainBorderFlipFlop = false;
+	}
+/*
+By appropriate switching of the CSEL/RSEL bits you can prevent the
+comparison values from being reached and thus turn off the border partly or
+completely (see 3.14.1.).
+	 */
+	}
+
+	@Override
+	public void reset()
+	{
+		super.reset();
+
+		displayEnabled = true;
+
+		textColumnCount=40;
+		textRowCount=25;
+
+		screenWidth = 320;
+		screenHeight = 200;
+
+		beamX = beamY = 0;
+		badLinePossible = true;
+
+		updateBorderFlipFlops();
+
+		characterROM = MemorySubsystem.loadCharacterROM();
+	}
+
+	private void swapBuffers()
+	{
+		BufferedImage tmp = frontBuffer;
+		frontBuffer= backBuffer;
+		backBuffer = tmp;
+	}
+
+	public void render(Graphics2D graphics,int width,int height)
+	{
+		graphics.drawImage( frontBuffer , 0 , 0 , width, height , null );
 	}
 }
