@@ -50,6 +50,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.border.TitledBorder;
 import javax.swing.table.AbstractTableModel;
 
@@ -168,7 +169,7 @@ public class Debugger
 
 	public static void main(String[] args)
 	{
-		new Debugger().run();
+		SwingUtilities.invokeLater( () -> new Debugger().run() );
 	}
 
 	public void run() {
@@ -284,6 +285,15 @@ public class Debugger
 
 		final Optional<D64File> current = doWithFloppyAndReturn( floppy -> floppy.getDisk() );
 		bamPanel.setDisk( current.orElse( null ) );
+		
+		final Timer timer = new Timer( 16 , ev -> 
+		{
+			if ( screenPanel.isDisplayed() ) 
+			{
+				screenPanel.repaint();
+			}
+		});
+		timer.start();
 	}
 
 	private JMenuBar createMenu()
@@ -763,7 +773,7 @@ public class Debugger
 	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.IDebuggerView {
 
 		private Component frame;
-		private boolean isDisplayed;
+		private volatile boolean isDisplayed;
 
 		public ScreenPanel()
 		{
@@ -837,7 +847,7 @@ public class Debugger
 
 		@Override
 		public boolean isRefreshAfterTick() {
-			return true;
+			return false; // handled via Swing Timer
 		}		
 
 		@Override
@@ -868,8 +878,10 @@ public class Debugger
 		@Override
 		protected void paintComponent(Graphics g)
 		{
-			super.paintComponent(g);
-			emulator.getVIC().render( (Graphics2D) g , getWidth() , getHeight() );
+			synchronized( emulator ) 
+			{
+				emulator.getVIC().render( (Graphics2D) g , getWidth() , getHeight() );
+			}
 		}
 	}
 

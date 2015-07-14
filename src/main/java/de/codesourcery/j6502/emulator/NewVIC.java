@@ -406,6 +406,7 @@ public class NewVIC extends Memory
 					tmpBeamY = 0;
 					swapBuffers();
 				}
+				// TODO: Implement raster IRQ
 //				if ( irqOnRaster == tmpBeamY ) 
 //				{
 //					cpu.queueInterrupt();
@@ -504,7 +505,7 @@ public class NewVIC extends Memory
 
 	private int getNextPixel(int beamX,int beamY)
 	{
-		if ( beamY < topBorder || beamY > bottomBorder || beamX < leftBorder || beamX > rightBorder  ) 
+		if ( beamY < topBorder || beamY >= bottomBorder || beamX < leftBorder || beamX >= rightBorder  ) 
 		{
 			return borderColor;
 		}
@@ -633,13 +634,18 @@ The flip flops are switched according to the following rules:
 
 	private void swapBuffers()
 	{
-		BufferedImage tmp = frontBuffer;
-		frontBuffer= backBuffer;
-		backBuffer = tmp;
+		synchronized( frontBuffer ) 
+		{
+			BufferedImage tmp = frontBuffer;
+			frontBuffer= backBuffer;
+			backBuffer = tmp;
+		}
 	}
 
 	public void render(Graphics2D graphics,int width,int height)
 	{
-		graphics.drawImage( frontBuffer , 0 , 0 , width, height , null );
+		synchronized( frontBuffer ) {
+			graphics.drawImage( frontBuffer , 0 , 0 , width, height , null );
+		}
 	}
 }

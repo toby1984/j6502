@@ -257,20 +257,6 @@ public abstract class EmulatorDriver extends Thread
 						}
 						sendCmd( stopCommand( false ) );
 					}
-
-					if ( cyclesRemaining <= 0 )
-					{
-						tick();
-						if ( PRINT_SPEED )
-						{
-							long now = System.currentTimeMillis();
-							float cyclesPerSecond = CALLBACK_INVOKE_CYCLES / ( (now - startTime ) / 1000f );
-							float khz = cyclesPerSecond / 1000f;
-							System.out.println("CPU frequency: "+khz+" kHz "+dummy);
-							startTime = now;
-						}
-						cyclesRemaining = CALLBACK_INVOKE_CYCLES;
-					}
 				}
 				catch(final Throwable e)
 				{
@@ -281,6 +267,19 @@ public abstract class EmulatorDriver extends Thread
 					sendCmd( stopCommand( false ) );
 				}
 			}
+			if ( cyclesRemaining <= 0 )
+			{
+				tick();
+				if ( PRINT_SPEED )
+				{
+					long now = System.currentTimeMillis();
+					float cyclesPerSecond = CALLBACK_INVOKE_CYCLES / ( (now - startTime ) / 1000f );
+					float khz = cyclesPerSecond / 1000f;
+					System.out.println("CPU frequency: "+khz+" kHz "+dummy);
+					startTime = now;
+				}
+				cyclesRemaining = CALLBACK_INVOKE_CYCLES;
+			}			
 		}
 	}
 	
