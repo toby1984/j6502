@@ -444,6 +444,7 @@ public class VIC extends Memory
 		{
 			// current scan line, lo-byte
 			irqOnRaster = (short) (irqOnRaster | (value & 0xff) );
+			System.out.println("IRQ on raster low: "+value);
 		}
 		else if ( offset == VIC.VIC_CTRL1 )
 		{
@@ -453,6 +454,7 @@ public class VIC extends Memory
 			} else {
 				irqOnRaster = (short) (irqOnRaster & 0xff); // clear hi-bit
 			}
+			System.out.println("IRQ on raster hi: "+value);
 		}
 		super.writeByte(offset, value);
 	}

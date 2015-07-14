@@ -289,7 +289,7 @@ public class IOArea extends Memory
 	{
 		cia1.tick( cpu , clockHigh );
 		cia2.tick(cpu , clockHigh );
-		vic.tick( clockHigh );
+		vic.tick( cpu , clockHigh );
 		iecBus.tick(clockHigh);
 	}
 

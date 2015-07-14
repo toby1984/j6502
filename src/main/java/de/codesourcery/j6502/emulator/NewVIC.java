@@ -260,6 +260,8 @@ public class NewVIC extends Memory
 	protected int backgroundColor;
 	protected int borderColor;
 	
+	private int irqOnRaster = -1;
+	
 	private int beamX;
 	private int beamY;
 
@@ -325,18 +327,18 @@ public class NewVIC extends Memory
 		public abstract int getPixel();
 	}
 
-	public void tick(boolean clockHigh)
+	public void tick(CPU cpu,boolean clockHigh)
 	{
 		if ( clockHigh )
 		{
-			render(clockHigh);
+			render(cpu,clockHigh);
 			cycleOnCurrentLine++;
 		} else {
-			render(clockHigh);
+			render(cpu,clockHigh);
 		}
 	}
 
-	private void render(boolean clockHigh)
+	private void render(CPU cpu,boolean clockHigh)
 	{
 		// video RAM location
 		/*
@@ -404,6 +406,10 @@ public class NewVIC extends Memory
 					tmpBeamY = 0;
 					swapBuffers();
 				}
+//				if ( irqOnRaster == tmpBeamY ) 
+//				{
+//					cpu.queueInterrupt();
+//				}
 			}
 		}
 		beamX = tmpBeamX;
@@ -411,10 +417,43 @@ public class NewVIC extends Memory
 	}
 
 	@Override
+	public int readByte(int offset) 
+	{
+		int result = super.readByte(offset);
+		
+		switch( offset ) 
+		{
+			case VIC_CTRL1:
+			case VIC_SCANLINE:
+				final byte lo = (byte) beamY;
+				final byte hi = (byte) (beamY>>8);
+
+				int hiBit = super.readByte( VIC.VIC_CTRL1 );
+				if ( hi != 0 ) {
+					hiBit |= 0b1000_0000;
+				} else {
+					hiBit &= 0b0111_1111;
+				}
+				if ( offset == VIC.VIC_CTRL1 ) {
+					return hiBit;
+				}
+				return lo;
+			default:
+				// $$FALL-THROUGH$$
+		}
+		return result;
+	}
+	@Override
 	public void writeByte(int offset, byte value)
 	{
 		super.writeByte(offset, value);
-		switch( offset ) {
+		
+		switch( offset ) 
+		{
+			case VIC.VIC_SCANLINE:
+				// current scan line, lo-byte
+				irqOnRaster = (short) (irqOnRaster | (value & 0xff) );
+				break;
 			case VIC_CTRL1:
 
 				/*
@@ -426,6 +465,13 @@ public class NewVIC extends Memory
 				 *                          Bit 3: 25 Zeilen (sonst 24)
 				 *                          Bit 2..0: Offset in Rasterzeilen vom oberen Bildschirmrand
 				 */
+				
+				if ( ( value & 0b1000_0000 ) != 0 ) {
+					irqOnRaster = (short) ( 0b0100 | (irqOnRaster & 0xff) ); // set hi-bit
+				} else {
+					irqOnRaster = (short) (irqOnRaster & 0xff); // clear hi-bit
+				}
+				
 				yScroll= ( value & 0x111);
 				displayEnabled = (value & 0b10000) != 1 ? true : false;
 				textRowCount   = (value & 0b01000) != 0 ? 25 : 24; // RSEL
@@ -467,15 +513,17 @@ public class NewVIC extends Memory
 		int y = beamY - topBorder;
 		
 		final int byteOffset = (y/8) * textColumnCount + (x/8);
-		final int bitOffset = 7 - (x % 8);
+		final int bitOffset = 7-(x%8);
 		
-		System.out.println("Video RAM = "+HexDump.toAdr( videoRAM ) );
+//		System.out.println("("+x+","+y+") => byte "+byteOffset+" , bit "+bitOffset);
+		
+//		System.out.println("Video RAM = "+HexDump.toAdr( videoRAM ) );
 
 		final int character = mainMemory.readByte( videoRAM + byteOffset );
 
 		final int glyphAdr = character << 3; // *8 bytes per glyph
-		final int word = characterROM.readByte( glyphAdr );
-//		System.out.println("Offset "+byteOffset+" = "+character);
+		final int word = characterROM.readByte( glyphAdr + (y%8) );
+//		System.out.println("Offset "+byteOffset+" = "+(char) character);
 		int mask = 1 << bitOffset;
 		if ( (word & mask) != 0 ) 
 		{
@@ -574,6 +622,8 @@ The flip flops are switched according to the following rules:
 
 		cycleOnCurrentLine = 0;
 
+		irqOnRaster = -1;
+		
 		beamX = 0;
 		beamY = 0;
 		badLinePossible = true;
