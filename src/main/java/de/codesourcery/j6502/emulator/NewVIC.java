@@ -516,15 +516,11 @@ public class NewVIC extends Memory
 		final int byteOffset = (y/8) * textColumnCount + (x/8);
 		final int bitOffset = 7-(x%8);
 		
-//		System.out.println("("+x+","+y+") => byte "+byteOffset+" , bit "+bitOffset);
-		
-//		System.out.println("Video RAM = "+HexDump.toAdr( videoRAM ) );
-
 		final int character = mainMemory.readByte( videoRAM + byteOffset );
 
 		final int glyphAdr = character << 3; // *8 bytes per glyph
 		final int word = characterROM.readByte( glyphAdr + (y%8) );
-//		System.out.println("Offset "+byteOffset+" = "+(char) character);
+		
 		int mask = 1 << bitOffset;
 		if ( (word & mask) != 0 ) 
 		{

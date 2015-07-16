@@ -101,7 +101,7 @@ public final class MemorySubsystem extends IMemoryRegion
 	private WriteOnceMemory kernelROM;
 	private WriteOnceMemory charROM;
 	private WriteOnceMemory basicROM;
-	private final IOArea ioArea = new IOArea("I/O area", Bank.BANK5.range , this );
+	public final IOArea ioArea = new IOArea("I/O area", Bank.BANK5.range , this );
 	private IMemoryRegion cartROMLow;
 	private IMemoryRegion cartROMHi;
 
@@ -540,9 +540,5 @@ public final class MemorySubsystem extends IMemoryRegion
 			}
 		}
 		return buffer.toString();
-	}
-
-	public IOArea getIOArea() {
-		return ioArea;
 	}
 }

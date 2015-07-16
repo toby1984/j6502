@@ -9,6 +9,9 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -17,11 +20,13 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.font.LineMetrics;
 import java.awt.geom.Rectangle2D;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -138,6 +143,8 @@ public class Debugger
 
 	private final JDesktopPane desktop = new JDesktopPane();
 
+	private final KeyboardInputListener keyboardListener = new KeyboardInputListener(emulator);
+	
 	private final List<IDebuggerView> views = new ArrayList<>();
 
 	private final BreakpointModel bpModel = new BreakpointModel();
@@ -351,7 +358,7 @@ public class Debugger
 	{
 		synchronized(emulator) 
 		{
-			emulator.getMemory().getIOArea().getIECBus().getDevices()
+			emulator.getMemory().ioArea.iecBus.getDevices()
 			.stream().filter( dev -> dev instanceof Floppy).map( dev -> (Floppy) dev).findFirst().ifPresent( consumer );
 		}
 	}
@@ -360,7 +367,7 @@ public class Debugger
 	{
 		synchronized(emulator) 
 		{
-			Optional<Floppy> floppy = emulator.getMemory().getIOArea().getIECBus().getDevices()
+			Optional<Floppy> floppy = emulator.getMemory().ioArea.iecBus.getDevices()
 					.stream().filter( dev -> dev instanceof Floppy).map( dev -> (Floppy) dev).findFirst();
 			if ( floppy.isPresent() ) 
 			{
@@ -779,70 +786,7 @@ public class Debugger
 		{
 			setFocusable(true);
 			setRequestFocusEnabled(true);
-			addKeyListener( new KeyAdapter()
-			{
-				@Override
-				public void keyPressed(java.awt.event.KeyEvent e)
-				{
-					KeyLocation location = getLocation(e);
-					Set<Modifier> modifiers = getModifiers( e );
-					Key pressed = Keyboard.keyCodeToKey( e.getKeyCode() , location , modifiers);
-					if ( pressed != null ) {
-						emulator.keyPressed( pressed );
-					}
-				}
-
-				private Set<Keyboard.Modifier> getModifiers(KeyEvent e)
-				{
-					int mask = e.getModifiersEx();
-					boolean shiftPressed = false;
-					boolean controlPressed = false;
-					if ( ( (mask & KeyEvent.SHIFT_DOWN_MASK) != 0 ) ||
-							( ( mask & KeyEvent.SHIFT_MASK ) != 0 )
-							)
-					{
-						shiftPressed = true;
-					}
-
-					if ( ( (mask & KeyEvent.CTRL_DOWN_MASK) != 0 ) ||
-							( ( mask & KeyEvent.CTRL_MASK ) != 0 )
-							)
-					{
-						controlPressed = true;
-					}
-					if ( ! controlPressed && ! shiftPressed ) {
-						return Collections.emptySet();
-					}
-					Set<Keyboard.Modifier> result = new HashSet<>();
-					if ( controlPressed ) {
-						result.add( Keyboard.Modifier.CONTROL );
-					}
-					if ( shiftPressed ) {
-						result.add( Keyboard.Modifier.SHIFT );
-					}
-					return result;
-				}
-
-				private KeyLocation getLocation(KeyEvent e)
-				{
-					final int keyLocation = e.getKeyLocation();
-					if (keyLocation == KeyEvent.KEY_LOCATION_LEFT) {
-						return KeyLocation.LEFT;
-					}
-					if (keyLocation == KeyEvent.KEY_LOCATION_RIGHT) {
-						return KeyLocation.RIGHT;
-					}
-					return KeyLocation.STANDARD;
-				}
-				@Override
-				public void keyReleased(java.awt.event.KeyEvent e)
-				{
-					Key released = Keyboard.keyCodeToKey( e.getKeyCode() , getLocation(e) , getModifiers(e) );
-					if ( released != null ) {
-						emulator.keyReleased( released );
-					}
-				}
-			});
+			keyboardListener.attach( this );
 		}
 
 		@Override

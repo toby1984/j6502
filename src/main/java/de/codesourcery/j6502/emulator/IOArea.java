@@ -11,10 +11,12 @@ import de.codesourcery.j6502.emulator.Keyboard.Key;
  */
 public class IOArea extends Memory
 {
-	private final NewVIC vic;
-	private final IECBus iecBus;
-
-	private final CIA cia1 = new CIA("CIA #1" , AddressRange.range( 0xdc00, 0xdd00 ) ) {
+	public final KeyboardBuffer keyboardBuffer = new KeyboardBuffer();
+	
+	public final NewVIC vic;
+	public final IECBus iecBus;
+	
+	public final CIA cia1 = new CIA("CIA #1" , AddressRange.range( 0xdc00, 0xdd00 ) ) {
 
 		@Override
 		public int readByte(int adr)
@@ -207,22 +209,22 @@ public class IOArea extends Memory
 
 	private final int[] keyboardColumns = new int[] {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff}; // 8 keyboard columns, bits are low-active
 
-	public void keyPressed(Key key)
+	protected void handleKeyPress(Key key)
 	{
 		keyboardColumns[ key.colBitNo ] &= ~(1 << key.rowBitNo); // bits are low-active so clear bit if key is pressed
 		if ( key.clearShift() ) {
-			keyReleased(Key.KEY_LEFT_SHIFT);
-			keyReleased(Key.KEY_RIGHT_SHIFT);
+			handleKeyRelease(Key.KEY_LEFT_SHIFT);
+			handleKeyRelease(Key.KEY_RIGHT_SHIFT);
 		} else if ( key.fakeLeftShift() ) {
-			keyPressed(Key.KEY_LEFT_SHIFT);
+			handleKeyPress(Key.KEY_LEFT_SHIFT);
 		}
 	}
 
-	public void keyReleased(Key key)
+	protected void handleKeyRelease(Key key)
 	{
 		keyboardColumns[ key.colBitNo ] |= (1 << key.rowBitNo);	 // bits are low-active so set bit if key is released
 		if ( key.fakeLeftShift() ) {
-			keyReleased(Key.KEY_LEFT_SHIFT);
+			handleKeyRelease(Key.KEY_LEFT_SHIFT);
 		}
 	}
 
@@ -272,13 +274,15 @@ public class IOArea extends Memory
 	}
 
 	@Override
-	public void reset() {
+	public void reset() 
+	{
 		super.reset();
 
 		for ( int i = 0 ; i < keyboardColumns.length ; i++ ) {
 			keyboardColumns[i] = 0xff;
 		}
 
+		keyboardBuffer.reset();
 		vic.reset();
 		cia1.reset();
 		cia2.reset();
@@ -287,22 +291,13 @@ public class IOArea extends Memory
 
 	public void tick(CPU cpu,boolean clockHigh)
 	{
+		if ( clockHigh ) {
+			keyboardBuffer.tick( this );
+		}
 		cia1.tick( cpu , clockHigh );
 		cia2.tick(cpu , clockHigh );
 		vic.tick( cpu , clockHigh );
 		iecBus.tick(clockHigh);
-	}
-
-	public CIA getCIA1() {
-		return cia1;
-	}
-
-	public NewVIC getVIC() {
-		return vic;
-	}
-
-	public IECBus getIECBus() {
-		return iecBus;
 	}
 
 	protected static String toBinaryString(int value)

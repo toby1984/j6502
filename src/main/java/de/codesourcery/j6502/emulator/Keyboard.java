@@ -1,6 +1,8 @@
 package de.codesourcery.j6502.emulator;
 
 import java.awt.event.KeyEvent;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 public class Keyboard
@@ -56,82 +58,88 @@ public class Keyboard
 				return true;
 			}
 		},		
-		KEY_RETURN(6,1,  0),
+		KEY_RETURN((char) 10,6,1,  0),
 		KEY_DELETE(7,0,  0),	
 		// row #1 (idx , rowBit / PRB , columnBit / PRA )
 		KEY_LEFT_SHIFT(8 ,7,1),
-		KEY_E         (9 ,6,1),
-		KEY_S         (10,5,1),
-		KEY_Z         (11,4,1),
-		KEY_4         (12,3,1),
-		KEY_A         (13,2,1),
-		KEY_W         (14,1,1),
-		KEY_3         (15,0,1),
+		KEY_E         ('e',9 ,6,1),
+		KEY_S         ('s',10,5,1),
+		KEY_Z         ('z',11,4,1),
+		KEY_4         ('4',12,3,1),
+		KEY_A         ('a',13,2,1),
+		KEY_W         ('w',14,1,1),
+		KEY_3         ('3',15,0,1),
 		// row #2 (idx , rowBit / PRB , columnBit / PRA )
-		KEY_X(16,7,2),
-		KEY_T(17,6,2),
-		KEY_F(18,5,2),
-		KEY_C(19,4,2),
-		KEY_6(20,3,2),
-		KEY_D(21,2,2),
-		KEY_R(22,1,2),
-		KEY_5(23,0,2),
+		KEY_X('x',16,7,2),
+		KEY_T('t',17,6,2),
+		KEY_F('f',18,5,2),
+		KEY_C('c',19,4,2),
+		KEY_6('6',20,3,2),
+		KEY_D('d',21,2,2),
+		KEY_R('r',22,1,2),
+		KEY_5('5',23,0,2),
 		// row #3 (idx , rowBit / PRB , columnBit / PRA )
-		KEY_V(24,7,3),
-		KEY_U(25,6,3),
-		KEY_H(26,5,3),
-		KEY_B(27,4,3),
-		KEY_8(28,3,3),
-		KEY_G(29,2,3),
-		KEY_Y(30,1,3),
-		KEY_7(31,0,3),
+		KEY_V('v',24,7,3),
+		KEY_U('u',25,6,3),
+		KEY_H('h',26,5,3),
+		KEY_B('b',27,4,3),
+		KEY_8('8',28,3,3),
+		KEY_G('g',29,2,3),
+		KEY_Y('y',30,1,3),
+		KEY_7('7',31,0,3),
 		// row #4 (idx , rowBit / PRB , columnBit / PRA )
-		KEY_N(32, 7,4),
-		KEY_O(33, 6,4),
-		KEY_K(34, 5,4),
-		KEY_M(35, 4,4),
-		KEY_0(36, 3,4),
-		KEY_J(37, 2,4),
-		KEY_I(38, 1,4),
-		KEY_9(39, 0,4),
+		KEY_N('n',32, 7,4),
+		KEY_O('o',33, 6,4),
+		KEY_K('k',34, 5,4),
+		KEY_M('m',35, 4,4),
+		KEY_0('0',36, 3,4),
+		KEY_J('j',37, 2,4),
+		KEY_I('i',38, 1,4),
+		KEY_9('9',39, 0,4),
 		// row #5 (idx , rowBit / PRB , columnBit / PRA )
-		KEY_COMMA (40, 7,5),
-		KEY_AT    (41, 6,5),
-		KEY_COLON (42, 5,5),
-		KEY_PERIOD(43, 4,5),
-		KEY_MINUS (44, 3,5),
-		KEY_L     (45, 2,5),
-		KEY_P     (46, 1,5),
-		KEY_PLUS  (47, 0,5),
+		KEY_COMMA (',',40, 7,5),
+		KEY_AT    ('@',41, 6,5),
+		KEY_COLON (':',42, 5,5),
+		KEY_PERIOD('.',43, 4,5),
+		KEY_MINUS ('-',44, 3,5),
+		KEY_L     ('l',45, 2,5),
+		KEY_P     ('p',46, 1,5),
+		KEY_PLUS  ('+',47, 0,5),
 		// row #6 (idx , rowBit / PRB , columnBit / PRA )
-		KEY_SLASH       (48, 7,6),
-		KEY_CIRCUMFLEX  (49, 6,6),
-		KEY_EQUALS      (50, 5,6),
+		KEY_SLASH       ('/',48, 7,6),
+		KEY_CIRCUMFLEX  ('^',49, 6,6),
+		KEY_EQUALS      ('=',50, 5,6),
 		KEY_RIGHT_SHIFT (51, 4,6),
 		KEY_HOME        (52, 3,6),
-		KEY_SEMICOLON   (53, 2,6) {
+		KEY_SEMICOLON   (';',53, 2,6) {
 			@Override
 			public boolean clearShift() {
 				return true;
 			}
 		},
-		KEY_MULTIPLY    (54, 1,6),
-		KEY_BACK_SLASH  (55, 0,6),
+		KEY_MULTIPLY    ('*',54, 1,6),
+		KEY_BACK_SLASH  ('\\',55, 0,6),
 		// row #7 (idx , rowBit / PRB , columnBit / PRA )
 		KEY_STOP      (56, 7,7),
-		KEY_Q         (57, 6,7),
+		KEY_Q         ('q',57, 6,7),
 		KEY_COMMODORE (58, 5,7),
-		KEY_SPACE     (59, 4,7),
-		KEY_2         (60, 3,7),
+		KEY_SPACE     (' ',59, 4,7),
+		KEY_2         ('2',60, 3,7),
 		KEY_CONTROL   (61, 2,7),
-		KEY_UNDERSCORE(62, 1,7),
-		KEY_1         (63, 0,7);			
+		KEY_UNDERSCORE('_',62, 1,7),
+		KEY_1         ('1',63, 0,7);			
 		
+		public final char c;
 		public final int index;
 		public final int rowBitNo;
 		public final int colBitNo;
 		
 		private Key(int idx,int rowBitNo,int colBitNo) {
+			this((char) 0,idx,rowBitNo,colBitNo);
+		}
+		
+		private Key(char c,int idx,int rowBitNo,int colBitNo) {
+			this.c = c;
 			this.index = idx;
 			this.rowBitNo = rowBitNo;
 			this.colBitNo = colBitNo;
@@ -248,4 +256,34 @@ public class Keyboard
 				return null;
 		}
 	}
+	
+	/**
+	 * Tries to convert UTF-8 character to key presses.
+	 * 
+	 * @param character
+	 * @return Keys that need to be pressed at the same time to input the character or an empty list if this character is not available on the keyboard
+	 */
+	public static List<Key> charToKeys(char character) 
+	{
+		final char c = Character.toLowerCase( character );
+		final List<Key> result = new ArrayList<>();
+		
+		// TODO: Lots of character mappings missing here...there are obviously many more characters that require modifiers 
+		if ( c == '$' ) 
+		{
+			result.add( Key.KEY_LEFT_SHIFT );
+			result.add( Key.KEY_4 );
+			return result;
+		}
+		
+		for ( int j = 0 , len = Key.values().length ; j < len ; j++ ) 
+		{
+			if ( Key.values()[j].c == c ) {
+				result.add( Key.values()[j]);
+				return result;
+			}
+		}
+		System.out.println("Failed to convert char to key press: '"+c+"' ("+(int) c+")");
+		return result;
+	}		
 }

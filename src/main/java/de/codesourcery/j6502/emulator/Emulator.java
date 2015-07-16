@@ -37,7 +37,7 @@ public class Emulator
 	}
 
 	public NewVIC getVIC() {
-		return memory.getIOArea().getVIC();
+		return memory.ioArea.vic;
 	}
 
 	public CPU getCPU() {
@@ -268,16 +268,12 @@ public class Emulator
 				unknownOpcode( op ); // never returns
 		}
 	}
-
-	public void keyPressed(Key key) {
-		memory.getIOArea().keyPressed( key );
-	}
-
-	public void keyReleased(Key key) {
-		memory.getIOArea().keyReleased( key );
+	
+	public KeyboardBuffer getKeyboardBuffer() {
+		return memory.ioArea.keyboardBuffer;
 	}
 
 	public IECBus getBus() {
-		return memory.getIOArea().getIECBus();
+		return memory.ioArea.iecBus;
 	}
 }
