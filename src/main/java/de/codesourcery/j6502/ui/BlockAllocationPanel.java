@@ -4,14 +4,18 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Graphics;
+import java.awt.Point;
+import java.awt.event.MouseAdapter;
+import java.util.List;
 
 import javax.swing.JInternalFrame;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
+import javax.swing.ToolTipManager;
 
 import de.codesourcery.j6502.emulator.D64File;
-import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.D64File.BAMEntry;
+import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.CharsetConverter;
 
@@ -21,9 +25,34 @@ public class BlockAllocationPanel extends JPanel implements IDebuggerView {
 	private boolean isDisplayed;
 	private D64File disk;
 	
+	private static final int TRACKS_TO_DISPLAY = 35;
+	private static final int MAX_SECTORS_PER_TRACK = 21;
+	
+	private static final int MARGIN = 10;
+	
+	private int w;
+	private int h;
+	private int xScale;
+	private int yScale;
+	
+	
+	private final Point lastMousePosition = new Point();
+	
+	private final MouseAdapter mouseListener = new MouseAdapter()
+	{
+		public void mouseMoved(java.awt.event.MouseEvent e) 
+		{
+			lastMousePosition.setLocation( e.getPoint() );
+			repaint();
+		}
+	};
+	
 	public BlockAllocationPanel() 
 	{
 		setPreferredSize( new Dimension(200, 200 ) );
+		addMouseMotionListener( mouseListener );
+		addMouseListener( mouseListener );
+		ToolTipManager.sharedInstance().registerComponent( this );
 	}
 	
 	@Override
@@ -46,7 +75,8 @@ public class BlockAllocationPanel extends JPanel implements IDebuggerView {
 		this.isDisplayed = yesNo;
 	}
 	
-	public void setDisk(D64File disk) {
+	public void setDisk(D64File disk) 
+	{
 		this.disk = disk;
 		if ( peer instanceof JInternalFrame)
 		{
@@ -67,9 +97,20 @@ public class BlockAllocationPanel extends JPanel implements IDebuggerView {
 		return false;
 	}
 	
+	private void update() 
+	{
+		w = getWidth()-2*MARGIN;
+		h = getHeight()-2*MARGIN;
+		
+		xScale = (int) Math.max( 1f , w/ (float) MAX_SECTORS_PER_TRACK ); 
+		yScale = (int) Math.max( 1f , h/ (float) TRACKS_TO_DISPLAY );
+	}
+	
 	@Override
 	protected void paintComponent(Graphics g) 
 	{
+		update();
+		
 		g.setColor( Color.GRAY );
 		g.fillRect(0,0,getWidth(),getHeight());
 		
@@ -77,33 +118,28 @@ public class BlockAllocationPanel extends JPanel implements IDebuggerView {
 			return;
 		}
 		
-		final int margin = 10;
-		final int w = getWidth()-2*margin;
-		final int h = getHeight()-2*margin;
+		final List<BAMEntry> list = disk.getBAM().getAllocationMap();
+		list.sort( (a,b) -> Integer.compare( a.trackNo , b.trackNo  ) );
 		
-		final int tracks = 35;
-		final int maxSectorsPerTrack = 21;
-		
-		final int xScale = (int) Math.max( 1f , w/ (float) maxSectorsPerTrack ); 
-		final int yScale = (int) Math.max( 1f , h/ (float) tracks );
-		
-		for ( BAMEntry entry : disk.getBAM().getAllocationMap() ) 
+		String tooltipText = null;
+		for ( BAMEntry entry : list ) 
 		{
-			final int firstSectorNo = (entry.trackNo-1)*maxSectorsPerTrack;
-			final boolean[] allocationMap = entry.freeSectorsMap;
-			for ( int i = 0 ; i < allocationMap.length ; i++ ) 
+			for ( int i = 0 , max = entry.sectorsOnTrack() ; i < max ; i++ ) 
 			{
-				if ( i == entry.sectorsOnTrack ) {
-					break;
-				}
-				final int sectorNo = firstSectorNo+i;
-				final int row = sectorNo/maxSectorsPerTrack;
-				final int column = sectorNo - row*maxSectorsPerTrack;
+				final int row = (entry.trackNo-1);
+				final int column = i;
 				
-				final int x0 = margin + column*xScale;
-				final int y0 = margin + row*yScale;
+				final int x0 = MARGIN + column*xScale;
+				final int y0 = MARGIN + row*yScale;
 				
-				if ( allocationMap[i] ) {
+				if ( lastMousePosition.x >= x0 && lastMousePosition.x < (x0+xScale ) &&
+					  lastMousePosition.y >= y0 && lastMousePosition.y < (y0+yScale ) ) 
+				{
+					tooltipText = "Track "+entry.trackNo+" , sector "+(i+1);
+				} 
+				
+				if ( entry.isAllocated( i ) ) 
+				{
 					g.setColor(Color.RED);
 				} else {
 					g.setColor(Color.GREEN);
@@ -113,6 +149,7 @@ public class BlockAllocationPanel extends JPanel implements IDebuggerView {
 				g.drawRect( x0 , y0 , xScale , yScale );				
 			}
 		}
+		setToolTipText( tooltipText );
 		
 		g.setColor( Color.WHITE );
 	}

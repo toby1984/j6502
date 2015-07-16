@@ -17,8 +17,8 @@ public class KeyboardBuffer
 {
 	protected static final int CYCLES_PER_MS = 1000; // TODO: assuming  1 Mhz CPU frequency 
 
-	protected static final int KEYPRESS_DURATION_CYCLES = 35*CYCLES_PER_MS; 
-	protected static final int KEYRELEASE_DURATION_CYCLES = 15*CYCLES_PER_MS; 
+	protected static final int KEYPRESS_DURATION_CYCLES = 45*CYCLES_PER_MS; 
+	protected static final int KEYRELEASE_DURATION_CYCLES = 25*CYCLES_PER_MS; 
 
 	protected static final int NOT_RELEASED = -1;
 

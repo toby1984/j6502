@@ -241,16 +241,17 @@ public class NewVIC extends Memory
 	private BufferedImage frontBuffer;
 	private BufferedImage backBuffer;
 	
-	private WriteOnceMemory characterROM;
-	
 	protected static final int colorRAM = 0xD800;
-	protected int videoRAM;
-	protected int glyphRAM;
+	protected int videoRAMAdr;
+	protected int glyphRAMAdr;
+	
+	protected boolean readGlyphsFromRAM;
+	protected int charROMAdr;
 
 	private volatile int textColumnCount=40;
 	private volatile int textRowCount=25;
 
-	private final IMemoryRegion mainMemory;
+	private final MemorySubsystem mainMemory;
 	
 	protected int leftBorder;
 	protected int rightBorder;
@@ -273,17 +274,7 @@ public class NewVIC extends Memory
 	private int xScroll;
 	private int yScroll;
 
-	protected final PixelGenerator textGenerator = new PixelGenerator() 
-	{
-		
-		@Override
-		public int getPixel() {
-			// TODO Auto-generated method stub
-			return 0;
-		}
-	};
-
-	public NewVIC(String identifier, AddressRange range,IMemoryRegion mainMemory)
+	public NewVIC(String identifier, AddressRange range,MemorySubsystem mainMemory)
 	{
 		super(identifier, range);
 		this.mainMemory = mainMemory;
@@ -371,24 +362,29 @@ public class NewVIC extends Memory
 
 		int bankAdr;
 		switch( bankNo ) {
-			case 0b00:
-				bankAdr = 0xc000;
-				break;
-			case 0b01:
-				bankAdr = 0x8000;
+			case 0b11:
+				bankAdr = 0x0000;
+				readGlyphsFromRAM = false;
 				break;
 			case 0b10:
 				bankAdr = 0x4000;
+				readGlyphsFromRAM = true;
 				break;
-			case 0b11:
-				bankAdr = 0x0000;
+			case 0b01:
+				bankAdr = 0x8000;
+				readGlyphsFromRAM = false;
+				break;
+			case 0b00:
+				bankAdr = 0xc000;
+				readGlyphsFromRAM = true;
 				break;
 			default:
 				throw new RuntimeException("Unreachable code reached");
 		}
 
-		videoRAM = bankAdr+videoRAMOffset;
-		glyphRAM = bankAdr+glyphRAMOffset;
+		videoRAMAdr = bankAdr+videoRAMOffset;
+		glyphRAMAdr = bankAdr+glyphRAMOffset;
+		charROMAdr  = bankAdr + 0x1000; 
 		
 		// handle the next 8 pixels
 		int tmpBeamX = beamX;
@@ -429,13 +425,13 @@ public class NewVIC extends Memory
 				final byte lo = (byte) beamY;
 				final byte hi = (byte) (beamY>>8);
 
-				int hiBit = super.readByte( VIC.VIC_CTRL1 );
+				int hiBit = super.readByte( VIC_CTRL1 );
 				if ( hi != 0 ) {
 					hiBit |= 0b1000_0000;
 				} else {
 					hiBit &= 0b0111_1111;
 				}
-				if ( offset == VIC.VIC_CTRL1 ) {
+				if ( offset == VIC_CTRL1 ) {
 					return hiBit;
 				}
 				return lo;
@@ -451,7 +447,7 @@ public class NewVIC extends Memory
 		
 		switch( offset ) 
 		{
-			case VIC.VIC_SCANLINE:
+			case VIC_SCANLINE:
 				// current scan line, lo-byte
 				irqOnRaster = (short) (irqOnRaster | (value & 0xff) );
 				break;
@@ -505,10 +501,11 @@ public class NewVIC extends Memory
 
 	private int getNextPixel(int beamX,int beamY)
 	{
-		if ( beamY < topBorder || beamY >= bottomBorder || beamX < leftBorder || beamX >= rightBorder  ) 
+		if ( beamY < topBorder || beamY >= bottomBorder || beamX < leftBorder || beamX >= rightBorder ) 
 		{
 			return borderColor;
 		}
+		
 		// get current character color
 		int x = beamX - leftBorder;
 		int y = beamY - topBorder;
@@ -516,10 +513,16 @@ public class NewVIC extends Memory
 		final int byteOffset = (y/8) * textColumnCount + (x/8);
 		final int bitOffset = 7-(x%8);
 		
-		final int character = mainMemory.readByte( videoRAM + byteOffset );
+		final int character = mainMemory.readByte( videoRAMAdr + byteOffset );
 
 		final int glyphAdr = character << 3; // *8 bytes per glyph
-		final int word = characterROM.readByte( glyphAdr + (y%8) );
+		
+		final int word;
+		if ( readGlyphsFromRAM ) {
+			word = mainMemory.readByte( charROMAdr + glyphAdr + (y%8) );
+		} else {
+			word = mainMemory.getCharacterROM().readByte( glyphAdr + (y%8) );
+		}
 		
 		int mask = 1 << bitOffset;
 		if ( (word & mask) != 0 ) 
@@ -624,8 +627,6 @@ The flip flops are switched according to the following rules:
 		beamX = 0;
 		beamY = 0;
 		badLinePossible = true;
-
-		characterROM = MemorySubsystem.loadCharacterROM();
 	}
 
 	private void swapBuffers()

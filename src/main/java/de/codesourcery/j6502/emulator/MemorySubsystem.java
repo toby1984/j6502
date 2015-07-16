@@ -380,10 +380,14 @@ public final class MemorySubsystem extends IMemoryRegion
 		}
 	}
 
-	public static WriteOnceMemory loadCharacterROM() {
+	private static WriteOnceMemory loadCharacterROM() {
 		WriteOnceMemory rom = new WriteOnceMemory("Char ROM" , Bank.BANK5.range );
 		loadROM("character.rom", rom );
 		return rom;
+	}
+	
+	public WriteOnceMemory getCharacterROM() {
+		return charROM;
 	}
 
 	private static void loadROM(String string, WriteOnceMemory region)

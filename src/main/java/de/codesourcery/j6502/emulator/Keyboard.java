@@ -269,11 +269,26 @@ public class Keyboard
 		final List<Key> result = new ArrayList<>();
 		
 		// TODO: Lots of character mappings missing here...there are obviously many more characters that require modifiers 
-		if ( c == '$' ) 
+		switch(c) 
 		{
-			result.add( Key.KEY_LEFT_SHIFT );
-			result.add( Key.KEY_4 );
-			return result;
+			case '#': 
+				result.add( Key.KEY_LEFT_SHIFT );
+				result.add( Key.KEY_3 );
+				return result;					
+			case '(': 
+				result.add( Key.KEY_LEFT_SHIFT );
+				result.add( Key.KEY_8 );
+				return result;			
+			case ')': 
+				result.add( Key.KEY_LEFT_SHIFT );
+				result.add( Key.KEY_9 );
+				return result;					
+			case '$': 
+				result.add( Key.KEY_LEFT_SHIFT );
+				result.add( Key.KEY_4 );
+				return result;
+			default:
+				// $$FALL-THROUGH$$
 		}
 		
 		for ( int j = 0 , len = Key.values().length ; j < len ; j++ ) 

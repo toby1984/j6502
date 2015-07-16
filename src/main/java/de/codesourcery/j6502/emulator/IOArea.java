@@ -143,7 +143,7 @@ public class IOArea extends Memory
 	private final SerialDevice cpuDevice;
 	private final IMemoryRegion mainMemory;
 
-	public IOArea(String identifier, AddressRange range, IMemoryRegion mainMemory)
+	public IOArea(String identifier, AddressRange range, MemorySubsystem mainMemory)
 	{
 		super(identifier, range);
 
