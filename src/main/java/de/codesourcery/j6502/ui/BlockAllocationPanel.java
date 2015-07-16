@@ -81,7 +81,7 @@ public class BlockAllocationPanel extends JPanel implements IDebuggerView {
 		if ( peer instanceof JInternalFrame)
 		{
 			final JInternalFrame frame = (JInternalFrame) peer;
-			final String diskName = CharsetConverter.petToASCII( disk.getBAM().getDiskName() );
+			final String diskName = disk.getDiskNameInASCII();
 			final String title = diskName+" - "+( disk == null ? "<no disk>" : disk.getFreeSectorCount()+" blocks free."); 
 			SwingUtilities.invokeLater( () -> frame.setTitle( title ) );
 		}
@@ -118,7 +118,7 @@ public class BlockAllocationPanel extends JPanel implements IDebuggerView {
 			return;
 		}
 		
-		final List<BAMEntry> list = disk.getBAM().getAllocationMap();
+		final List<BAMEntry> list = disk.getAllocationMap();
 		list.sort( (a,b) -> Integer.compare( a.trackNo , b.trackNo  ) );
 		
 		String tooltipText = null;
