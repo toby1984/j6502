@@ -9,11 +9,13 @@ import de.codesourcery.j6502.emulator.Keyboard.Key;
  *
  * @author tobias.gierke@code-sourcery.de
  */
-public class IOArea extends Memory
+public class IOArea extends SlowMemory
 {
 	public final KeyboardBuffer keyboardBuffer = new KeyboardBuffer();
 	
-	public final NewVIC vic;
+	private final IMemoryRegion colorRAMBank; // RAM that covers $D000 - $DFFF
+	
+	public final VIC vic;
 	public final IECBus iecBus;
 	
 	public final CIA cia1 = new CIA("CIA #1" , AddressRange.range( 0xdc00, 0xdd00 ) ) {
@@ -43,7 +45,7 @@ public class IOArea extends Memory
 		}
 	};
 
-	private final CIA cia2 = new CIA("CIA #2" , AddressRange.range( 0xdd00, 0xde00 ) )
+	public final CIA cia2 = new CIA("CIA #2" , AddressRange.range( 0xdd00, 0xde00 ) )
 	{
 		@Override
 		public void writeByte(int adr, byte value)
@@ -72,12 +74,19 @@ public class IOArea extends Memory
 				    Bit 7: DATA IN
 				 */
 
+				final int oldValue = super.readByte( adr );
 				super.writeByte( adr , value);
+				
+				if ( (oldValue & 0b11) != (value & 0b11 ) ) // VIC bank was changed, recalculate RAM offsets 
+				{
+					vic.setCurrentBankNo( value & 0b11 );
+				}
 
-				final boolean atn = (value     & 0b0000_1000) == 0;
-				final boolean clkOut = (value  & 0b0001_0000) == 0;
-				final boolean dataOut = (value & 0b0010_0000) == 0;
-				if ( IECBus.DEBUG_WIRE_LEVEL ) {
+				if ( IECBus.DEBUG_WIRE_LEVEL ) 
+				{
+					final boolean atn = (value     & 0b0000_1000) == 0;
+					final boolean clkOut = (value  & 0b0001_0000) == 0;
+					final boolean dataOut = (value & 0b0010_0000) == 0;					
 					System.out.println("Write to $DD00: to_write: "+toBinaryString( value)+toLogical(", ATN: ",atn)+toLogical(" , clkOut: ",clkOut)+toLogical(", dataOut: ",dataOut));
 				}
 			}
@@ -141,12 +150,21 @@ public class IOArea extends Memory
 	};
 
 	private final SerialDevice cpuDevice;
-	private final IMemoryRegion mainMemory;
 
-	public IOArea(String identifier, AddressRange range, MemorySubsystem mainMemory)
+	/**
+	 * 
+	 * @param identifier
+	 * @param range
+	 * @param mainMemory
+	 * @param colorRAMBank Writes/reads of color RAM @ 0d800-0dc00 will be redirected here so
+	 * that contents of color RAM are identical no matter whether the I/O area has been swapped for RAM or not
+	 */
+	public IOArea(String identifier, AddressRange range, MemorySubsystem mainMemory,IMemoryRegion colorRAMBank)
 	{
 		super(identifier, range);
 
+		this.colorRAMBank = colorRAMBank;
+		
 		cpuDevice = new SerialDevice() {
 
 			@Override
@@ -203,8 +221,7 @@ public class IOArea extends Memory
 			}
 		};
 		this.iecBus = new IECBus("default bus" , cpuDevice );
-		this.mainMemory = mainMemory;
-		this.vic = new NewVIC("VIC", AddressRange.range( 0xd000, 0xd02f) , mainMemory );
+		this.vic = new VIC("VIC", AddressRange.range( 0xd000, 0xd02f) , mainMemory );
 	}
 
 	private final int[] keyboardColumns = new int[] {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff}; // 8 keyboard columns, bits are low-active
@@ -239,6 +256,11 @@ public class IOArea extends Memory
 
 		// I/O area starts at 0xd000
 		// but input to writeByte is already translated by -d000
+		
+		if ( offset >= 0x800 && offset < 0x800+1024) { 
+			colorRAMBank.writeByte( offset, value ); 
+			return;
+		}
 		if ( offset >= 0xc00 && offset <= 0xcff) { // $DC00-$DCFF
 			cia1.writeByte( set , value );
 			return;
@@ -258,9 +280,13 @@ public class IOArea extends Memory
 	@Override
 	public int readByte(int adr)
 	{
-		// I/O area starts at 0xd000
+		// this I/O area starts at 0xd000
 		// but input to writeByte is already translated by -d000
 		final int offset = adr & 0xffff;
+		
+		if ( offset >= 0x800 && offset < 0x800+1024) { 
+			return colorRAMBank.readByte( adr );
+		}
 		if ( offset >= 0xc00 && offset <= 0xcff) { // CIA #1 $DC00-$DCFF
 			return cia1.readByte( offset );
 		}

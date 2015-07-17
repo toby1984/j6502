@@ -2,11 +2,17 @@ package de.codesourcery.j6502.emulator;
 
 import de.codesourcery.j6502.utils.HexDump;
 
-public class Memory extends IMemoryRegion
+/**
+ * Memory that implements all operations in terms of {@link #readByte(int)} and {@link #writeByte(int, byte)}
+ * instead of directly accessing the internal array.
+ *
+ * @author tobias.gierke@voipfuture.com
+ */
+public class SlowMemory extends IMemoryRegion
 {
 	private final byte[] data;
 
-	public Memory(String identifier, AddressRange range) {
+	public SlowMemory(String identifier, AddressRange range) {
 		super(identifier, range);
 		this.data = new byte[ range.getSizeInBytes() ];
 	}
@@ -22,7 +28,7 @@ public class Memory extends IMemoryRegion
 	{
 		for ( int i = 0 , len = data.length ; i < len ; i++ ) 
 		{
-			data[i] = 0;
+			writeByte(i,(byte) 0);
 		}
 	}
 	
@@ -37,34 +43,34 @@ public class Memory extends IMemoryRegion
 	}	
 
 	@Override
-	public void writeWord(int offset, short value) {
+	public final void writeWord(int offset, short value) {
 		final byte low = (byte) value;
 		final byte hi = (byte) (value>>8);
 
 		int realOffset = offset & 0xffff;
-		data[ realOffset ] = low;
+		writeByte( realOffset, low );
 		realOffset = (realOffset+1) & 0xffff;
-		data[ realOffset ] = hi;
+		writeByte( realOffset , hi );
 	}
 
 	@Override
-	public int readWord(int offset)
+	public final int readWord(int offset)
 	{
 		int realOffset = offset & 0xffff;
-		final byte low = data[realOffset];
+		final byte low = (byte) readByte( realOffset );
 		realOffset = (realOffset+1) & 0xffff;
-		final byte hi = data[realOffset];
+		final byte hi = (byte) readByte( realOffset );
 		return (hi<<8|low) & 0xffff;
 	}
 
 	@Override
-	public void bulkWrite(int startingAddress, byte[] data, int datapos, int len)
+	public final void bulkWrite(int startingAddress, byte[] data, int datapos, int len)
 	{
 		final int realOffset = startingAddress & 0xffff;
 		final int size = getAddressRange().getSizeInBytes();
 		for ( int dstOffset = realOffset , bytesLeft = len , srcOffset = datapos ; bytesLeft > 0 ; bytesLeft-- )
 		{
-			this.data[ dstOffset ] = data[ srcOffset++ ];
+			writeByte( dstOffset , data[ srcOffset++ ] );
 			dstOffset = (dstOffset+1) % size;
 		}
 	}

@@ -8,7 +8,7 @@ import org.apache.commons.lang.StringUtils;
 
 public class IECBus
 {
-	public static final boolean CAPTURE_BUS_SNAPSHOTS = true;
+	public static final boolean CAPTURE_BUS_SNAPSHOTS = false;
 
 	private final int MAX_CYCLES_TO_KEEP = 200;
 

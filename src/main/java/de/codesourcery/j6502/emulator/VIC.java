@@ -6,7 +6,7 @@ import java.awt.image.BufferedImage;
 
 import de.codesourcery.j6502.utils.HexDump;
 
-public class NewVIC extends Memory
+public class VIC extends SlowMemory
 {
 	public  static final Color Black 	     = color( 0, 0, 0); // 0
 	public  static final Color White        = color( 255, 255, 255); // 1
@@ -32,6 +32,41 @@ public class NewVIC extends Memory
 		return new Color(r,g,b);
 	}
 
+	/**
+	 * VIC graphics mode.
+	 * 
+	 * The VIC is capable of 8 different graphics modes that
+	 * are selected by the bits 
+	 * 
+	 * ECM (Extended Color Mode)
+	 * BMM (Bit Map Mode)
+	 * MCM (Multi Color Mode) 
+	 * 
+	 * in the registers $d011 and $d016.
+	 * 
+	 * Of the 8 possible bit combinations, 3 are "invalid" and generate the 
+	 * same output, the color black.		
+	 * 
+	 * $D011 	53265 	17 	Steuerregister, Einzelbedeutung der Bits (1 = an):
+	 *                      Bit 7: Bit 8 von $D012
+	 *                      Bit 6: Extended Color Modus
+	 *                      Bit 5: Bitmapmodus
+	 *                      Bit 4: Bildausgabe eingeschaltet (Effekt erst beim nächsten Einzelbild)
+	 *                      Bit 3: 25 Zeilen (sonst 24)
+	 *                      Bit 2..0: Offset in Rasterzeilen vom oberen Bildschirmrand
+	 *                      
+	 * $D016 	53270 	22 	Steuerregister, Einzelbedeutung der Bits (1 = an):
+	 *                      Bit 7..5: unbenutzt
+	 *                      Bit 4: Multicolor-Modus
+	 *                      Bit 3: 40 Spalten (an)/38 Spalten (aus)
+	 *                      Bit 2..0: Offset in Pixeln vom linken Bildschirmrand
+	 *
+	 * @author tobias.gierke@voipfuture.com
+	 */
+	private boolean extendedColorMode;
+	private boolean bitMapMode;
+	private boolean multiColorMode;
+	
 	public static final Color[] AWT_COLORS = { Black,White,Red,Cyan,Violet,Green,Blue,Yellow,Orange,Brown,Lightred,Grey1,Grey2,Lightgreen,Lightblue,Lightgrey};
 
 	public  static final int[] INT_COLORS = new int[16];
@@ -234,35 +269,32 @@ public class NewVIC extends Memory
 	public  static final int VIC_SPRITE5_COLOR10 = 0x2c;
 	public  static final int VIC_SPRITE6_COLOR10 = 0x2d;
 	public  static final int VIC_SPRITE7_COLOR10 = 0x2e;
-	
+
 	protected static final int DISPLAY_WIDTH= 504;
 	protected static final int DISPLAY_HEIGHT = 312;
-	
+
 	private BufferedImage frontBuffer;
 	private BufferedImage backBuffer;
-	
-	protected static final int colorRAM = 0xD800;
+
 	protected int videoRAMAdr;
-	protected int glyphRAMAdr;
-	
 	protected boolean readGlyphsFromRAM;
 	protected int charROMAdr;
-
-	private volatile int textColumnCount=40;
-	private volatile int textRowCount=25;
+	
+	private int textColumnCount=40;
+	private int textRowCount=25;
 
 	private final MemorySubsystem mainMemory;
-	
+
 	protected int leftBorder;
 	protected int rightBorder;
 	protected int topBorder;
 	protected int bottomBorder;
-	
+
 	protected int backgroundColor;
 	protected int borderColor;
-	
+
 	private int irqOnRaster = -1;
-	
+
 	private int beamX;
 	private int beamY;
 
@@ -274,11 +306,11 @@ public class NewVIC extends Memory
 	private int xScroll;
 	private int yScroll;
 
-	public NewVIC(String identifier, AddressRange range,MemorySubsystem mainMemory)
+	public VIC(String identifier, AddressRange range,MemorySubsystem mainMemory)
 	{
 		super(identifier, range);
 		this.mainMemory = mainMemory;
-		
+
 		/*
 
 		The dimensions of the video display for the different VIC types are as
@@ -303,19 +335,14 @@ public class NewVIC extends Memory
 		$1f7 on the 6569) within a line, then comes X coordinate 0. This is
 		explained in more detail in the explanation of the structure of a raster
 		line.
-		
+
 		                                          0
 		        |----------VVVVVVVVVVVVVVVVVVVVVV|VVVVVVVVVVVVVV----| $1f7
 		        ^ $194     ^ $1e0                ^ $1f7        ^$17c
 		 */
-		
+
 		frontBuffer = new BufferedImage(DISPLAY_WIDTH,DISPLAY_HEIGHT,BufferedImage.TYPE_INT_RGB);
 		backBuffer  = new BufferedImage(DISPLAY_WIDTH,DISPLAY_HEIGHT,BufferedImage.TYPE_INT_RGB);
-	}
-	
-	protected abstract class PixelGenerator 
-	{
-		public abstract int getPixel();
 	}
 
 	public void tick(CPU cpu,boolean clockHigh)
@@ -331,65 +358,10 @@ public class NewVIC extends Memory
 
 	private void render(CPU cpu,boolean clockHigh)
 	{
-		// video RAM location
-		/*
-		 *    $D018 	53272 	24 	VIC-Speicherkontrollregister
-		 *
-		 *                           vvvvggg
-		 *                          Bit 7..4: Basisadresse des Bildschirmspeichers in aktueller 16K-Bank des VIC = 64*(Bit 7…4)[2]
-		 *                          Bit 3..1: Basisadresse des Zeichensatzes = 1024*(Bit 3…1).
-		 *
-         * When in TEXT SCREEN MODE, the VIC-II looks to 53272 for information on where the character set and text screen character RAM is located:
-		 */
-		int value = readByte(VIC_MEMORY_MAPPING);
-		int videoRAMOffset = 1024 * ( ( value & 0b1111_0000) >>4 ); // The four most significant bits form a 4-bit number in the range 0 thru 15: Multiplied with 1024 this gives the start address for the screen character RAM.
-		int glyphRAMOffset = 2048 * ( ( value & 0b0000_1110) >> 1); // Bits 1 thru 3 (weights 2 thru 8) form a 3-bit number in the range 0 thru 7: Multiplied with 2048 this gives the start address for the character set.
-
-		/* CIA #2 , $DD00
-		 * Bit 0..1: Select the position of the VIC-memory
-		 * %00, 0: Bank 3: $C000-$FFFF, 49152-65535
-		 * %01, 1: Bank 2: $8000-$BFFF, 32768-49151
-		 * %10, 2: Bank 1: $4000-$7FFF, 16384-32767
-		 * %11, 3: Bank 0: $0000-$3FFF, 0-16383 (standard)
-		 *
-         * Bank no.	Bit pattern in 56576/$DD00    Character ROM available?
-         * 3	xxxxxx11	0–16383	$0000–$3FFF	      Yes, at 4096–8192 $1000–$1FFF
-         * 2	xxxxxx10	16384–32767	$4000–$7FFF	  No
-         * 1	xxxxxx01	32768–49151	$8000–$BFFF	  Yes, at 36864–40959 $9000–$9FFF
-         * 0	xxxxxx00	49152–65535	$C000–$FFFF	  No
-		 */
-		final int bankNo = mainMemory.readByte( 0xdd00 ) & 0b11;
-
-		int bankAdr;
-		switch( bankNo ) {
-			case 0b11:
-				bankAdr = 0x0000;
-				readGlyphsFromRAM = false;
-				break;
-			case 0b10:
-				bankAdr = 0x4000;
-				readGlyphsFromRAM = true;
-				break;
-			case 0b01:
-				bankAdr = 0x8000;
-				readGlyphsFromRAM = false;
-				break;
-			case 0b00:
-				bankAdr = 0xc000;
-				readGlyphsFromRAM = true;
-				break;
-			default:
-				throw new RuntimeException("Unreachable code reached");
-		}
-
-		videoRAMAdr = bankAdr+videoRAMOffset;
-		glyphRAMAdr = bankAdr+glyphRAMOffset;
-		charROMAdr  = bankAdr + 0x1000; 
-		
-		// handle the next 8 pixels
+		// handle the next 4 pixels
 		int tmpBeamX = beamX;
 		int tmpBeamY = beamY;
-		
+
 		for ( int i = 0 ; i < 4 ; i++ ) 
 		{
 			backBuffer.setRGB( tmpBeamX , tmpBeamY , getNextPixel(tmpBeamX,tmpBeamY) );
@@ -403,10 +375,10 @@ public class NewVIC extends Memory
 					swapBuffers();
 				}
 				// TODO: Implement raster IRQ
-//				if ( irqOnRaster == tmpBeamY ) 
-//				{
-//					cpu.queueInterrupt();
-//				}
+				//				if ( irqOnRaster == tmpBeamY ) 
+				//				{
+				//					cpu.queueInterrupt();
+				//				}
 			}
 		}
 		beamX = tmpBeamX;
@@ -417,10 +389,10 @@ public class NewVIC extends Memory
 	public int readByte(int offset) 
 	{
 		int result = super.readByte(offset);
-		
+
 		switch( offset ) 
 		{
-			case VIC_CTRL1:
+			case VIC_CTRL1: // $d011
 			case VIC_SCANLINE:
 				final byte lo = (byte) beamY;
 				final byte hi = (byte) (beamY>>8);
@@ -431,7 +403,8 @@ public class NewVIC extends Memory
 				} else {
 					hiBit &= 0b0111_1111;
 				}
-				if ( offset == VIC_CTRL1 ) {
+				if ( offset == VIC_CTRL1 ) 
+				{
 					return hiBit;
 				}
 				return lo;
@@ -440,13 +413,79 @@ public class NewVIC extends Memory
 		}
 		return result;
 	}
+
+	/**
+	 * CIA #2 , $DD00
+	 * Bit 0..1: Select the position of the VIC-memory
+	 * %00, 0: Bank 3: $C000-$FFFF, 49152-65535
+	 * %01, 1: Bank 2: $8000-$BFFF, 32768-49151
+	 * %10, 2: Bank 1: $4000-$7FFF, 16384-32767
+	 * %11, 3: Bank 0: $0000-$3FFF, 0-16383 (standard)
+	 *
+	 * Bank no.	Bit pattern in 56576/$DD00        Character ROM available?
+	 * 0	xxxxxx00	49152–65535	$C000–$FFFF	  No
+	 * 1	xxxxxx01	32768–49151	$8000–$BFFF	  Yes, at 36864–40959 $9000–$9FFF
+	 * 2	xxxxxx10	16384–32767	$4000–$7FFF	  No
+	 * 3	xxxxxx11	0–16383	$0000–$3FFF	      Yes, at 4096–8192 $1000–$1FFF
+	 * 
+	 * @param bankNo Bank no. (bits 0..1) from CIA2 PRA register
+	 */
+	public void setCurrentBankNo(int bankNo) 
+	{
+		// video RAM location
+		/*
+		 *    $D018 	53272 	24 	VIC-Speicherkontrollregister
+		 *
+		 *                           vvvvggg
+		 *                          Bit 7..4: Basisadresse des Bildschirmspeichers in aktueller 16K-Bank des VIC = 64*(Bit 7…4)[2]
+		 *                          Bit 3..1: Basisadresse des Zeichensatzes = 1024*(Bit 3…1).
+		 *
+		 * When in TEXT SCREEN MODE, the VIC-II looks to 53272 for information on where the character set and text screen character RAM is located:
+		 */
+		final int value = super.readByte(VIC_MEMORY_MAPPING);
+		final int videoRAMOffset = 1024 * ( ( value & 0b1111_0000) >>4 ); // The four most significant bits form a 4-bit number in the range 0 thru 15: Multiplied with 1024 this gives the start address for the screen character RAM.
+		final int glyphRAMOffset = 2048 * ( ( value & 0b0000_1110) >> 1); // Bits 1 thru 3 (weights 2 thru 8) form a 3-bit number in the range 0 thru 7: Multiplied with 2048 this gives the start address for the character set.
+
+		final int bankAdr;
+		switch( bankNo ) {
+			case 0: 
+				bankAdr = 0xc000;
+				readGlyphsFromRAM = true;
+				break;
+			case 1: 
+				bankAdr = 0x8000;
+				readGlyphsFromRAM = false;
+				break;
+			case 2: 
+				bankAdr = 0x4000;
+				readGlyphsFromRAM = true;
+				break;
+			case 3: 
+				bankAdr = 0x0000;
+				readGlyphsFromRAM = false;
+				break;
+			default:
+				throw new RuntimeException("Unreachable code reached");
+		}
+
+		videoRAMAdr = bankAdr+videoRAMOffset;
+		charROMAdr  = bankAdr+glyphRAMOffset;
+
+		System.out.println("VIC: Bank #"+bankNo+" ("+HexDump.toAdr( bankAdr )+")");
+		System.out.println("VIC: Video RAM @ "+HexDump.toAdr( videoRAMAdr ) );
+		System.out.println("VIC: Char ROM @ "+HexDump.toAdr( charROMAdr ) +" (from RAM: "+readGlyphsFromRAM+")" );
+	}
+
 	@Override
 	public void writeByte(int offset, byte value)
 	{
 		super.writeByte(offset, value);
-		
+
 		switch( offset ) 
 		{
+			case VIC_MEMORY_MAPPING:
+				setCurrentBankNo( mainMemory.ioArea.cia2.readByte( 0 ) & 0b11); // read bank no. from CIA2 PRA bits 0..1
+				break;
 			case VIC_SCANLINE:
 				// current scan line, lo-byte
 				irqOnRaster = (short) (irqOnRaster | (value & 0xff) );
@@ -462,16 +501,31 @@ public class NewVIC extends Memory
 				 *                          Bit 3: 25 Zeilen (sonst 24)
 				 *                          Bit 2..0: Offset in Rasterzeilen vom oberen Bildschirmrand
 				 */
-				
+
 				if ( ( value & 0b1000_0000 ) != 0 ) {
 					irqOnRaster = (short) ( 0b0100 | (irqOnRaster & 0xff) ); // set hi-bit
 				} else {
 					irqOnRaster = (short) (irqOnRaster & 0xff); // clear hi-bit
 				}
-				
+
 				yScroll= ( value & 0x111);
 				displayEnabled = (value & 0b10000) != 1 ? true : false;
 				textRowCount   = (value & 0b01000) != 0 ? 25 : 24; // RSEL
+
+				// update graphics mode
+				boolean newMode = ( value & 1<<6) != 0;
+				boolean modeChanged = ( extendedColorMode != newMode );
+				extendedColorMode = newMode; 
+				
+				newMode = ( value & 1<<5) != 0;
+				modeChanged |= ( bitMapMode != newMode );
+				bitMapMode = newMode;
+				
+				if ( modeChanged ) {
+					System.out.println("VIC: extendedColor: "+extendedColorMode+" | bitMap: "+bitMapMode+" | multiColor: "+multiColorMode);
+				}
+				
+				// update border locations
 				updateBorders();
 				System.out.println("Write to $D011: value="+Integer.toBinaryString( value & 0xff)+" , text columns: "+textColumnCount+" , text rows: "+textRowCount);
 				break;
@@ -485,6 +539,16 @@ public class NewVIC extends Memory
 				 */
 				xScroll = value & 0b111;
 				textColumnCount = ( value & 0b1000) != 0 ? 40 : 38; // CSEL
+				
+				// update graphics mode
+				newMode = ( value & 1<<4) != 0;
+				if ( multiColorMode != newMode ) 
+				{
+					multiColorMode = newMode; 
+					System.out.println("VIC: extendedColor: "+extendedColorMode+" | bitMap: "+bitMapMode+" | multiColor: "+multiColorMode);
+				}
+				
+				// update border locations
 				updateBorders();
 				System.out.println("Write to $D016: value="+Integer.toBinaryString( value & 0xff)+" , text columns: "+textColumnCount+" , text rows: "+textRowCount);
 				break;
@@ -505,29 +569,31 @@ public class NewVIC extends Memory
 		{
 			return borderColor;
 		}
-		
+
+		// TEXT MODE
+
 		// get current character color
 		int x = beamX - leftBorder;
 		int y = beamY - topBorder;
-		
+
 		final int byteOffset = (y/8) * textColumnCount + (x/8);
 		final int bitOffset = 7-(x%8);
-		
+
 		final int character = mainMemory.readByte( videoRAMAdr + byteOffset );
 
 		final int glyphAdr = character << 3; // *8 bytes per glyph
-		
+
 		final int word;
 		if ( readGlyphsFromRAM ) {
 			word = mainMemory.readByte( charROMAdr + glyphAdr + (y%8) );
 		} else {
 			word = mainMemory.getCharacterROM().readByte( glyphAdr + (y%8) );
 		}
-		
+
 		int mask = 1 << bitOffset;
 		if ( (word & mask) != 0 ) 
 		{
-			final int color = mainMemory.readByte( colorRAM + byteOffset ) % 0b1111; // color ram is actually a 4-bit static RAM
+			final int color =mainMemory.getColorRAMBank().readByte( 0x800 + byteOffset ) % 0b1111; // ignore upper 4 bits, color ram is actually a 4-bit static RAM
 			return INT_COLORS[ color ];
 		}			
 		return backgroundColor;
@@ -550,7 +616,7 @@ public class NewVIC extends Memory
 
 	private void updateBorders()
 	{
-	/*
+		/*
 The VIC uses two flip flops to generate the border around the display
 window: A main border flip flop and a vertical border flip flop.
 
@@ -588,9 +654,9 @@ And the vertical ones:
  Bottom | 247 ($f7) | 251 ($fb)
 
 The flip flops are switched according to the following rules:
-*/
+		 */
 		final boolean csel = textColumnCount == 40 ? true : false;
-		
+
 		if ( csel ) {
 			leftBorder = 24;
 			rightBorder = 344;
@@ -623,10 +689,16 @@ The flip flops are switched according to the following rules:
 		cycleOnCurrentLine = 0;
 
 		irqOnRaster = -1;
-		
+
 		beamX = 0;
 		beamY = 0;
 		badLinePossible = true;
+		
+		extendedColorMode=false;
+		bitMapMode=false;
+		multiColorMode=false;
+		
+		setCurrentBankNo( 0 );
 	}
 
 	private void swapBuffers()

@@ -109,9 +109,18 @@ public class Floppy extends AbstractSerialDevice
 	{
 		protected boolean eof;
 		private final InputStream in;
+		
+		private int bytesWrittenToSendBuffer;
+		private final int sectorsToSend;
 
 		public SendTransfer(InputStream in) {
 			this.in = in;
+			this.sectorsToSend = -1; // unknown count
+		}
+		
+		public SendTransfer(InputStream in,int sectorsToSend) {
+			this.in = in;
+			this.sectorsToSend = sectorsToSend;
 		}
 		
 		@Override
@@ -147,6 +156,15 @@ public class Floppy extends AbstractSerialDevice
 					break;
 				}
 				sendBuffer.write( (byte) data );
+				bytesWrittenToSendBuffer++;
+				if ( (bytesWrittenToSendBuffer % 254) == 0 ) 
+				{
+					if ( sectorsToSend == -1 ) {
+						System.out.println("Transferred "+(bytesWrittenToSendBuffer/254)+" sectors ...");
+					} else {
+						System.out.println("Transferred "+(bytesWrittenToSendBuffer/254)+" sectors of "+sectorsToSend+" ...");
+					}
+				}
 			}
 			return true;
 		}
@@ -156,7 +174,7 @@ public class Floppy extends AbstractSerialDevice
 	{
 		super(primaryAddress);
 		try {
-			disk = new D64File("test.d64");
+			disk = new D64File("basic.d64");
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -236,8 +254,8 @@ public class Floppy extends AbstractSerialDevice
 		final Optional<DirectoryEntry> entry = disk.getDirectoryEntry( data );
 		if ( entry.isPresent() )
 		{
-			System.out.println("====> Sending file >"+entry.get().getFileNameAsASCII()+"<");
-			return new SendTransfer( entry.get().createInputStream() );
+			System.out.println("====> Sending file >"+entry.get().getFileNameAsASCII()+" with "+entry.get().getFileSizeInSectors()+" sectors<");
+			return new SendTransfer( entry.get().createInputStream() , entry.get().getFileSizeInSectors() );
 		}
 		return new EmptyTransfer();
 	}

@@ -89,19 +89,31 @@ public final class MemorySubsystem extends IMemoryRegion
      * Bits 6-7: Not connected--no function presently defined.
 	 */
 	private byte plaLatchBits = 0; // address $01
-
+	
 	private final IMemoryRegion ram0= new Memory("RAM #0",Bank.BANK0.range);
 	private final IMemoryRegion ram1= new Memory("RAM #1",Bank.BANK1.range);
 	private final IMemoryRegion ram2= new Memory("RAM #2",Bank.BANK2.range);
 	private final IMemoryRegion ram3= new Memory("RAM #3",Bank.BANK3.range);
 	private final IMemoryRegion ram4= new Memory("RAM #4",Bank.BANK4.range);
-	private final IMemoryRegion ram5= new Memory("RAM #5",Bank.BANK5.range);
+	
+	private final IMemoryRegion ram5= new SlowMemory("RAM #5",Bank.BANK5.range) 
+	{ 
+		public int readByte(int offset) 
+		{
+			final int set = offset & 0xffff;
+			if ( set >= 0x800 && set < 0x800+1024) { // color RAM
+				return super.readByte(offset) | 0b11110000; // color RAM is actually a 4-bit ram and always returns 0b1111 for the hi nibble
+			}
+			return super.readByte(offset);
+		}
+	};
+	
 	private final IMemoryRegion ram6= new Memory("RAM #6",Bank.BANK6.range);
-
+	
 	private WriteOnceMemory kernelROM;
 	private WriteOnceMemory charROM;
 	private WriteOnceMemory basicROM;
-	public final IOArea ioArea = new IOArea("I/O area", Bank.BANK5.range , this );
+	public final IOArea ioArea = new IOArea("I/O area", Bank.BANK5.range , this , ram5 );
 	private IMemoryRegion cartROMLow;
 	private IMemoryRegion cartROMHi;
 
@@ -131,6 +143,14 @@ public final class MemorySubsystem extends IMemoryRegion
 			}
 		}
 		reset();
+	}
+	
+	/**
+	 * Returns RAM starting at $d000
+	 * @return
+	 */
+	public IMemoryRegion getColorRAMBank() {
+		return ram5;
 	}
 
 	@Override
