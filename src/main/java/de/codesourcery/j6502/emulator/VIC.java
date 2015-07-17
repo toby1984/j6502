@@ -63,10 +63,54 @@ public class VIC extends SlowMemory
 	 *
 	 * @author tobias.gierke@voipfuture.com
 	 */
-	private boolean extendedColorMode;
-	private boolean bitMapMode;
-	private boolean multiColorMode;
-	
+	protected static enum GraphicsMode 
+	{
+		MODE_0(false,false,false),
+		MODE_1(false,false,true),
+		MODE_2(false,true ,false),
+		MODE_3(false,true ,true),
+		MODE_4(true ,false,false),
+		MODE_5(true ,false,true),
+		MODE_6(true ,true ,false),
+		MODE_7(true ,true ,true);
+
+		public final boolean extendedColorMode;
+		public final boolean bitMapMode;
+		public final boolean multiColorMode;
+
+		private GraphicsMode(boolean extendedColorMode, boolean bitMapMode, boolean multiColorMode) 
+		{
+			this.extendedColorMode = extendedColorMode;
+			this.bitMapMode = bitMapMode;
+			this.multiColorMode = multiColorMode;
+		}
+
+		@Override
+		public String toString() {
+			return "extendedColor: "+extendedColorMode+" | bitMap: "+bitMapMode+" | multiColor: "+multiColorMode;
+		}
+	}
+
+	private static final GraphicsMode[] GRAPHIC_MODES = { GraphicsMode.MODE_0,GraphicsMode.MODE_1,GraphicsMode.MODE_2,GraphicsMode.MODE_3,GraphicsMode.MODE_4,GraphicsMode.MODE_5,
+			GraphicsMode.MODE_6,GraphicsMode.MODE_7};
+
+	private GraphicsMode getGraphicsMode(boolean extendedColorMode, boolean bitMapMode, boolean multiColorMode) 
+	{
+		int index = 0;
+		if ( extendedColorMode ) {
+			index |= 1<<2;
+		}
+		if ( bitMapMode ) {
+			index |= 1<<1;
+		}
+		if ( multiColorMode ) {
+			index |= 1<<0;
+		}
+		return GRAPHIC_MODES[ index ];
+	}
+
+	private GraphicsMode graphicsMode = GraphicsMode.MODE_0;
+
 	public static final Color[] AWT_COLORS = { Black,White,Red,Cyan,Violet,Green,Blue,Yellow,Orange,Brown,Lightred,Grey1,Grey2,Lightgreen,Lightblue,Lightgrey};
 
 	public  static final int[] INT_COLORS = new int[16];
@@ -279,7 +323,7 @@ public class VIC extends SlowMemory
 	protected int videoRAMAdr;
 	protected boolean readGlyphsFromRAM;
 	protected int charROMAdr;
-	
+
 	private int textColumnCount=40;
 	private int textRowCount=25;
 
@@ -381,6 +425,7 @@ public class VIC extends SlowMemory
 				//				}
 			}
 		}
+
 		beamX = tmpBeamX;
 		beamY = tmpBeamY;
 	}
@@ -513,18 +558,14 @@ public class VIC extends SlowMemory
 				textRowCount   = (value & 0b01000) != 0 ? 25 : 24; // RSEL
 
 				// update graphics mode
-				boolean newMode = ( value & 1<<6) != 0;
-				boolean modeChanged = ( extendedColorMode != newMode );
-				extendedColorMode = newMode; 
-				
-				newMode = ( value & 1<<5) != 0;
-				modeChanged |= ( bitMapMode != newMode );
-				bitMapMode = newMode;
-				
-				if ( modeChanged ) {
-					System.out.println("VIC: extendedColor: "+extendedColorMode+" | bitMap: "+bitMapMode+" | multiColor: "+multiColorMode);
+				final boolean extendedColorMode = ( value & 1<<6) != 0;
+				final boolean bitMapMode = ( value & 1<<5) != 0;
+
+				if ( extendedColorMode != graphicsMode.extendedColorMode || bitMapMode != graphicsMode.bitMapMode ) 
+				{
+					setGraphicsMode( getGraphicsMode( extendedColorMode , bitMapMode , graphicsMode.multiColorMode ) );
 				}
-				
+
 				// update border locations
 				updateBorders();
 				System.out.println("Write to $D011: value="+Integer.toBinaryString( value & 0xff)+" , text columns: "+textColumnCount+" , text rows: "+textRowCount);
@@ -539,15 +580,14 @@ public class VIC extends SlowMemory
 				 */
 				xScroll = value & 0b111;
 				textColumnCount = ( value & 0b1000) != 0 ? 40 : 38; // CSEL
-				
+
 				// update graphics mode
-				newMode = ( value & 1<<4) != 0;
-				if ( multiColorMode != newMode ) 
+				final boolean multiColorMode  = ( value & 1<<4) != 0;
+				if ( multiColorMode != graphicsMode.multiColorMode ) 
 				{
-					multiColorMode = newMode; 
-					System.out.println("VIC: extendedColor: "+extendedColorMode+" | bitMap: "+bitMapMode+" | multiColor: "+multiColorMode);
+					setGraphicsMode( getGraphicsMode( graphicsMode.extendedColorMode , graphicsMode.bitMapMode , multiColorMode ) );
 				}
-				
+
 				// update border locations
 				updateBorders();
 				System.out.println("Write to $D016: value="+Integer.toBinaryString( value & 0xff)+" , text columns: "+textColumnCount+" , text rows: "+textRowCount);
@@ -570,33 +610,81 @@ public class VIC extends SlowMemory
 			return borderColor;
 		}
 
-		// TEXT MODE
-
-		// get current character color
 		int x = beamX - leftBorder;
 		int y = beamY - topBorder;
 
-		final int byteOffset = (y/8) * textColumnCount + (x/8);
-		final int bitOffset = 7-(x%8);
-
-		final int character = mainMemory.readByte( videoRAMAdr + byteOffset );
-
-		final int glyphAdr = character << 3; // *8 bytes per glyph
-
-		final int word;
-		if ( readGlyphsFromRAM ) {
-			word = mainMemory.readByte( charROMAdr + glyphAdr + (y%8) );
-		} else {
-			word = mainMemory.getCharacterROM().readByte( glyphAdr + (y%8) );
-		}
-
-		int mask = 1 << bitOffset;
-		if ( (word & mask) != 0 ) 
+		switch( graphicsMode ) 
 		{
-			final int color =mainMemory.getColorRAMBank().readByte( 0x800 + byteOffset ) % 0b1111; // ignore upper 4 bits, color ram is actually a 4-bit static RAM
-			return INT_COLORS[ color ];
-		}			
-		return backgroundColor;
+			case MODE_0: // extendedColor = false | bitmap = false | multiColor = false
+			case MODE_1: // extendedColor = false | bitmap = false | multiColor = true
+			{
+				// TEXT MODE
+				final int byteOffset = (y/8) * textColumnCount + (x/8);
+				final int character = mainMemory.readByte( videoRAMAdr + byteOffset );
+
+				final int glyphAdr = character << 3; // *8 bytes per glyph
+
+				final int word;
+				if ( readGlyphsFromRAM ) 
+				{
+					word = mainMemory.readByte( charROMAdr + glyphAdr + (y%8) );
+				} else {
+					word = mainMemory.getCharacterROM().readByte( glyphAdr + (y%8) );
+				}
+
+				if ( graphicsMode == GraphicsMode.MODE_0) // text mode , 8x8 pixel per glyph
+				{
+					final int bitOffset = 7-(x%8);
+					final int mask = 1 << bitOffset;
+					if ( (word & mask) != 0 ) 
+					{
+						final int color =mainMemory.getColorRAMBank().readByte( 0x800 + byteOffset ) % 0b1111; // ignore upper 4 bits, color ram is actually a 4-bit static RAM
+						return INT_COLORS[ color ];
+					}			
+					return backgroundColor;
+				} 
+				
+				// multi-color text mode, 2 bits per pixel => 4x8 pixel per glyph
+				
+				/*
+				 * Farb-Bits 	Entsprechende Farbe 	Speicheradresse
+				 * 00 	        Bildschirmfarbe 	          53281   $D021
+				 * 01 	        Multicolorfarbe 1 	          53282   $D022
+				 * 10 	        Multicolorfarbe 2 	          53283   $D023
+				 * 11 	        Farbspeicher (Zeichenfarbe)   55296-56295
+				 * 
+				 *    $D021 	53281 	33 	Bildschirmhintergrundfarbe (0..15)
+				 *    $D022 	53282 	34 	Bildschirmhintergrundfarbe 1 bei Extended Color Modus (0..15)
+				 *    $D023 	53283 	35 	Bildschirmhintergrundfarbe 2 bei Extended Color Mode (0..15)
+				 *    $D024 	53284 	36 	Bildschirmhintergrundfarbe 3 bei Extended Color Mode (0..15)                 				 
+				 */
+				int color =mainMemory.getColorRAMBank().readByte( 0x800 + byteOffset ) % 0b1111; // ignore upper 4 bits, color ram is actually a 4-bit static RAM
+				if ( color <= 7) { // 0111 bits => use regular color
+					return INT_COLORS[ color ];
+				}
+				// multi-color mode enabled for this character
+				color &= 0b0111;
+				
+				final int bitOffset = 3-((x/2)%4);
+				final int mask = 0b11 << 2*bitOffset;
+				
+				switch( (word & mask) >> 2*bitOffset ) 
+				{
+					case 0:
+						return INT_COLORS[ readByte( 0x21 ) & 0b1111 ];
+					case 1:
+						return INT_COLORS[ readByte( 0x22 ) & 0b1111 ];
+					case 2:
+						return INT_COLORS[ readByte( 0x23 ) & 0b1111 ];
+					case 3:
+						return INT_COLORS[ color & 0b0111 ]; // clear upper bit
+					default:
+						throw new RuntimeException("Unreachable code reached");
+				}
+			}
+			default:
+				return backgroundColor;
+		}
 	}
 
 	private boolean isBadLine() // Only call this method on the negative clock edge
@@ -693,12 +781,16 @@ The flip flops are switched according to the following rules:
 		beamX = 0;
 		beamY = 0;
 		badLinePossible = true;
-		
-		extendedColorMode=false;
-		bitMapMode=false;
-		multiColorMode=false;
-		
+
 		setCurrentBankNo( 0 );
+
+		setGraphicsMode( GraphicsMode.MODE_0 );
+	}
+
+	private void setGraphicsMode(GraphicsMode newMode)
+	{
+		this.graphicsMode = newMode;
+		System.out.println( "VIC: "+newMode);
 	}
 
 	private void swapBuffers()
