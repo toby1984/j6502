@@ -322,11 +322,12 @@ public class VIC extends SlowMemory
 	private BufferedImage backBuffer;
 
 	protected int videoRAMAdr;
-	private int currentBank;
 	protected int charROMAdr;
 
 	private int textColumnCount=40;
 	private int textRowCount=25;
+
+	private boolean rendered=true;
 
 	private final MemorySubsystem mainMemory;
 
@@ -418,9 +419,11 @@ public class VIC extends SlowMemory
 				if ( tmpBeamY == 312 ) 
 				{
 					tmpBeamY = 0;
-					swapBuffers();
+					if ( clockHigh ) {
+						swapBuffers();
+					}
 				}
-				if ( rasterIRQEnabled && irqOnRaster == tmpBeamY ) 
+				if ( clockHigh && rasterIRQEnabled && irqOnRaster == tmpBeamY ) 
 				{
 					triggerRasterIRQ(cpu);
 				}
@@ -430,21 +433,21 @@ public class VIC extends SlowMemory
 		beamX = tmpBeamX;
 		beamY = tmpBeamY;
 	}
-	
+
 	private void triggerRasterIRQ(CPU cpu) 
 	{
-/*
- 			 *    $D019 	53273 	25 	Interrupt Request, Bit = 1 = an
-	 *                          Lesen:
-	 *                          Bit 7: IRQ durch VIC ausgelöst
-	 *                          Bit 6..4: unbenutzt
-	 *                          Bit 3: Anforderung durch Lightpen
-	 *                          Bit 2: Anforderung durch Sprite-Sprite-Kollision (Reg. $D01E)
-	 *                          Bit 1: Anforderung durch Sprite-Hintergrund-Kollision (Reg. $D01F)
-	 *                          Bit 0: Anforderung durch Rasterstrahl (Reg. $D012)
-	 *                          Schreiben:
-	 *                          1 in jeweiliges Bit schreiben = zugehöriges Interrupt-Flag löschen
- */
+		/*
+		 *    $D019 	53273 	25 	Interrupt Request, Bit = 1 = an
+		 *                          Lesen:
+		 *                          Bit 7: IRQ durch VIC ausgelöst
+		 *                          Bit 6..4: unbenutzt
+		 *                          Bit 3: Anforderung durch Lightpen
+		 *                          Bit 2: Anforderung durch Sprite-Sprite-Kollision (Reg. $D01E)
+		 *                          Bit 1: Anforderung durch Sprite-Hintergrund-Kollision (Reg. $D01F)
+		 *                          Bit 0: Anforderung durch Rasterstrahl (Reg. $D012)
+		 *                          Schreiben:
+		 *                          1 in jeweiliges Bit schreiben = zugehöriges Interrupt-Flag löschen
+		 */
 		final int value = super.readByte( VIC_IRQ_ACTIVE_BITS );
 		if ( (value & 1<<7) == 0 ) // only trigger interrupt if no other VIC IRQ is still active 
 		{
@@ -460,22 +463,16 @@ public class VIC extends SlowMemory
 
 		switch( offset ) 
 		{
-			case VIC_CTRL1: // $d011
+			case VIC_CTRL1: // $d011 , bit 7 is bit 8 of beamY
+				int value = super.readByte( VIC_CTRL1 );
+				if ( (beamY & 1<<8) != 0 ) {
+					value |= 0b1000_0000;
+				} else {
+					value &= 0b0111_1111;
+				}					
+				return value;
 			case VIC_SCANLINE:
-				final byte lo = (byte) beamY;
-				final byte hi = (byte) (beamY>>8);
-
-				if ( offset == VIC_CTRL1 ) 
-				{
-					int hiBit = super.readByte( VIC_CTRL1 );
-					if ( hi != 0 ) {
-						hiBit |= 0b1000_0000;
-					} else {
-						hiBit &= 0b0111_1111;
-					}					
-					return hiBit;
-				}
-				return lo;
+				return (byte) beamY;
 			default:
 				// $$FALL-THROUGH$$
 		}
@@ -500,8 +497,6 @@ public class VIC extends SlowMemory
 	 */
 	public void setCurrentBankNo(int bankNo) 
 	{
-		currentBank = bankNo;
-		
 		// video RAM location
 		/*
 		 *    $D018 	53272 	24 	VIC-Speicherkontrollregister
@@ -551,24 +546,24 @@ public class VIC extends SlowMemory
 		switch( offset ) 
 		{
 			/*
- 			 *    $D019 	53273 	25 	Interrupt Request, Bit = 1 = an
-	 *                          Lesen:
-	 *                          Bit 7: IRQ durch VIC ausgelöst
-	 *                          Bit 6..4: unbenutzt
-	 *                          Bit 3: Anforderung durch Lightpen
-	 *                          Bit 2: Anforderung durch Sprite-Sprite-Kollision (Reg. $D01E)
-	 *                          Bit 1: Anforderung durch Sprite-Hintergrund-Kollision (Reg. $D01F)
-	 *                          Bit 0: Anforderung durch Rasterstrahl (Reg. $D012)
-	 *                          Schreiben:
-	 *                          1 in jeweiliges Bit schreiben = zugehöriges Interrupt-Flag löschen
-	 *    $D01A 	53274 	26 	Interrupt Request: Maske, Bit = 1 = an
-	 *                          Ist das entsprechende Bit hier und in $D019 gesetzt, wird ein IRQ ausgelöst und Bit 7 in $D019 gesetzt
-	 *                          Bit 7..4: unbenutzt
-	 *                          Bit 3: IRQ wird durch Lightpen ausgelöst
-	 *                          Bit 2: IRQ wird durch S-S-Kollision ausgelöst
-	 *                          Bit 1: IRQ wird durch S-H-Kollision ausgelöst
-	 *                          Bit 0: IRQ wird durch Rasterstrahl ausgelöst
- */
+			 *    $D019 	53273 	25 	Interrupt Request, Bit = 1 = an
+			 *                          Lesen:
+			 *                          Bit 7: IRQ durch VIC ausgelöst
+			 *                          Bit 6..4: unbenutzt
+			 *                          Bit 3: Anforderung durch Lightpen
+			 *                          Bit 2: Anforderung durch Sprite-Sprite-Kollision (Reg. $D01E)
+			 *                          Bit 1: Anforderung durch Sprite-Hintergrund-Kollision (Reg. $D01F)
+			 *                          Bit 0: Anforderung durch Rasterstrahl (Reg. $D012)
+			 *                          Schreiben:
+			 *                          1 in jeweiliges Bit schreiben = zugehöriges Interrupt-Flag löschen
+			 *    $D01A 	53274 	26 	Interrupt Request: Maske, Bit = 1 = an
+			 *                          Ist das entsprechende Bit hier und in $D019 gesetzt, wird ein IRQ ausgelöst und Bit 7 in $D019 gesetzt
+			 *                          Bit 7..4: unbenutzt
+			 *                          Bit 3: IRQ wird durch Lightpen ausgelöst
+			 *                          Bit 2: IRQ wird durch S-S-Kollision ausgelöst
+			 *                          Bit 1: IRQ wird durch S-H-Kollision ausgelöst
+			 *                          Bit 0: IRQ wird durch Rasterstrahl ausgelöst
+			 */
 			case VIC_IRQ_ACTIVE_BITS:
 				final int mask = ~value;
 				final int oldValue = super.readByte( VIC_IRQ_ACTIVE_BITS );
@@ -678,7 +673,7 @@ public class VIC extends SlowMemory
 				final int glyphAdr = character << 3; // *8 bytes per glyph
 
 				final int word;
-				
+
 				/*
 				 * Bank no.	Bit pattern in 56576/$DD00        Character ROM available?
 				 * 0	xxxxxx00	49152–65535	$C000–$FFFF	  No
@@ -703,9 +698,9 @@ public class VIC extends SlowMemory
 					}			
 					return backgroundColor;
 				} 
-				
+
 				// multi-color text mode, 2 bits per pixel => 4x8 pixel per glyph
-				
+
 				/*
 				 * Farb-Bits 	Entsprechende Farbe 	Speicheradresse
 				 * 00 	        Bildschirmfarbe 	          53281   $D021
@@ -724,10 +719,10 @@ public class VIC extends SlowMemory
 				}
 				// multi-color mode enabled for this character
 				color &= 0b0111;
-				
+
 				final int bitOffset = 3-((x/2)%4);
 				final int mask = 0b11 << 2*bitOffset;
-				
+
 				switch( (word & mask) >> 2*bitOffset ) 
 				{
 					case 0:
@@ -832,6 +827,11 @@ The flip flops are switched according to the following rules:
 	public void reset()
 	{
 		super.reset();
+		
+		synchronized( frontBuffer ) 
+		{
+			rendered = true;
+		}
 
 		displayEnabled = true;
 
@@ -862,16 +862,22 @@ The flip flops are switched according to the following rules:
 	{
 		synchronized( frontBuffer ) 
 		{
+			if ( ! rendered ) {				
+				System.out.println("VIC frame dropped");
+			}			
 			BufferedImage tmp = frontBuffer;
 			frontBuffer= backBuffer;
 			backBuffer = tmp;
+			rendered = false;
 		}
 	}
 
 	public void render(Graphics2D graphics,int width,int height)
 	{
-		synchronized( frontBuffer ) {
+		synchronized( frontBuffer ) 
+		{
 			graphics.drawImage( frontBuffer , 0 , 0 , width, height , null );
+			rendered = true;
 		}
 	}
 }
