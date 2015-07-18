@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import de.codesourcery.j6502.emulator.Emulator;
+import de.codesourcery.j6502.emulator.IOArea.JoyDirection;
 import de.codesourcery.j6502.emulator.Keyboard;
 import de.codesourcery.j6502.emulator.Keyboard.Key;
 import de.codesourcery.j6502.emulator.Keyboard.KeyLocation;
@@ -34,6 +35,9 @@ public class KeyboardInputListener extends KeyAdapter
 	private Component peer;
 	
 	private volatile boolean pasteEnabled = true;
+
+	private JoyDirection joyDirection = JoyDirection.CENTER;
+	private boolean joyFire = false;
 	
 	public KeyboardInputListener(Emulator emulator) 
 	{
@@ -63,6 +67,21 @@ public class KeyboardInputListener extends KeyAdapter
 	@Override
 	public void keyPressed(java.awt.event.KeyEvent e)
 	{
+		switch( e.getKeyCode() ) 
+		{
+			case KeyEvent.VK_NUMPAD9: joyDirection = JoyDirection.NE; joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD8: joyDirection = JoyDirection.N;  joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD7: joyDirection = JoyDirection.NW; joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD6: joyDirection = JoyDirection.E;  joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD4: joyDirection = JoyDirection.W;  joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD3: joyDirection = JoyDirection.SE; joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD5: joyDirection = JoyDirection.S;  joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD1: joyDirection = JoyDirection.SW; joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD0: joyFire = true; joystickChanged(); return;
+			default:
+				// $$FALL-THROUGH$$
+		}
+		
 		final KeyLocation location = getLocation(e);
 		final Set<Modifier> modifiers = getModifiers( e );
 		
@@ -88,6 +107,41 @@ public class KeyboardInputListener extends KeyAdapter
 			}
 		}
 	}
+	
+	private void joystickChanged() 
+	{
+		synchronized( emulator ) {
+			emulator.getMemory().ioArea.setJoystick2( joyDirection , joyFire );
+		}
+	}	
+	
+	@Override
+	public void keyReleased(java.awt.event.KeyEvent e)
+	{
+		switch( e.getKeyCode() ) 
+		{
+			case KeyEvent.VK_NUMPAD9: joyDirection = JoyDirection.CENTER; joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD8: joyDirection = JoyDirection.CENTER; joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD7: joyDirection = JoyDirection.CENTER; joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD6: joyDirection = JoyDirection.CENTER; joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD4: joyDirection = JoyDirection.CENTER; joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD3: joyDirection = JoyDirection.CENTER; joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD5: joyDirection = JoyDirection.CENTER; joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD1: joyDirection = JoyDirection.CENTER; joystickChanged(); return;
+			case KeyEvent.VK_NUMPAD0: joyFire = false; joystickChanged(); return;
+			default:
+				// $$FALL-THROUGH$$
+		}
+		
+		final Key released = Keyboard.keyCodeToKey( e.getKeyCode() , getLocation(e) , getModifiers(e) );
+		if ( released != null ) 
+		{
+			synchronized( emulator ) 
+			{
+				emulator.getKeyboardBuffer().keyReleased( released , emulator.getCPU().cycles );
+			}
+		}
+	}		
 
 	private Set<Keyboard.Modifier> getModifiers(KeyEvent e)
 	{
@@ -172,17 +226,4 @@ public class KeyboardInputListener extends KeyAdapter
 		}
 		return KeyLocation.STANDARD;
 	}
-	
-	@Override
-	public void keyReleased(java.awt.event.KeyEvent e)
-	{
-		final Key released = Keyboard.keyCodeToKey( e.getKeyCode() , getLocation(e) , getModifiers(e) );
-		if ( released != null ) 
-		{
-			synchronized( emulator ) 
-			{
-				emulator.getKeyboardBuffer().keyReleased( released , emulator.getCPU().cycles );
-			}
-		}
-	}	
 }

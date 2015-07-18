@@ -147,6 +147,7 @@ public class VIC extends SlowMemory
 	 *    $D00F 	53263 	15 	Y-Koordinate für Sprite 7 (0..255)
 	 *    $D010 	53264 	16 	Bit 8 für die obigen X-Koordinaten (0..255) , jedes Bit steht für eins der Sprites 0..7
 	 *
+	 *    value=00011011
 	 *    $D011 	53265 	17 	Steuerregister, Einzelbedeutung der Bits (1 = an):
 	 *                          Bit 7: Bit 8 von $D012
 	 *                          Bit 6: Extended Color Modus
@@ -321,7 +322,7 @@ public class VIC extends SlowMemory
 	private BufferedImage backBuffer;
 
 	protected int videoRAMAdr;
-	protected boolean readGlyphsFromRAM;
+	private int currentBank;
 	protected int charROMAdr;
 
 	private int textColumnCount=40;
@@ -337,6 +338,7 @@ public class VIC extends SlowMemory
 	protected int backgroundColor;
 	protected int borderColor;
 
+	private boolean rasterIRQEnabled = false;
 	private int irqOnRaster = -1;
 
 	private int beamX;
@@ -418,16 +420,37 @@ public class VIC extends SlowMemory
 					tmpBeamY = 0;
 					swapBuffers();
 				}
-				// TODO: Implement raster IRQ
-				//				if ( irqOnRaster == tmpBeamY ) 
-				//				{
-				//					cpu.queueInterrupt();
-				//				}
+				if ( rasterIRQEnabled && irqOnRaster == tmpBeamY ) 
+				{
+					triggerRasterIRQ(cpu);
+				}
 			}
 		}
 
 		beamX = tmpBeamX;
 		beamY = tmpBeamY;
+	}
+	
+	private void triggerRasterIRQ(CPU cpu) 
+	{
+/*
+ 			 *    $D019 	53273 	25 	Interrupt Request, Bit = 1 = an
+	 *                          Lesen:
+	 *                          Bit 7: IRQ durch VIC ausgelöst
+	 *                          Bit 6..4: unbenutzt
+	 *                          Bit 3: Anforderung durch Lightpen
+	 *                          Bit 2: Anforderung durch Sprite-Sprite-Kollision (Reg. $D01E)
+	 *                          Bit 1: Anforderung durch Sprite-Hintergrund-Kollision (Reg. $D01F)
+	 *                          Bit 0: Anforderung durch Rasterstrahl (Reg. $D012)
+	 *                          Schreiben:
+	 *                          1 in jeweiliges Bit schreiben = zugehöriges Interrupt-Flag löschen
+ */
+		final int value = super.readByte( VIC_IRQ_ACTIVE_BITS );
+		if ( (value & 1<<7) == 0 ) // only trigger interrupt if no other VIC IRQ is still active 
+		{
+			super.writeByte( VIC_IRQ_ACTIVE_BITS , (byte) (value|1<<0|1<<7) );
+			cpu.queueInterrupt();
+		}
 	}
 
 	@Override
@@ -442,14 +465,14 @@ public class VIC extends SlowMemory
 				final byte lo = (byte) beamY;
 				final byte hi = (byte) (beamY>>8);
 
-				int hiBit = super.readByte( VIC_CTRL1 );
-				if ( hi != 0 ) {
-					hiBit |= 0b1000_0000;
-				} else {
-					hiBit &= 0b0111_1111;
-				}
 				if ( offset == VIC_CTRL1 ) 
 				{
+					int hiBit = super.readByte( VIC_CTRL1 );
+					if ( hi != 0 ) {
+						hiBit |= 0b1000_0000;
+					} else {
+						hiBit &= 0b0111_1111;
+					}					
 					return hiBit;
 				}
 				return lo;
@@ -477,6 +500,8 @@ public class VIC extends SlowMemory
 	 */
 	public void setCurrentBankNo(int bankNo) 
 	{
+		currentBank = bankNo;
+		
 		// video RAM location
 		/*
 		 *    $D018 	53272 	24 	VIC-Speicherkontrollregister
@@ -488,6 +513,7 @@ public class VIC extends SlowMemory
 		 * When in TEXT SCREEN MODE, the VIC-II looks to 53272 for information on where the character set and text screen character RAM is located:
 		 */
 		final int value = super.readByte(VIC_MEMORY_MAPPING);
+		System.out.println("VIC: mem_mapping is "+HexDump.toBinaryString( (byte) value ) );
 		final int videoRAMOffset = 1024 * ( ( value & 0b1111_0000) >>4 ); // The four most significant bits form a 4-bit number in the range 0 thru 15: Multiplied with 1024 this gives the start address for the screen character RAM.
 		final int glyphRAMOffset = 2048 * ( ( value & 0b0000_1110) >> 1); // Bits 1 thru 3 (weights 2 thru 8) form a 3-bit number in the range 0 thru 7: Multiplied with 2048 this gives the start address for the character set.
 
@@ -495,19 +521,15 @@ public class VIC extends SlowMemory
 		switch( bankNo ) {
 			case 0: 
 				bankAdr = 0xc000;
-				readGlyphsFromRAM = true;
 				break;
 			case 1: 
 				bankAdr = 0x8000;
-				readGlyphsFromRAM = false;
 				break;
 			case 2: 
 				bankAdr = 0x4000;
-				readGlyphsFromRAM = true;
 				break;
 			case 3: 
 				bankAdr = 0x0000;
-				readGlyphsFromRAM = false;
 				break;
 			default:
 				throw new RuntimeException("Unreachable code reached");
@@ -518,7 +540,7 @@ public class VIC extends SlowMemory
 
 		System.out.println("VIC: Bank #"+bankNo+" ("+HexDump.toAdr( bankAdr )+")");
 		System.out.println("VIC: Video RAM @ "+HexDump.toAdr( videoRAMAdr ) );
-		System.out.println("VIC: Char ROM @ "+HexDump.toAdr( charROMAdr ) +" (from RAM: "+readGlyphsFromRAM+")" );
+		System.out.println("VIC: Char ROM @ "+HexDump.toAdr( charROMAdr )  );
 	}
 
 	@Override
@@ -528,12 +550,43 @@ public class VIC extends SlowMemory
 
 		switch( offset ) 
 		{
+			/*
+ 			 *    $D019 	53273 	25 	Interrupt Request, Bit = 1 = an
+	 *                          Lesen:
+	 *                          Bit 7: IRQ durch VIC ausgelöst
+	 *                          Bit 6..4: unbenutzt
+	 *                          Bit 3: Anforderung durch Lightpen
+	 *                          Bit 2: Anforderung durch Sprite-Sprite-Kollision (Reg. $D01E)
+	 *                          Bit 1: Anforderung durch Sprite-Hintergrund-Kollision (Reg. $D01F)
+	 *                          Bit 0: Anforderung durch Rasterstrahl (Reg. $D012)
+	 *                          Schreiben:
+	 *                          1 in jeweiliges Bit schreiben = zugehöriges Interrupt-Flag löschen
+	 *    $D01A 	53274 	26 	Interrupt Request: Maske, Bit = 1 = an
+	 *                          Ist das entsprechende Bit hier und in $D019 gesetzt, wird ein IRQ ausgelöst und Bit 7 in $D019 gesetzt
+	 *                          Bit 7..4: unbenutzt
+	 *                          Bit 3: IRQ wird durch Lightpen ausgelöst
+	 *                          Bit 2: IRQ wird durch S-S-Kollision ausgelöst
+	 *                          Bit 1: IRQ wird durch S-H-Kollision ausgelöst
+	 *                          Bit 0: IRQ wird durch Rasterstrahl ausgelöst
+ */
+			case VIC_IRQ_ACTIVE_BITS:
+				final int mask = ~value;
+				final int oldValue = super.readByte( VIC_IRQ_ACTIVE_BITS );
+				final int newValue = oldValue & mask;
+				super.writeByte( VIC_IRQ_ACTIVE_BITS , (byte) newValue ); 
+				break;
+			case VIC_IRQ_ENABLE_BITS:
+				rasterIRQEnabled = (value & 1<<0) != 0;
+				System.out.println("Raster IRQ enabled: "+rasterIRQEnabled);
+				break;
 			case VIC_MEMORY_MAPPING:
 				setCurrentBankNo( mainMemory.ioArea.cia2.readByte( 0 ) & 0b11); // read bank no. from CIA2 PRA bits 0..1
 				break;
 			case VIC_SCANLINE:
 				// current scan line, lo-byte
-				irqOnRaster = (short) (irqOnRaster | (value & 0xff) );
+				int newValue2 = irqOnRaster & 0b1_0000_0000;
+				newValue2 |= (value & 0xff);
+				irqOnRaster = newValue2;
 				break;
 			case VIC_CTRL1:
 
@@ -548,9 +601,9 @@ public class VIC extends SlowMemory
 				 */
 
 				if ( ( value & 0b1000_0000 ) != 0 ) {
-					irqOnRaster = (short) ( 0b0100 | (irqOnRaster & 0xff) ); // set hi-bit
+					irqOnRaster = ( 1<<8 | (irqOnRaster & 0xff) ); // set hi-bit
 				} else {
-					irqOnRaster = (short) (irqOnRaster & 0xff); // clear hi-bit
+					irqOnRaster = (irqOnRaster & 0xff); // clear hi-bit
 				}
 
 				yScroll= ( value & 0x111);
@@ -625,11 +678,18 @@ public class VIC extends SlowMemory
 				final int glyphAdr = character << 3; // *8 bytes per glyph
 
 				final int word;
-				if ( readGlyphsFromRAM ) 
-				{
-					word = mainMemory.readByte( charROMAdr + glyphAdr + (y%8) );
-				} else {
+				
+				/*
+				 * Bank no.	Bit pattern in 56576/$DD00        Character ROM available?
+				 * 0	xxxxxx00	49152–65535	$C000–$FFFF	  No
+				 * 1	xxxxxx01	32768–49151	$8000–$BFFF	  Yes, at 36864–40959 $9000–$9FFF
+				 * 2	xxxxxx10	16384–32767	$4000–$7FFF	  No
+				 * 3	xxxxxx11	0–16383	$0000–$3FFF	      Yes, at 4096–8192 $1000–$1FFF
+				 */
+				if ( charROMAdr == 0x1000 | charROMAdr == 0x9000) {
 					word = mainMemory.getCharacterROM().readByte( glyphAdr + (y%8) );
+				} else {
+					word = mainMemory.readByte( charROMAdr + glyphAdr + (y%8) );
 				}
 
 				if ( graphicsMode == GraphicsMode.MODE_0) // text mode , 8x8 pixel per glyph
@@ -682,8 +742,12 @@ public class VIC extends SlowMemory
 						throw new RuntimeException("Unreachable code reached");
 				}
 			}
+			case MODE_2: // // extendedColor = false | bitmap = true | multiColor = false
+			{
+				// TODO: Implement me
+			}
 			default:
-				return backgroundColor;
+				return INT_COLORS[ beamX%2 ];
 		}
 	}
 
@@ -776,6 +840,7 @@ The flip flops are switched according to the following rules:
 
 		cycleOnCurrentLine = 0;
 
+		rasterIRQEnabled = false;
 		irqOnRaster = -1;
 
 		beamX = 0;

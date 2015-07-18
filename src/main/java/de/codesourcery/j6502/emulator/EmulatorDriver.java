@@ -231,7 +231,7 @@ public abstract class EmulatorDriver extends Thread
 			}
 			
 			if ( DELAY_LOOP_ENABLED ) {
-				for ( int i = 139 ; i > 0 ; i-- ) {
+				for ( int i = 55 ; i > 0 ; i-- ) {
 					dummy += Math.sqrt( i );
 				}
 			}

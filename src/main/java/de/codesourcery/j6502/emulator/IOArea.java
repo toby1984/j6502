@@ -12,23 +12,61 @@ import de.codesourcery.j6502.emulator.Keyboard.Key;
 public class IOArea extends SlowMemory
 {
 	public final KeyboardBuffer keyboardBuffer = new KeyboardBuffer();
-	
+
 	private final IMemoryRegion colorRAMBank; // RAM that covers $D000 - $DFFF
-	
+
 	public final VIC vic;
 	public final IECBus iecBus;
-	
+
+	public static enum JoyDirection 
+	{
+		N, NE, E, SE, S, SW, W , NW, CENTER;
+	}
+
+	/* Joystick masks:
+	 * 
+	 * Bit 0 => left (low-active , 0 = on)
+	 * Bit 1 => right (low-active!)
+	 * Bit 2 => up (low-active!)
+	 * Bit 3 => down (low-active!)
+	 * Bit 4 => fire (low-active!)
+	 */	
+	protected int joy1Mask = 0xff; 
+	protected int joy2Mask = 0xff; 
+
 	public final CIA cia1 = new CIA("CIA #1" , AddressRange.range( 0xdc00, 0xdd00 ) ) {
 
 		@Override
 		public int readByte(int adr)
 		{
+			/*
+$DC00
+PRA 	Data Port A 	Monitoring/control of the 8 data lines of Port A
+
+        Read/Write: Bit 0..7 keyboard matrix columns
+        Read: Joystick Port 2: Bit 0: up, Bit 1: down, Bit 2: left, Bit 3: right, Bit 4: fire ( all bits 0 = active )
+        Read: Lightpen: Bit 4 (as fire button), connected also with "/LP" (Pin 9) of the VIC
+        Read: Paddles: Bit 2..3 Fire buttons, Bit 6..7 Switch control port 1 (%01=Paddles A) or 2 (%10=Paddles B)
+----
+$DC01
+PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines are used for multiple purposes:
+
+        Read/Write: Bit 0..7 keyboard matrix rows
+        Read: Joystick Port 1: Bit 0: up, Bit 1: down, Bit 2: left, Bit 3: right, Bit 4: fire ( all bits 0 = active )
+        Read: Bit 6: Timer A: Toggle/Impulse output (see register 14 bit 2)
+        Read: Bit 7: Timer B: Toggle/Impulse output (see register 15 bit 2)			 
+			 */
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
+			if ( offset == CIA1_PRA ) 
+			{
+				final int pra = super.readByte( CIA1_PRA );
+				return pra & joy2Mask;
+			} 
 			if ( offset == CIA1_PRB )
 			{
 				// rowBit / PRB , columnBit / PRA )
 				int pra = super.readByte( CIA1_PRA ); // figure out which keyboard column to read (columns to be read have a 0 bit in here)
-				int result2 = 0xff; // keyboard lines are low-active, so 0xff = no key pressed
+				int result2 = 0xff; // keyboard lines are low-active, so 1 = key NOT pressed , 0 = key pressed
 				for ( int col = 0 ; col < 8 ; col++ ) {
 					if ( ( pra & (1<< col ) ) == 0 ) { // got column (bit is low-active)
 						int tmp = keyboardColumns[col];
@@ -39,11 +77,75 @@ public class IOArea extends SlowMemory
 						}
 					}
 				}
-				return result2;
+				return result2 & joy1Mask;
 			}
 			return super.readByte( offset );
 		}
 	};
+
+	public void setJoystick1(JoyDirection direction,boolean fire) 
+	{
+//		System.out.println("Joystick #2: "+direction+",fire: "+fire);		
+		joy1Mask = calcJoystickMask(direction,fire);
+	}
+	
+	public void setJoystick2(JoyDirection direction,boolean fire) 
+	{
+//		System.out.println("Joystick #2: "+direction+",fire: "+fire);
+		joy2Mask = calcJoystickMask(direction,fire);
+	}
+	
+	private int calcJoystickMask(JoyDirection direction,boolean fire) 
+	{
+		/* All bits: 0 = active, 1 = inactive
+         * Bit 0: up,
+         * Bit 1: down,
+         * Bit 2: left,
+         * Bit 3: right,
+         * Bit 4: fire 
+		 */
+
+		int mask = 0xff;
+		switch( direction ) 
+		{
+			case CENTER:
+				break;
+			case E:
+				mask &= ~(1<<3); // right
+				break;
+			case N:
+				mask &= ~(1<<0); // up
+				break;
+			case NE:
+				mask &= ~(1<<0); // up
+				mask &= ~(1<<3); // right
+				break;
+			case NW:
+				mask &= ~(1<<0); // up
+				mask &= ~(1<<2); // left
+				break;
+			case S:
+				mask &= ~(1<<1); // down
+				break;
+			case SE:
+				mask &= ~(1<<1); // down
+				mask &= ~(1<<3); // right
+				break;
+			case SW:
+				mask &= ~(1<<1); // down
+				mask &= ~(1<<2); // left				
+				break;
+			case W:
+				mask &= ~(1<<2); // left
+				break;
+			default:
+				throw new IllegalArgumentException("Unhandled joystick direction: "+direction);
+		}
+		if (fire) {
+			mask &= ~(1<<4);
+		}
+		return mask;
+	}
 
 	public final CIA cia2 = new CIA("CIA #2" , AddressRange.range( 0xdd00, 0xde00 ) )
 	{
@@ -76,7 +178,7 @@ public class IOArea extends SlowMemory
 
 				final int oldValue = super.readByte( adr );
 				super.writeByte( adr , value);
-				
+
 				if ( (oldValue & 0b11) != (value & 0b11 ) ) // VIC bank was changed, recalculate RAM offsets 
 				{
 					vic.setCurrentBankNo( value & 0b11 );
@@ -164,7 +266,7 @@ public class IOArea extends SlowMemory
 		super(identifier, range);
 
 		this.colorRAMBank = colorRAMBank;
-		
+
 		cpuDevice = new SerialDevice() {
 
 			@Override
@@ -256,7 +358,7 @@ public class IOArea extends SlowMemory
 
 		// I/O area starts at 0xd000
 		// but input to writeByte is already translated by -d000
-		
+
 		if ( offset >= 0x800 && offset < 0x800+1024) { 
 			colorRAMBank.writeByte( offset, value ); 
 			return;
@@ -283,7 +385,7 @@ public class IOArea extends SlowMemory
 		// this I/O area starts at 0xd000
 		// but input to writeByte is already translated by -d000
 		final int offset = adr & 0xffff;
-		
+
 		if ( offset >= 0x800 && offset < 0x800+1024) { 
 			return colorRAMBank.readByte( adr );
 		}
@@ -307,6 +409,9 @@ public class IOArea extends SlowMemory
 		for ( int i = 0 ; i < keyboardColumns.length ; i++ ) {
 			keyboardColumns[i] = 0xff;
 		}
+
+		joy1Mask = 0xff;
+		joy2Mask = 0xff;
 
 		keyboardBuffer.reset();
 		vic.reset();

@@ -9,9 +9,6 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
-import java.awt.datatransfer.Clipboard;
-import java.awt.datatransfer.DataFlavor;
-import java.awt.datatransfer.Transferable;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -20,17 +17,14 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.font.LineMetrics;
 import java.awt.geom.Rectangle2D;
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
-import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -83,10 +77,6 @@ import de.codesourcery.j6502.emulator.Floppy;
 import de.codesourcery.j6502.emulator.IECBus.StateSnapshot;
 import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
-import de.codesourcery.j6502.emulator.Keyboard;
-import de.codesourcery.j6502.emulator.Keyboard.Key;
-import de.codesourcery.j6502.emulator.Keyboard.KeyLocation;
-import de.codesourcery.j6502.emulator.Keyboard.Modifier;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
 
@@ -95,7 +85,7 @@ public class Debugger
 	/**
 	 * Time between consecutive UI updates while trying to run emulation at full speed.
 	 */
-	public static final int UI_REFRESH_MILLIS = 250;
+	public static final int UI_REFRESH_MILLIS = 500;
 
 	protected final Emulator emulator = new Emulator();
 
@@ -385,7 +375,7 @@ public class Debugger
 		{
 			chooser = new JFileChooser(new File( current.get().getSource().substring("file:".length()) ) );
 		} else {
-			chooser = new JFileChooser();
+			chooser = new JFileChooser( new File("/home/tobi/mars_workspace/j6502/src/main/resources/disks"));
 		}
 		int result = chooser.showOpenDialog( null );
 
