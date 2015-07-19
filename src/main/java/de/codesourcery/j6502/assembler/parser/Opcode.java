@@ -1603,7 +1603,91 @@ Subroutines are normally terminated by a RTS op code.
 			cpu.incPC();
 			cpu.cycles+=2;
 		}
+	},
+	// ======================
+	// !!! ILLEGAL OPCODES !!!
+	// =======================
+	
+	/* 
+	 * See http://www.retro-programming.de/?page_id=2248
+	 * 
+	 * AXS: Akku AND X-Register+Stored to memory (alternatives Mnemonic: SAX)
+     * AXS absolut ($8F, 3B, 4T, <keine>)
+     * 
+     * AXS funktioniert so: Die Inhalte von Akku und X-Register werden UND-Verknüpft, aber OHNE eines der beiden Register zu ändern!  
+     * Das Ergbnis wird dann an der angegebenen Adresse abgelegt. Die Flags im Statusregister (SR) bleiben ebenfalls unverändert!
+     * 
+     * Wollte man das mit normalen Befehlen nachbilden, dann bräuchte man eine ganze Menge davon:
+     * 
+	 * Adressierung | OpCode | Bytes | TZ
+     * absolut      |  $8F   |   3   |  4
+     * Zero-Page    |  $87   |   2   |  3
+     * Zero-Page,X  |  $97   |   2   |  4
+     * indirekt X   |  $83   |   2   |  6
+	 */
+	AXS("AXS",(byte) 0x87) 
+	{
+		// TODO: Maybe add assembler support ??
+		
+		@Override
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) 
+		{
+			int value = cpu.getAccumulator() & cpu.getX();
+			
+			/*
+				case 0x85: // Zero Page     STA $44       $85  2   3
+					writeZeroPage( cpu.getAccumulator() , cpu , memory );
+					cpu.cycles += 3;
+					break;
+				case 0x95: // Zero Page,X   STA $44,X     $95  2   4
+					writeAbsoluteZeroPageXValue( cpu.getAccumulator() , cpu, memory );
+					cpu.cycles += 4;
+					break;
+				case 0x8D: // Absolute      STA $4400     $8D  3   4
+					writeAbsoluteValue( cpu.getAccumulator() , cpu , memory );
+					cpu.cycles += 4;
+					break;
+				case 0x9D: // Absolute,X    STA $4400,X   $9D  3   5
+					writeAbsoluteXValue( cpu.getAccumulator() , cpu , memory );
+					cpu.cycles += 5;
+					break;
+				case 0x99: // Absolute,Y    STA $4400,Y   $99  3   5
+					writeAbsoluteYValue( cpu.getAccumulator() , cpu , memory );
+					cpu.cycles += 5;
+					break;
+				case 0x81: // Indexed Indirect,X    STA ($44,X)   $81  2   6
+					writeIndexedIndirectX( cpu.getAccumulator() , cpu , memory );
+					cpu.cycles += 6;
+					break;
+				case 0x91: // Indirect,Y    STA ($44),Y   $91  2   6
+					writeIndirectIndexedY( cpu.getAccumulator() , cpu , memory );
+					cpu.cycles += 6;
+					break;
+			 */
+			switch( opcode ) 
+			{
+				case 0x8f:
+					writeAbsoluteValue( value , cpu , memory );
+					cpu.cycles += 4;
+					break;
+				case 0x87:
+					writeZeroPage( value , cpu , memory );
+					cpu.cycles += 3;
+					break;
+				case 0x97:
+					writeAbsoluteZeroPageXValue( value , cpu, memory );
+					cpu.cycles += 4;
+					break;
+				case 0x83:
+					writeIndexedIndirectX( value , cpu , memory );
+					cpu.cycles += 6;
+					break;
+				default:
+					throw new RuntimeException("Unreachable code reached"); // caller screwed up
+			}
+		}
 	};
+	
 
 	private final String mnemonic;
 	private final byte opcode;

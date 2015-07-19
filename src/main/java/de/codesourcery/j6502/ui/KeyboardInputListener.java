@@ -145,8 +145,8 @@ public class KeyboardInputListener extends KeyAdapter
 			joyDirection = JoyDirection.CENTER;
 			joyFire = false;
 			joystickChanged();
+			this.joystickPort = port;			
 		}
-		this.joystickPort = port;
 	}
 	
 	@Override

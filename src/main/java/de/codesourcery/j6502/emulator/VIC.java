@@ -1078,8 +1078,6 @@ public class VIC extends SlowMemory
 				if ( color <= 7) { // 0111 bits => use regular color
 					return INT_COLORS[ color ];
 				}
-				// multi-color mode enabled for this character
-				color &= 0b0111;
 
 				final int bitOffset = 3-((x/2)%4);
 				final int mask = 0b11 << 2*bitOffset;
