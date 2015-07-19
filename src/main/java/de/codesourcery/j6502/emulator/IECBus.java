@@ -23,6 +23,7 @@ public class IECBus
 
 	private final SerialDevice cpu;
 	private final List<SerialDevice> devices = new ArrayList<>();
+	private final SerialDevice[] deviceArray = new SerialDevice[32];
 	private final List<StateSnapshot> states = new ArrayList<>();
 
 	private boolean atn=true;
@@ -84,12 +85,21 @@ public class IECBus
 
 	public void addDevice(SerialDevice device)
 	{
+		if ( deviceArray[ device.getPrimaryAddress() ] != null ) {
+			throw new IllegalArgumentException("There already is a device registered with primary address #"+device.getPrimaryAddress());
+		}
 		devices.add( device );
+		deviceArray[ device.getPrimaryAddress() ] = device;
 	}
 
-	public Optional<SerialDevice> getDevice(int primaryAddress)
+	/**
+	 * 
+	 * @param primaryAddress
+	 * @return device or <code>NULL</code> if there is no such device
+	 */
+	public SerialDevice getDevice(int primaryAddress)
 	{
-		return devices.stream().filter( d -> d.getPrimaryAddress() == primaryAddress ).findFirst();
+		return deviceArray[ primaryAddress ];
 	}
 	
 	public List<SerialDevice> getDevices() {
@@ -165,7 +175,7 @@ public class IECBus
 		boolean sumData = true;
 
 		final boolean atnLowered = (this.atn != cpu.getATN()) && ! cpu.getATN();
-		for (int i = 0; i < devices.size(); i++)
+		for (int i = 0, len = devices.size() ; i < len ; i++)
 		{
 			final SerialDevice dev = devices.get(i);
 			dev.tick(this , atnLowered );

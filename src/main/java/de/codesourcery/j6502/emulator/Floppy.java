@@ -3,7 +3,9 @@ package de.codesourcery.j6502.emulator;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -19,6 +21,8 @@ public class Floppy extends AbstractSerialDevice
 	
 	// key is channel #
 	private final Map<Integer,ActiveTransfer> activeTransfers = new HashMap<>();
+	
+	private final List<ActiveTransfer> runningTransfers = new ArrayList<>();
 	
 	private D64File disk;
 	private DriveMessage driveMessage=new DriveMessage( MessageCode.BOOT_MSG );
@@ -105,7 +109,7 @@ public class Floppy extends AbstractSerialDevice
 		}
 	}
 	
-	protected class SendTransfer extends ActiveTransfer
+	protected final class SendTransfer extends ActiveTransfer
 	{
 		protected boolean eof;
 		private final InputStream in;
@@ -146,12 +150,14 @@ public class Floppy extends AbstractSerialDevice
 				catch (IOException e)
 				{
 					eof = true;
+					runningTransfers.remove( this );
 					IOUtils.closeQuietly( in );
-					throw new RuntimeException("Failed to read from "+disk,e);
+					throw new RuntimeException("Failed to read from disk",e);
 				}
 				if ( data == -1 )
 				{
 					eof = true;
+					runningTransfers.remove(this);
 					IOUtils.closeQuietly( in );
 					break;
 				}
@@ -215,6 +221,10 @@ public class Floppy extends AbstractSerialDevice
 		{
 			transfer = processCommand( getActiveChannel().receiveBuffer.readFully() );
 			activeTransfers.put( getActiveChannel().channelNo , transfer );
+			if ( !(transfer instanceof EmptyTransfer ) ) 
+			{
+				runningTransfers.add( transfer );
+			}
 			transfer.populateSendBuffer( getActiveChannel() );
 		}
 		else
@@ -345,6 +355,19 @@ public class Floppy extends AbstractSerialDevice
 	@Override
 	protected void resetHook() 
 	{
+		if ( runningTransfers != null ) { // TODO: dirty hack , resetHook() gets called from super constructor and thus the field may be NULL
+			runningTransfers.clear();
+		}
+		
 		driveMessage=new DriveMessage( MessageCode.BOOT_MSG );
+		if ( activeTransfers != null ) { // TODO: dirty hack , resetHook() gets called from super constructor and thus the field may be NULL
+			activeTransfers.clear();
+		}
+	}
+	
+	@Override
+	public boolean isDataTransferActive() 
+	{
+		return ! runningTransfers.isEmpty();
 	}
 }

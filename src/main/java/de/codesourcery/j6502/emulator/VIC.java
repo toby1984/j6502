@@ -25,8 +25,20 @@ public class VIC extends SlowMemory
 	public  static final Color Lightblue   = color( 0, 136, 255 ); // 14
 	public  static final Color Lightgrey   = color(  187, 187, 187); // 15
 
+	protected static final boolean DEBUG_MEMORY_LAYOUT = false;
+	protected static final boolean DEBUG_SET_GRAPHICS_MODE = false;
+	
+	protected static final int SPRITE_WIDTH = 24;
+	protected static final int SPRITE_HEIGHT = 21;
+	
+	protected static final int SPRITE_DOUBLE_WIDTH = SPRITE_WIDTH*2;
+	protected static final int SPRITE_DOUBLE_HEIGHT = SPRITE_HEIGHT*2;	
+	
 	private static final int CPU_CLOCK_CYCLES_PER_LINE = 63;
+
 	private static final int LAST_CPU_CYLE_IN_LINE = CPU_CLOCK_CYCLES_PER_LINE-1;
+	
+	protected static final int SPRITE_TRANSPARENT_COLOR = 0xdeadbeef;
 
 	@FunctionalInterface
 	public interface IScreenCallback 
@@ -71,11 +83,11 @@ public class VIC extends SlowMemory
 	 */
 	protected static enum GraphicsMode 
 	{
-		MODE_0(false,false,false),
-		MODE_1(false,false,true),
-		MODE_2(false,true ,false),
+		MODE_0(false,false,false), // text mode
+		MODE_1(false,false,true), // multi-color text mode
+		MODE_2(false,true ,false), // hi-res bitmap mode
 		MODE_3(false,true ,true),
-		MODE_4(true ,false,false),
+		MODE_4(true ,false,false), // extended color mode
 		MODE_5(true ,false,true),
 		MODE_6(true ,true ,false),
 		MODE_7(true ,true ,true);
@@ -128,6 +140,119 @@ public class VIC extends SlowMemory
 			INT_COLORS[i] = rgb;
 		}
 	}
+	
+	protected final Sprite[] sprites;
+	
+	protected static final class Sprite 
+	{
+		public boolean enabled;	
+		public int x;
+		public int y;
+	
+		public int color; // this is the C64 color (0...f) and NOT the actual RGB color
+		public int rgbColor;
+		
+		public final int no;
+		public boolean multiColor;
+		public boolean behindBackground;
+		
+		private int spriteWidth=SPRITE_WIDTH;
+		private int spriteHeight=SPRITE_HEIGHT;
+		
+		public Sprite(int no)  {
+			this.no = no;
+			reset();
+		}
+		
+		public int getPixelColor(VIC vic,int scrX,int scrY) 
+		{
+			// check whether the current beam position overlaps with this sprite, sprite size is 24x21 pixels
+			if ( x <= scrX && scrX < x+spriteWidth &&
+			     y <= scrY && scrY < y+spriteHeight ) 
+			{
+				final int localX;
+				if ( spriteWidth == SPRITE_DOUBLE_WIDTH ) {
+					 localX = (scrX - x)/2;
+				} else {
+					 localX = scrX - x;
+				}
+				final int localY;
+				if ( spriteHeight == SPRITE_DOUBLE_HEIGHT ) {
+					localY = (scrY - y)/2;
+				} else {
+					localY = scrY - y;
+				}
+				
+				/*
+				The location of the sprite pointers follow that of the text screen, so that if the VIC-II has been "told" (through address 53272) that the
+				 text screen RAM begins at address S, the sprite pointers reside at addresses S+1016 thru S+1023. 
+				 Since the default text screen RAM address is 1024, this puts the sprite pointers at addresses 2040 (for sprite #0) 
+				 thru 2047 (for sprite #7), or $07F8–07FF in hexadecimal.
+				To make a given sprite show the pattern that's stored in RAM at an address A (which must be divisible with 64), set the contents 
+				of the corresponding sprite pointer address to A divided by 64. For instance, if the sprite pattern begins at address 704, the pointer value will be 704 / 64 = 11. 			 
+							 */
+				final int dataPtr = vic.videoRAMAdr+1016+no;
+				final int dataAdr = 64*vic.mainMemory.readByte( dataPtr );
+				
+				if ( multiColor ) 
+				{
+					// multi-color mode enabled for this character
+					final int byteOffset = localY*3 + localX / 8; // y*24 bits 
+					final int colorBits = vic.mainMemory.readByte( dataAdr+byteOffset );
+					final int bitOffset = 3-((localX/2)%4);
+					final int mask = 0b11 << 2*bitOffset;
+					
+					/*
+                     * Bit-Paar  Farbe
+                     * 
+                     *  %00 	 transparent
+                     *  %10 	 Sprite-Farbenregister ($D027-$D02E)
+                     *  %01 	 Mehrfarbenregister #0 ($D025)
+                     *  %11 	 Mehrfarbenregister #1 ($D026) 					 
+					 */					
+					switch( (colorBits & mask) >> 2*bitOffset ) 
+					{
+						case 0: // %00
+							return SPRITE_TRANSPARENT_COLOR;
+						case 1: // %01
+							return INT_COLORS[ vic.readByte( VIC_SPRITE_COLOR01_MULTICOLOR_MODE ) & 0b1111 ];
+						case 2: // %10
+							return rgbColor;
+						case 3: // %11
+							return INT_COLORS[ vic.readByte( VIC_SPRITE_COLOR11_MULTICOLOR_MODE ) & 0b1111 ];
+					}
+					throw new RuntimeException("Unreachable code reached");
+				} 
+				
+				final int byteOffset = localY*3 + localX/8; // y*24 bits 
+				final int colorBits = vic.mainMemory.readByte( dataAdr+byteOffset ) & 0b1111;
+				
+				final int bitInByte = 7-localX%8;
+				
+				if ( (colorBits & (1<<bitInByte) ) != 0 ) 
+				{
+					return rgbColor;
+				}
+				return SPRITE_TRANSPARENT_COLOR;
+			}
+			// there's no pixel of this sprite at the current location
+			return SPRITE_TRANSPARENT_COLOR;
+		}
+		
+		public void reset() {
+			x = 0;
+			y = 0;
+			enabled = false;
+			color = 1;
+			rgbColor = INT_COLORS[color];
+			
+			multiColor = false;
+			behindBackground = false;
+			
+			spriteWidth=SPRITE_WIDTH;
+			spriteHeight=SPRITE_HEIGHT;
+		}
+	}
 
 	/* I/O area is fixed at $D000 - $DFFF.
 	 *
@@ -135,107 +260,106 @@ public class VIC extends SlowMemory
 	 * ---
 	 *
 	 * Adresse (hex) 	Adresse (dez) 	Register 	Inhalt
-	 *    $D000 	53248 	0 	X-Koordinate für Sprite 0 (0..255)
-	 *    $D001 	53249 	1 	Y-Koordinate für Sprite 0 (0..255)
-	 *    $D002 	53250 	2 	X-Koordinate für Sprite 1 (0..255)
-	 *    $D003 	53251 	3 	Y-Koordinate für Sprite 1 (0..255)
-	 *    $D004 	53252 	4 	X-Koordinate für Sprite 2 (0..255)
-	 *    $D005 	53253 	5 	Y-Koordinate für Sprite 2 (0..255)
-	 *    $D006 	53254 	6 	X-Koordinate für Sprite 3 (0..255)
-	 *    $D007 	53255 	7 	Y-Koordinate für Sprite 3 (0..255)
-	 *    $D008 	53256 	8 	X-Koordinate für Sprite 4 (0..255)
-	 *    $D009 	53257 	9 	Y-Koordinate für Sprite 4 (0..255)
-	 *    $D00A 	53258 	10 	X-Koordinate für Sprite 5 (0..255)
-	 *    $D00B 	53259 	11 	Y-Koordinate für Sprite 5 (0..255)
-	 *    $D00C 	53260 	12 	X-Koordinate für Sprite 6 (0..255)
-	 *    $D00D 	53261 	13 	Y-Koordinate für Sprite 6 (0..255)
-	 *    $D00E 	53262 	14 	X-Koordinate für Sprite 7 (0..255)
-	 *    $D00F 	53263 	15 	Y-Koordinate für Sprite 7 (0..255)
-	 *    $D010 	53264 	16 	Bit 8 für die obigen X-Koordinaten (0..255) , jedes Bit steht für eins der Sprites 0..7
-	 *
-	 *    value=00011011
-	 *    $D011 	53265 	17 	Steuerregister, Einzelbedeutung der Bits (1 = an):
-	 *                          Bit 7: Bit 8 von $D012
-	 *                          Bit 6: Extended Color Modus
-	 *                          Bit 5: Bitmapmodus
-	 *                          Bit 4: Bildausgabe eingeschaltet (Effekt erst beim nächsten Einzelbild)
-	 *                          Bit 3: 25 Zeilen (sonst 24)
-	 *                          Bit 2..0: Offset in Rasterzeilen vom oberen Bildschirmrand
-	 *
-	 *    $D012 	53266 	18 	Lesen: Aktuelle Rasterzeile
-	 *                          Schreiben: Rasterzeile, bei der ein IRQ ausgelöst wird (zugehöriges Bit 8 in $D011)
-	 *    $D013 	53267 	19 	Lightpen X-Koordinate (assoziiert mit Pin LP am VIC)
-	 *    $D014 	53268 	20 	Lightpen Y-Koordinate
-	 *    $D015 	53269 	21 	Spriteschalter, Bit = 1: Sprite n an (0..255)
-	 *    $D016 	53270 	22 	Steuerregister, Einzelbedeutung der Bits (1 = an):
-	 *                          Bit 7..5: unbenutzt
-	 *                          Bit 4: Multicolor-Modus
-	 *                          Bit 3: 40 Spalten (an)/38 Spalten (aus)
-	 *                          Bit 2..0: Offset in Pixeln vom linken Bildschirmrand
-	 *
-	 *    $D017 	53271 	23 	Spriteschalter, Bit = 1: Sprite n doppelt hoch (0..255)
-	 *    $D018 	53272 	24 	VIC-Speicherkontrollregister
-	 *
-	 *                          Bit 7..4: Basisadresse des Bildschirmspeichers in aktueller 16K-Bank des VIC = 64*(Bit 7…4)[2]
-	 *                          Bit 3..1: Basisadresse des Zeichensatzes = 1024*(Bit 3…1).
-	 *
-	 *    _oder_ im Bitmapmodus
-	 *
-	 *                          Bit 3: Basisadresse der Bitmap = 1024*8 (Bit 3)
-	 *                          (8kB-Schritte in VIC-Bank)
-	 *                          Bit 0 ist immer 1: nur 2 kB Schritte in VIC-Bank[3]
-	 *
-	 *                          Beachte: Das Character-ROM wird nur in VIC-Bank 0 und 2 ab 4096 eingeblendet
-	 *
-	 *    $D019 	53273 	25 	Interrupt Request, Bit = 1 = an
-	 *                          Lesen:
-	 *                          Bit 7: IRQ durch VIC ausgelöst
-	 *                          Bit 6..4: unbenutzt
-	 *                          Bit 3: Anforderung durch Lightpen
-	 *                          Bit 2: Anforderung durch Sprite-Sprite-Kollision (Reg. $D01E)
-	 *                          Bit 1: Anforderung durch Sprite-Hintergrund-Kollision (Reg. $D01F)
-	 *                          Bit 0: Anforderung durch Rasterstrahl (Reg. $D012)
-	 *                          Schreiben:
-	 *                          1 in jeweiliges Bit schreiben = zugehöriges Interrupt-Flag löschen
-	 *    $D01A 	53274 	26 	Interrupt Request: Maske, Bit = 1 = an
-	 *                          Ist das entsprechende Bit hier und in $D019 gesetzt, wird ein IRQ ausgelöst und Bit 7 in $D019 gesetzt
-	 *                          Bit 7..4: unbenutzt
-	 *                          Bit 3: IRQ wird durch Lightpen ausgelöst
-	 *                          Bit 2: IRQ wird durch S-S-Kollision ausgelöst
-	 *                          Bit 1: IRQ wird durch S-H-Kollision ausgelöst
-	 *                          Bit 0: IRQ wird durch Rasterstrahl ausgelöst
-	 *    $D01B 	53275 	27 	Priorität Sprite-Hintergrund, Bit = 1: Hintergrund liegt vor Sprite n (0..255)
-	 *    $D01C 	53276 	28 	Sprite-Darstellungsmodus, Bit = 1: Sprite n ist Multicolor
-	 *    $D01D 	53277 	29 	Spriteschalter, Bit = 1: Sprite n doppelt breit (0..255)
-	 *    $D01E 	53278 	30 	Sprite-Info: Bits = 1: Sprites miteinander kollidiert (0..255)
-	 *                          Wird durch Zugriff gelöscht
-	 *    $D01F 	53279 	31 	Sprite-Info: Bits = 1: Sprite n mit Hintergrund kollidiert (0..255)
-	 *                          Wird durch Zugriff gelöscht
-	 *    $D020 	53280 	32 	Farbe des Bildschirmrands (0..15)
-	 *    $D021 	53281 	33 	Bildschirmhintergrundfarbe (0..15)
-	 *    $D022 	53282 	34 	Bildschirmhintergrundfarbe 1 bei Extended Color Modus (0..15)
-	 *    $D023 	53283 	35 	Bildschirmhintergrundfarbe 2 bei Extended Color Mode (0..15)
-	 *    $D024 	53284 	36 	Bildschirmhintergrundfarbe 3 bei Extended Color Mode (0..15)
-	 *
-	 *    $D025 	53285 	37 	gemeinsame Spritefarbe 0 im Sprite-Multicolormodus, Bitkombination %01 (0..15)
-	 *    $D026 	53286 	38 	gemeinsame Spritefarbe 1 im Sprite-Multicolormodus, Bitkombination %11 (0..15)
-	 *
-	 *    $D027 	53287 	39 	Farbe Sprite 0, Bitkombination %10 (0..15)
-	 *    $D028 	53288 	40 	Farbe Sprite 1, Bitkombination %10 (0..15)
-	 *    $D029 	53289 	41 	Farbe Sprite 2, Bitkombination %10 (0..15)
-	 *    $D02A 	53290 	42 	Farbe Sprite 3, Bitkombination %10 (0..15)
-	 *    $D02B 	53291 	43 	Farbe Sprite 4, Bitkombination %10 (0..15)
-	 *    $D02C 	53292 	44 	Farbe Sprite 5, Bitkombination %10 (0..15)
-	 *    $D02D 	53293 	45 	Farbe Sprite 6, Bitkombination %10 (0..15)
-	 *    $D02E 	53294 	46 	Farbe Sprite 7, Bitkombination %10 (0..15)
-	 *    $D02F 	53295 	47 	nur VIC IIe (C128)
-	 *                          Bit 7..3: unbenutzt
-	 *                          Bit 2..0: Status der 3 zusätzlichen Tastaturpins
-	 *                          $D030 	53296 	48 	nur VIC IIe (C128)
-	 *
-	 *                          Bit 7..2: unbenutzt
-	 *                          Bit 1: Testmode
-	 *                          Bit 0: 0 => Slow-Mode (1 MHz), 1 => Fast-Mode (2 MHz)
+	 *  (s) $D000 	53248 	0 	X-Koordinate für Sprite 0 (0..255)
+	 *  (s) $D001 	53249 	1 	Y-Koordinate für Sprite 0 (0..255)
+	 *  (s) $D002 	53250 	2 	X-Koordinate für Sprite 1 (0..255)
+	 *  (s) $D003 	53251 	3 	Y-Koordinate für Sprite 1 (0..255)
+	 *  (s) $D004 	53252 	4 	X-Koordinate für Sprite 2 (0..255)
+	 *  (s) $D005 	53253 	5 	Y-Koordinate für Sprite 2 (0..255)
+	 *  (s) $D006 	53254 	6 	X-Koordinate für Sprite 3 (0..255)
+	 *  (s) $D007 	53255 	7 	Y-Koordinate für Sprite 3 (0..255)
+	 *  (s) $D008 	53256 	8 	X-Koordinate für Sprite 4 (0..255)
+	 *  (s) $D009 	53257 	9 	Y-Koordinate für Sprite 4 (0..255)
+	 *  (s) $D00A 	53258 	10 	X-Koordinate für Sprite 5 (0..255)
+	 *  (s) $D00B 	53259 	11 	Y-Koordinate für Sprite 5 (0..255)
+	 *  (s) $D00C 	53260 	12 	X-Koordinate für Sprite 6 (0..255)
+	 *  (s) $D00D 	53261 	13 	Y-Koordinate für Sprite 6 (0..255)
+	 *  (s) $D00E 	53262 	14 	X-Koordinate für Sprite 7 (0..255)
+	 *  (s) $D00F 	53263 	15 	Y-Koordinate für Sprite 7 (0..255)
+	 *  (s) $D010 	53264 	16 	Bit 8 für die obigen X-Koordinaten (0..255) , jedes Bit steht für eins der Sprites 0..7
+	 *  ( )                       The least significant bit corresponds to sprite #0, and the most sigificant bit to sprite #7. 
+	 *  ( ) $D011 	53265 	17 	Steuerregister, Einzelbedeutung der Bits (1 = an):
+	 *  ( )                       Bit 7: Bit 8 von $D012
+	 *  ( )                       Bit 6: Extended Color Modus
+	 *  ( )                       Bit 5: Bitmapmodus
+	 *  ( )                       Bit 4: Bildausgabe eingeschaltet (Effekt erst beim nächsten Einzelbild)
+	 *  ( )                       Bit 3: 25 Zeilen (sonst 24)
+	 *  ( )                       Bit 2..0: Offset in Rasterzeilen vom oberen Bildschirmrand
+	 *  ( ) 
+	 *  ( ) $D012 	53266 	18 	Lesen: Aktuelle Rasterzeile
+	 *  ( )                       Schreiben: Rasterzeile, bei der ein IRQ ausgelöst wird (zugehöriges Bit 8 in $D011)
+	 *  ( ) $D013 	53267 	19 	Lightpen X-Koordinate (assoziiert mit Pin LP am VIC)
+	 *  ( ) $D014 	53268 	20 	Lightpen Y-Koordinate
+	 *  (s) $D015 	53269 	21 	Spriteschalter, Bit = 1: Sprite n an (0..255)
+	 *  ( ) $D016 	53270 	22 	Steuerregister, Einzelbedeutung der Bits (1 = an):
+	 *  ( )                       Bit 7..5: unbenutzt
+	 *  ( )                       Bit 4: Multicolor-Modus
+	 *  ( )                       Bit 3: 40 Spalten (an)/38 Spalten (aus)
+	 *  ( )                       Bit 2..0: Offset in Pixeln vom linken Bildschirmrand
+	 *  ( ) 
+	 *  (s) $D017 	53271 	23 	Spriteschalter, Bit = 1: Sprite n doppelt hoch (0..255)
+	 *  ( ) $D018 	53272 	24 	VIC-Speicherkontrollregister
+	 *  ( ) 
+	 *  ( )                       Bit 7..4: Basisadresse des Bildschirmspeichers in aktueller 16K-Bank des VIC = 64*(Bit 7…4)[2]
+	 *  ( )                       Bit 3..1: Basisadresse des Zeichensatzes = 1024*(Bit 3…1).
+	 *  ( ) 
+	 *  ( ) _oder_ im Bitmapmodus
+	 *  ( ) 
+	 *  ( )                       Bit 3: Basisadresse der Bitmap = 1024*8 (Bit 3)
+	 *  ( )                       (8kB-Schritte in VIC-Bank)
+	 *  ( )                       Bit 0 ist immer 1: nur 2 kB Schritte in VIC-Bank[3]
+	 *  ( ) 
+	 *  ( )                       Beachte: Das Character-ROM wird nur in VIC-Bank 0 und 2 ab 4096 eingeblendet
+	 *  ( ) 
+	 *  ( ) $D019 	53273 	25 	Interrupt Request, Bit = 1 = an
+	 *  ( )                       Lesen:
+	 *  ( )                       Bit 7: IRQ durch VIC ausgelöst
+	 *  ( )                       Bit 6..4: unbenutzt
+	 *  ( )                       Bit 3: Anforderung durch Lightpen
+	 *  ( )                       Bit 2: Anforderung durch Sprite-Sprite-Kollision (Reg. $D01E)
+	 *  ( )                       Bit 1: Anforderung durch Sprite-Hintergrund-Kollision (Reg. $D01F)
+	 *  ( )                       Bit 0: Anforderung durch Rasterstrahl (Reg. $D012)
+	 *  ( )                       Schreiben:
+	 *  ( )                       1 in jeweiliges Bit schreiben = zugehöriges Interrupt-Flag löschen
+	 *  ( ) $D01A 	53274 	26 	Interrupt Request: Maske, Bit = 1 = an
+	 *  ( )                       Ist das entsprechende Bit hier und in $D019 gesetzt, wird ein IRQ ausgelöst und Bit 7 in $D019 gesetzt
+	 *  ( )                       Bit 7..4: unbenutzt
+	 *  ( )                       Bit 3: IRQ wird durch Lightpen ausgelöst
+	 *  ( )                       Bit 2: IRQ wird durch S-S-Kollision ausgelöst
+	 *  ( )                       Bit 1: IRQ wird durch S-H-Kollision ausgelöst
+	 *  ( )                       Bit 0: IRQ wird durch Rasterstrahl ausgelöst
+	 *  (s) $D01B 	53275 	27 	Priorität Sprite-Hintergrund, Bit = 1: Hintergrund liegt vor Sprite n (0..255)
+	 *  (s) $D01C 	53276 	28 	Sprite-Darstellungsmodus, Bit = 1: Sprite n ist Multicolor
+	 *  (s) $D01D 	53277 	29 	Spriteschalter, Bit = 1: Sprite n doppelt breit (0..255)
+	 *  (S) $D01E 	53278 	30 	Sprite-Info: Bits = 1: Sprites miteinander kollidiert (0..255)
+	 *  ( )                       Wird durch Zugriff gelöscht
+	 *  (S) $D01F 	53279 	31 	Sprite-Info: Bits = 1: Sprite n mit Hintergrund kollidiert (0..255)
+	 *  ( )                       Wird durch Zugriff gelöscht
+	 *  ( ) $D020 	53280 	32 	Farbe des Bildschirmrands (0..15)
+	 *  ( ) $D021 	53281 	33 	Bildschirmhintergrundfarbe (0..15)
+	 *  ( ) $D022 	53282 	34 	Bildschirmhintergrundfarbe 1 bei Extended Color Modus (0..15)
+	 *  ( ) $D023 	53283 	35 	Bildschirmhintergrundfarbe 2 bei Extended Color Mode (0..15)
+	 *  ( ) $D024 	53284 	36 	Bildschirmhintergrundfarbe 3 bei Extended Color Mode (0..15)
+	 *  ( ) 
+	 *  (S) $D025 	53285 	37 	gemeinsame Spritefarbe 0 im Sprite-Multicolormodus, Bitkombination %01 (0..15)
+	 *  (S) $D026 	53286 	38 	gemeinsame Spritefarbe 1 im Sprite-Multicolormodus, Bitkombination %11 (0..15)
+	 *  ( ) 
+	 *  (S) $D027 	53287 	39 	Farbe Sprite 0, Bitkombination %10 (0..15)
+	 *  (S) $D028 	53288 	40 	Farbe Sprite 1, Bitkombination %10 (0..15)
+	 *  (S) $D029 	53289 	41 	Farbe Sprite 2, Bitkombination %10 (0..15)
+	 *  (S) $D02A 	53290 	42 	Farbe Sprite 3, Bitkombination %10 (0..15)
+	 *  (S) $D02B 	53291 	43 	Farbe Sprite 4, Bitkombination %10 (0..15)
+	 *  (S) $D02C 	53292 	44 	Farbe Sprite 5, Bitkombination %10 (0..15)
+	 *  (S) $D02D 	53293 	45 	Farbe Sprite 6, Bitkombination %10 (0..15)
+	 *  (S) $D02E 	53294 	46 	Farbe Sprite 7, Bitkombination %10 (0..15)
+	 *  (S) $D02F 	53295 	47 	nur VIC IIe (C128)
+	 *  ( )                       Bit 7..3: unbenutzt
+	 *  ( )                       Bit 2..0: Status der 3 zusätzlichen Tastaturpins
+	 *  ( )                       $D030 	53296 	48 	nur VIC IIe (C128)
+	 *  ( ) 
+	 *  ( )                       Bit 7..2: unbenutzt
+	 *  ( )                       Bit 1: Testmode
+	 *  ( )                       Bit 0: 0 => Slow-Mode (1 MHz), 1 => Fast-Mode (2 MHz)
 	 */
 
 
@@ -309,7 +433,7 @@ public class VIC extends SlowMemory
 	public  static final int VIC_BACKGROUND1_EXT_COLOR = 0x23;
 	public  static final int VIC_BACKGROUND2_EXT_COLOR = 0x24;
 
-	public  static final int VIC_SPRITE_COLOR10_MULTICOLOR_MODE = 0x25;
+	public  static final int VIC_SPRITE_COLOR01_MULTICOLOR_MODE = 0x25;
 	public  static final int VIC_SPRITE_COLOR11_MULTICOLOR_MODE = 0x26;
 
 	public  static final int VIC_SPRITE0_COLOR10 = 0x27;
@@ -396,6 +520,11 @@ public class VIC extends SlowMemory
 
 		frontBuffer = new BufferedImage(DISPLAY_WIDTH,DISPLAY_HEIGHT,BufferedImage.TYPE_INT_RGB);
 		backBuffer  = new BufferedImage(DISPLAY_WIDTH,DISPLAY_HEIGHT,BufferedImage.TYPE_INT_RGB);
+		sprites = new Sprite[8];
+		for ( int i = 0 ; i < 8 ; i++ ) 
+		{
+			sprites[i] = new Sprite(i);
+		}
 	}
 
 	public void setScreenCallback(IScreenCallback screenCallback) 
@@ -484,6 +613,111 @@ public class VIC extends SlowMemory
 				return value;
 			case VIC_SCANLINE:
 				return (byte) beamY;
+				
+			case VIC_SPRITE0_X_COORD: return (byte) sprites[0].x;
+			case VIC_SPRITE0_Y_COORD: return (byte) sprites[0].y;
+			case VIC_SPRITE1_X_COORD: return (byte) sprites[1].x;
+			case VIC_SPRITE1_Y_COORD: return (byte) sprites[1].y;
+			case VIC_SPRITE2_X_COORD: return (byte) sprites[2].x;
+			case VIC_SPRITE2_Y_COORD: return (byte) sprites[2].y;
+			case VIC_SPRITE3_X_COORD: return (byte) sprites[3].x;
+			case VIC_SPRITE3_Y_COORD: return (byte) sprites[3].y;
+			case VIC_SPRITE4_X_COORD: return (byte) sprites[4].x;
+			case VIC_SPRITE4_Y_COORD: return (byte) sprites[4].y;
+			case VIC_SPRITE5_X_COORD: return (byte) sprites[5].x;
+			case VIC_SPRITE5_Y_COORD: return (byte) sprites[5].y;
+			case VIC_SPRITE6_X_COORD: return (byte) sprites[6].x;
+			case VIC_SPRITE6_Y_COORD: return (byte) sprites[6].y;
+			case VIC_SPRITE7_X_COORD: return (byte) sprites[7].x;
+			case VIC_SPRITE7_Y_COORD: return (byte) sprites[7].y;
+			case VIC_SPRITE_X_COORDS_HI_BIT: 
+			{
+				// The least significant bit corresponds to sprite #0, and the most sigificant bit to sprite #7. 
+				int hibits = 0;
+				for ( int i = 0 ; i < 8 ; i++ ) 
+				{
+					hibits = hibits >> 1;
+					if ( (sprites[i].x & 0b1_0000_0000) != 0 ) {
+						hibits |= 1<<7;
+					}
+				}
+				return hibits;
+			}
+			case VIC_SPRITE_ENABLE:
+			{
+				//  The least significant bit refers to sprite #0, and the most sigificant bit to sprite #7.
+				int enabledBits = 0;
+				for ( int i = 0 ; i < 8 ; i++ ) 
+				{
+					enabledBits = enabledBits >> 1;
+					if ( sprites[i].enabled ) {
+						enabledBits |= 1<<7;
+					}
+				}
+				return enabledBits;		
+			}
+			case VIC_SPRITE_DOUBLE_HEIGHT:
+			{
+				//  The least significant bit refers to sprite #0, and the most sigificant bit to sprite #7.
+				int heightBits = 0;
+				for ( int i = 0 ; i < 8 ; i++ ) 
+				{
+					heightBits = heightBits >> 1;
+					if ( sprites[i].spriteHeight == SPRITE_DOUBLE_HEIGHT ) {
+						heightBits |= 1<<7;
+					}
+				}
+				return heightBits;					
+			}
+			case VIC_SPRITE_DOUBLE_WIDTH:
+			{
+				//  The least significant bit refers to sprite #0, and the most sigificant bit to sprite #7.
+				int heightBits = 0;
+				for ( int i = 0 ; i < 8 ; i++ ) 
+				{
+					heightBits = heightBits >> 1;
+					if ( sprites[i].spriteWidth == SPRITE_DOUBLE_WIDTH ) {
+						heightBits |= 1<<7;
+					}
+				}
+				return heightBits;					
+			}		
+			case VIC_SPRITE_PRIORITY:
+			{
+				// 	 *    $D01B 	53275 	27 	Priorität Sprite-Hintergrund, Bit = 1: Hintergrund liegt vor Sprite n (0..255)
+				//  The least significant bit refers to sprite #0, and the most sigificant bit to sprite #7.
+				int bgBits = 0;
+				for ( int i = 0 ; i < 8 ; i++ ) 
+				{
+					bgBits = bgBits >> 1;
+					if ( sprites[i].behindBackground ) {
+						bgBits |= 1<<7;
+					}
+				}
+				return bgBits;			
+			}
+			case VIC_SPRITE_MULTICOLOR_MODE:
+			{
+				// 	 *    $D01B 	53275 	27 	Priorität Sprite-Hintergrund, Bit = 1: Hintergrund liegt vor Sprite n (0..255)
+				//  The least significant bit refers to sprite #0, and the most sigificant bit to sprite #7.
+				int mcBits = 0;
+				for ( int i = 0 ; i < 8 ; i++ ) 
+				{
+					mcBits = mcBits >> 1;
+					if ( sprites[i].multiColor ) {
+						mcBits |= 1<<7;
+					}
+				}
+				return mcBits;			
+			}
+			case VIC_SPRITE0_COLOR10: return sprites[0].color;
+			case VIC_SPRITE1_COLOR10: return sprites[1].color;
+			case VIC_SPRITE2_COLOR10: return sprites[2].color;
+			case VIC_SPRITE3_COLOR10: return sprites[3].color;
+			case VIC_SPRITE4_COLOR10: return sprites[4].color;
+			case VIC_SPRITE5_COLOR10: return sprites[5].color;
+			case VIC_SPRITE6_COLOR10: return sprites[6].color;
+			case VIC_SPRITE7_COLOR10: return sprites[7].color;
 			default:
 				// $$FALL-THROUGH$$
 		}
@@ -519,7 +753,10 @@ public class VIC extends SlowMemory
 		 * When in TEXT SCREEN MODE, the VIC-II looks to 53272 for information on where the character set and text screen character RAM is located:
 		 */
 		final int value = super.readByte(VIC_MEMORY_MAPPING);
-		System.out.println("VIC: mem_mapping is "+HexDump.toBinaryString( (byte) value ) );
+		
+		if ( DEBUG_MEMORY_LAYOUT ) {
+			System.out.println("VIC: mem_mapping is "+HexDump.toBinaryString( (byte) value ) );
+		}
 		final int videoRAMOffset = 1024 * ( ( value & 0b1111_0000) >>4 ); // The four most significant bits form a 4-bit number in the range 0 thru 15: Multiplied with 1024 this gives the start address for the screen character RAM.
 		final int glyphRAMOffset = 2048 * ( ( value & 0b0000_1110) >> 1); // Bits 1 thru 3 (weights 2 thru 8) form a 3-bit number in the range 0 thru 7: Multiplied with 2048 this gives the start address for the character set.
 
@@ -544,9 +781,11 @@ public class VIC extends SlowMemory
 		videoRAMAdr = bankAdr+videoRAMOffset;
 		charROMAdr  = bankAdr+glyphRAMOffset;
 
-		System.out.println("VIC: Bank #"+bankNo+" ("+HexDump.toAdr( bankAdr )+")");
-		System.out.println("VIC: Video RAM @ "+HexDump.toAdr( videoRAMAdr ) );
-		System.out.println("VIC: Char ROM @ "+HexDump.toAdr( charROMAdr )  );
+		if ( DEBUG_MEMORY_LAYOUT ) {
+			System.out.println("VIC: Bank #"+bankNo+" ("+HexDump.toAdr( bankAdr )+")");
+			System.out.println("VIC: Video RAM @ "+HexDump.toAdr( videoRAMAdr ) );
+			System.out.println("VIC: Char ROM @ "+HexDump.toAdr( charROMAdr )  );
+		}
 	}
 
 	@Override
@@ -583,7 +822,6 @@ public class VIC extends SlowMemory
 				break;
 			case VIC_IRQ_ENABLE_BITS:
 				rasterIRQEnabled = (value & 1<<0) != 0;
-				System.out.println("Raster IRQ enabled: "+rasterIRQEnabled);
 				break;
 			case VIC_MEMORY_MAPPING:
 				setCurrentBankNo( mainMemory.ioArea.cia2.readByte( 0 ) & 0b11); // read bank no. from CIA2 PRA bits 0..1
@@ -627,7 +865,7 @@ public class VIC extends SlowMemory
 
 				// update border locations
 				updateBorders();
-				System.out.println("Write to $D011: value="+Integer.toBinaryString( value & 0xff)+" , text columns: "+textColumnCount+" , text rows: "+textRowCount);
+//				System.out.println("Write to $D011: value="+Integer.toBinaryString( value & 0xff)+" , text columns: "+textColumnCount+" , text rows: "+textRowCount);
 				break;
 			case VIC_CTRL2:
 				/*
@@ -649,7 +887,7 @@ public class VIC extends SlowMemory
 
 				// update border locations
 				updateBorders();
-				System.out.println("Write to $D016: value="+Integer.toBinaryString( value & 0xff)+" , text columns: "+textColumnCount+" , text rows: "+textRowCount);
+//				System.out.println("Write to $D016: value="+Integer.toBinaryString( value & 0xff)+" , text columns: "+textColumnCount+" , text rows: "+textRowCount);
 				break;
 			case VIC_BORDER_COLOR:
 				borderColor = INT_COLORS[ (value & 0xf) ];
@@ -657,6 +895,113 @@ public class VIC extends SlowMemory
 			case VIC_BACKGROUND_COLOR:
 				backgroundColor = INT_COLORS[ (value & 0xf ) ];
 				break;
+				
+				// =============== SPRITES ===============
+				
+			case VIC_SPRITE0_X_COORD: sprites[0].x=(value & 0xff); return;
+			case VIC_SPRITE0_Y_COORD: sprites[0].y=(value & 0xff); return;
+			case VIC_SPRITE1_X_COORD: sprites[1].x=(value & 0xff); return;
+			case VIC_SPRITE1_Y_COORD: sprites[1].y=(value & 0xff); return;
+			case VIC_SPRITE2_X_COORD: sprites[2].x=(value & 0xff); return;
+			case VIC_SPRITE2_Y_COORD: sprites[2].y=(value & 0xff); return;
+			case VIC_SPRITE3_X_COORD: sprites[3].x=(value & 0xff); return;
+			case VIC_SPRITE3_Y_COORD: sprites[3].y=(value & 0xff); return;
+			case VIC_SPRITE4_X_COORD: sprites[4].x=(value & 0xff); return;
+			case VIC_SPRITE4_Y_COORD: sprites[4].y=(value & 0xff); return;
+			case VIC_SPRITE5_X_COORD: sprites[5].x=(value & 0xff); return;
+			case VIC_SPRITE5_Y_COORD: sprites[5].y=(value & 0xff); return;
+			case VIC_SPRITE6_X_COORD: sprites[6].x=(value & 0xff); return;
+			case VIC_SPRITE6_Y_COORD: sprites[6].y=(value & 0xff); return;
+			case VIC_SPRITE7_X_COORD: sprites[7].x=(value & 0xff); return;
+			case VIC_SPRITE7_Y_COORD: sprites[7].y=(value & 0xff); return;
+			case VIC_SPRITE_X_COORDS_HI_BIT: 
+			{
+				// The least significant bit corresponds to sprite #0, and the most sigificant bit to sprite #7. 
+				int hibits = value;
+				for ( int i = 0 ; i < 8 ; i++ ) 
+				{
+					if ( (hibits & 1 ) != 0 ) {
+						sprites[i].x |= 1<<8;
+					} else {
+						sprites[i].x &= ~(1<<8);
+					}
+					hibits = hibits >> 1;
+				}
+				return;
+			}
+			case VIC_SPRITE_ENABLE:
+			{
+				//  The least significant bit refers to sprite #0, and the most sigificant bit to sprite #7.
+				int hibits = value;
+				for ( int i = 0 ; i < 8 ; i++ ) 
+				{
+					sprites[i].enabled = (hibits & 1 ) != 0;
+					hibits = hibits >> 1;
+				}
+				return;	
+			}
+			case VIC_SPRITE_DOUBLE_HEIGHT:
+			{
+				//  The least significant bit refers to sprite #0, and the most sigificant bit to sprite #7.
+				int hibits = value;
+				for ( int i = 0 ; i < 8 ; i++ ) 
+				{
+					if ( (hibits & 1 ) != 0 ) {
+						sprites[i].spriteHeight = SPRITE_DOUBLE_HEIGHT;
+					} else {
+						sprites[i].spriteHeight = SPRITE_HEIGHT;
+					}
+					hibits = hibits >> 1;
+				}
+				return;				
+			}
+			case VIC_SPRITE_DOUBLE_WIDTH:
+			{
+				//  The least significant bit refers to sprite #0, and the most sigificant bit to sprite #7.
+				int hibits = value;
+				for ( int i = 0 ; i < 8 ; i++ ) 
+				{
+					if ( (hibits & 1 ) != 0 ) {
+						sprites[i].spriteWidth = SPRITE_DOUBLE_WIDTH;
+					} else {
+						sprites[i].spriteWidth = SPRITE_WIDTH;
+					}
+					hibits = hibits >> 1;
+				}
+				return;				
+			}		
+			case VIC_SPRITE_PRIORITY:
+			{
+				// 	 *    $D01B 	53275 	27 	Priorität Sprite-Hintergrund, Bit = 1: Hintergrund liegt vor Sprite n (0..255)
+				//  The least significant bit refers to sprite #0, and the most sigificant bit to sprite #7.
+				int hibits = value;
+				for ( int i = 0 ; i < 8 ; i++ ) 
+				{
+					sprites[i].behindBackground = (hibits & 1 ) != 0;
+					hibits = hibits >> 1;
+				}
+				return;			
+			}
+			case VIC_SPRITE_MULTICOLOR_MODE:
+			{
+				// 	 *    $D01B 	53275 	27 	Priorität Sprite-Hintergrund, Bit = 1: Hintergrund liegt vor Sprite n (0..255)
+				//  The least significant bit refers to sprite #0, and the most sigificant bit to sprite #7.
+				int hibits = value;
+				for ( int i = 0 ; i < 8 ; i++ ) 
+				{
+					sprites[i].multiColor = (hibits & 1 ) != 0;
+					hibits = hibits >> 1;
+				}
+				return;			
+			}
+			case VIC_SPRITE0_COLOR10: sprites[0].color=value & 0xf; sprites[0].rgbColor = INT_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE1_COLOR10: sprites[1].color=value & 0xf; sprites[1].rgbColor = INT_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE2_COLOR10: sprites[2].color=value & 0xf; sprites[2].rgbColor = INT_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE3_COLOR10: sprites[3].color=value & 0xf; sprites[3].rgbColor = INT_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE4_COLOR10: sprites[4].color=value & 0xf; sprites[4].rgbColor = INT_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE5_COLOR10: sprites[5].color=value & 0xf; sprites[5].rgbColor = INT_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE6_COLOR10: sprites[6].color=value & 0xf; sprites[6].rgbColor = INT_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE7_COLOR10: sprites[7].color=value & 0xf; sprites[7].rgbColor = INT_COLORS[ value & 0xf ]; return;				
 			default:
 				// $$FALL-THROUGH$$
 		}
@@ -669,19 +1014,51 @@ public class VIC extends SlowMemory
 			return borderColor;
 		}
 
+		int backgroundColor = calcBackgroundColor(beamX, beamY);
+		
+		//  draw order: Sprite 0 has the highest priority (drawn last) while Sprite 7 has the lowest priority (drawn first);
+		
+		int colorFromSprites = SPRITE_TRANSPARENT_COLOR;
+		int collisionColor = SPRITE_TRANSPARENT_COLOR;
+		int collisions = 0;
+		for ( int i = 7 ; i >= 0 ; i-- ) 
+		{
+			if ( sprites[i].enabled ) 
+			{
+				final int col = sprites[i].getPixelColor( this , beamX , beamY );
+				if ( col != SPRITE_TRANSPARENT_COLOR ) 
+				{
+					if ( collisionColor != SPRITE_TRANSPARENT_COLOR ) {
+						collisions |= 1<< i;
+					}
+					collisionColor = col;
+					if ( ! sprites[i].behindBackground ) 
+					{						
+						colorFromSprites = col;
+					}
+				}
+			}
+		}
+		
+		// TODO: Handle sprite collision IRQ
+		return colorFromSprites == SPRITE_TRANSPARENT_COLOR ? backgroundColor : colorFromSprites;
+	}
+
+	private int calcBackgroundColor(int beamX, int beamY) 
+	{
 		int x = beamX - leftBorder;
 		int y = beamY - topBorder;
 
 		switch( graphicsMode ) 
 		{
-			case MODE_0: // extendedColor = false | bitmap = false | multiColor = false
-			case MODE_1: // extendedColor = false | bitmap = false | multiColor = true
+			case MODE_0: // TEXT            -- extendedColor = false | bitmap = false | multiColor = false
+			case MODE_1: // MULT-COLOR TEXT -- extendedColor = false | bitmap = false | multiColor = true
 			{
 				// TEXT MODE
 				final int byteOffset = (y/8) * textColumnCount + (x/8);
 				final int character = mainMemory.readByte( videoRAMAdr + byteOffset );
 
-				final int glyphAdr = character << 3; // *8 bytes per glyph
+				final int glyphAdr = character*8; // *8 bytes per glyph
 
 				final int word;
 
@@ -692,19 +1069,19 @@ public class VIC extends SlowMemory
 				 * 2	xxxxxx10	16384–32767	$4000–$7FFF	  No
 				 * 3	xxxxxx11	0–16383	$0000–$3FFF	      Yes, at 4096–8192 $1000–$1FFF
 				 */
-				if ( charROMAdr == 0x1000 | charROMAdr == 0x9000) {
+				if ( charROMAdr == 0x1000 || charROMAdr == 0x9000) {
 					word = mainMemory.getCharacterROM().readByte( glyphAdr + (y%8) );
 				} else {
 					word = mainMemory.readByte( charROMAdr + glyphAdr + (y%8) );
 				}
 
+				int color =mainMemory.getColorRAMBank().readByte( 0x800 + byteOffset ) % 0b1111; // ignore upper 4 bits, color ram is actually a 4-bit static RAM				
 				if ( graphicsMode == GraphicsMode.MODE_0) // text mode , 8x8 pixel per glyph
 				{
 					final int bitOffset = 7-(x%8);
 					final int mask = 1 << bitOffset;
 					if ( (word & mask) != 0 ) 
 					{
-						final int color =mainMemory.getColorRAMBank().readByte( 0x800 + byteOffset ) % 0b1111; // ignore upper 4 bits, color ram is actually a 4-bit static RAM
 						return INT_COLORS[ color ];
 					}			
 					return backgroundColor;
@@ -724,7 +1101,6 @@ public class VIC extends SlowMemory
 				 *    $D023 	53283 	35 	Bildschirmhintergrundfarbe 2 bei Extended Color Mode (0..15)
 				 *    $D024 	53284 	36 	Bildschirmhintergrundfarbe 3 bei Extended Color Mode (0..15)                 				 
 				 */
-				int color =mainMemory.getColorRAMBank().readByte( 0x800 + byteOffset ) % 0b1111; // ignore upper 4 bits, color ram is actually a 4-bit static RAM
 				if ( color <= 7) { // 0111 bits => use regular color
 					return INT_COLORS[ color ];
 				}
@@ -748,7 +1124,11 @@ public class VIC extends SlowMemory
 						throw new RuntimeException("Unreachable code reached");
 				}
 			}
-			case MODE_2: // // extendedColor = false | bitmap = true | multiColor = false
+			case MODE_2: // HIRES -- extendedColor = false | bitmap = true | multiColor = false
+			{
+				// TODO: Implement me
+			}
+			case MODE_4: // HIRES -- extendedColor = true | bitmap = false | multiColor = false
 			{
 				// TODO: Implement me
 			}
@@ -852,6 +1232,10 @@ The flip flops are switched according to the following rules:
 		beamX = 0;
 		beamY = 0;
 		badLinePossible = true;
+		
+		for ( Sprite s : sprites ) {
+			s.reset();
+		}
 
 		setCurrentBankNo( 0 );
 
@@ -861,22 +1245,28 @@ The flip flops are switched according to the following rules:
 	private void setGraphicsMode(GraphicsMode newMode)
 	{
 		this.graphicsMode = newMode;
-		System.out.println( "VIC: "+newMode);
+		if ( DEBUG_SET_GRAPHICS_MODE ) {
+			System.out.println( "VIC: Setting graphics mode "+newMode);
+		}
+		if ( newMode.bitMapMode  || newMode.extendedColorMode ) {
+			System.err.println( "VIC: Setting NOT IMPLEMENTED graphics mode "+newMode);
+		}
 	}
 
 	private void swapBuffers()
 	{
+		final IScreenCallback cb;
 		synchronized( frontBuffer ) 
 		{
 			BufferedImage tmp = frontBuffer;
 			frontBuffer= backBuffer;
 			backBuffer = tmp;
-			final IScreenCallback cb = screenCallback;
-			if ( cb != null ) 
-			{
-				cb.renderMeNow();
-			}
+			cb = screenCallback;
 		}
+		if ( cb != null ) 
+		{
+			cb.renderMeNow();
+		}		
 	}
 
 	public void render(Graphics2D graphics,int width,int height)

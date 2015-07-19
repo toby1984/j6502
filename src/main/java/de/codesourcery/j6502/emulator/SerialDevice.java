@@ -26,4 +26,6 @@ public interface SerialDevice
 	public int getPrimaryAddress();
 	
 	public void reset();
+	
+	public boolean isDataTransferActive();
 }

@@ -2,6 +2,7 @@ package de.codesourcery.j6502.emulator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -17,7 +18,7 @@ public abstract class EmulatorDriver extends Thread
 	public volatile Throwable lastException;
 
 	public static final boolean DELAY_LOOP_ENABLED = true;
-	public static final boolean PRINT_SPEED = true;
+	public static final boolean PRINT_SPEED = false;
 
 	public static enum Mode { SINGLE_STEP , CONTINOUS; }
 
@@ -230,16 +231,22 @@ public abstract class EmulatorDriver extends Thread
 				onStart();
 			}
 			
-			if ( DELAY_LOOP_ENABLED ) {
-				for ( int i = 55 ; i > 0 ; i-- ) {
-					dummy += Math.sqrt( i );
-				}
-			}
-
 			synchronized( emulator )
 			{
 				try
 				{
+					if ( DELAY_LOOP_ENABLED ) 
+					{
+						// run at max. speed if floppy is transferring data
+						final SerialDevice floppy = emulator.getBus().getDevice(8);
+						if ( floppy == null || ! floppy.isDataTransferActive() )
+						{
+							for ( int i = 80 ; i > 0 ; i-- ) {
+								dummy += Math.sqrt( i );
+							}
+						}
+					}
+					
 					lastException = null;
 
 					emulator.doOneCycle();

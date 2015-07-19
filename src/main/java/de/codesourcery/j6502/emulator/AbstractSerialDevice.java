@@ -5,7 +5,7 @@ import java.util.Map;
 
 import de.codesourcery.j6502.utils.RingBuffer;
 
-public class AbstractSerialDevice implements SerialDevice {
+public abstract class AbstractSerialDevice implements SerialDevice {
 
 	protected  final int primaryAddress;
 

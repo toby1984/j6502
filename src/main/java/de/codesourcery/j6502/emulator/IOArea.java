@@ -276,6 +276,10 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 			@Override
 			public void reset() {
 			}
+			
+			public boolean isDataTransferActive() {
+				return false;
+			}
 
 			@Override
 			public int getPrimaryAddress() {
