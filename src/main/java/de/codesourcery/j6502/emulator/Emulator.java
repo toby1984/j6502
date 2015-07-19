@@ -158,8 +158,6 @@ public class Emulator
 			case 0x38: Opcode.SEC.execute(op,cpu ,memory,this); return;
 			case 0x58: Opcode.CLI.execute(op,cpu ,memory,this); return;
 			case 0x78: Opcode.SEI.execute(op,cpu ,memory,this); return;
-			
-			
 			case 0x8f: // "illegal opcode"
 			case 0x87: // "illegal opcode"
 			case 0x97: // "illegal opcode"

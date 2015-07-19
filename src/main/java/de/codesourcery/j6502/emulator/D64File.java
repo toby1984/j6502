@@ -138,7 +138,7 @@ public class D64File
 				System.out.println(this+": Creating input stream at "+track+"/"+sector+" for '"+getFileNameAsASCII()+"' (offset: 0x"+Long.toHexString( absoluteOffset )+")");
 			}
 
-			if ( getFileType() != FileType.PRG ) {
+			if ( getFileType() != FileType.PRG && getFileType() != FileType.DEL ) { // I have a Summer Games .d64 image that loads DEL files...
 				throw new RuntimeException("Sorry, handling file type "+getFileType()+" is currently not implemented");
 			}
 

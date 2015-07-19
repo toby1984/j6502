@@ -1625,7 +1625,7 @@ Subroutines are normally terminated by a RTS op code.
      * Zero-Page,X  |  $97   |   2   |  4
      * indirekt X   |  $83   |   2   |  6
 	 */
-	AXS("AXS",(byte) 0x87) 
+	AXS("AXS") 
 	{
 		// TODO: Maybe add assembler support ??
 		
