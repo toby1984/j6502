@@ -8,22 +8,22 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class VIC extends SlowMemory
 {
-	public  static final Color Black 	     = color( 0, 0, 0); // 0
-	public  static final Color White        = color( 255, 255, 255); // 1
-	public  static final Color Red          = color( 136, 0, 0); // 2
-	public  static final Color Cyan         = color( 170, 255, 238); // 3
-	public  static final Color Violet       = color( 204, 68, 204 ); // 4
-	public  static final Color Green        = color( 0, 204, 85  ); // 5
-	public  static final Color Blue         = color( 	0, 0, 170  ); // 6
-	public  static final Color Yellow         = color( 238, 238, 119 ); // 7
-	public  static final Color Orange       = color( 221, 136, 85); // 8
-	public  static final Color Brown        = color( 102, 68, 0); // 9
-	public  static final Color Lightred    = color( 255, 119, 119); // 10
-	public  static final Color Grey1       = color( 51, 51, 51); // 11
-	public  static final Color Grey2       = color( 119, 119, 119); // 12
-	public  static final Color Lightgreen  = color( 170, 255, 102); // 13
-	public  static final Color Lightblue   = color( 0, 136, 255 ); // 14
-	public  static final Color Lightgrey   = color(  187, 187, 187); // 15
+	public static final Color Black 	     = color( 0, 0, 0); // 0
+	public static final Color White        = color( 255, 255, 255); // 1
+	public static final Color Red          = color( 136, 0, 0); // 2
+	public static final Color Cyan         = color( 170, 255, 238); // 3
+	public static final Color Violet       = color( 204, 68, 204 ); // 4
+	public static final Color Green        = color( 0, 204, 85  ); // 5
+	public static final Color Blue         = color( 	0, 0, 170  ); // 6
+	public static final Color Yellow         = color( 238, 238, 119 ); // 7
+	public static final Color Orange       = color( 221, 136, 85); // 8
+	public static final Color Brown        = color( 102, 68, 0); // 9
+	public static final Color Lightred    = color( 255, 119, 119); // 10
+	public static final Color Grey1       = color( 51, 51, 51); // 11
+	public static final Color Grey2       = color( 119, 119, 119); // 12
+	public static final Color Lightgreen  = color( 170, 255, 102); // 13
+	public static final Color Lightblue   = color( 0, 136, 255 ); // 14
+	public static final Color Lightgrey   = color(  187, 187, 187); // 15
 
 	protected static final boolean DEBUG_MEMORY_LAYOUT = false;
 	protected static final boolean DEBUG_SET_GRAPHICS_MODE = false;
@@ -225,7 +225,7 @@ public class VIC extends SlowMemory
 				} 
 				
 				final int byteOffset = localY*3 + localX/8; // y*24 bits 
-				final int colorBits = vic.mainMemory.readByte( dataAdr+byteOffset ) & 0b1111;
+				final int colorBits = vic.mainMemory.readByte( dataAdr+byteOffset );
 				
 				final int bitInByte = 7-localX%8;
 				
