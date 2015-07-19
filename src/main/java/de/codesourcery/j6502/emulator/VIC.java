@@ -28,6 +28,12 @@ public class VIC extends SlowMemory
 	private static final int CPU_CLOCK_CYCLES_PER_LINE = 63;
 	private static final int LAST_CPU_CYLE_IN_LINE = CPU_CLOCK_CYCLES_PER_LINE-1;
 
+	@FunctionalInterface
+	public interface IScreenCallback 
+	{
+		public void renderMeNow();
+	}
+	
 	private static Color color(int r,int g,int b) {
 		return new Color(r,g,b);
 	}
@@ -327,8 +333,6 @@ public class VIC extends SlowMemory
 	private int textColumnCount=40;
 	private int textRowCount=25;
 
-	private boolean rendered=true;
-
 	private final MemorySubsystem mainMemory;
 
 	protected int leftBorder;
@@ -352,6 +356,8 @@ public class VIC extends SlowMemory
 
 	private int xScroll;
 	private int yScroll;
+	
+	private volatile IScreenCallback screenCallback;
 
 	public VIC(String identifier, AddressRange range,MemorySubsystem mainMemory)
 	{
@@ -392,6 +398,11 @@ public class VIC extends SlowMemory
 		backBuffer  = new BufferedImage(DISPLAY_WIDTH,DISPLAY_HEIGHT,BufferedImage.TYPE_INT_RGB);
 	}
 
+	public void setScreenCallback(IScreenCallback screenCallback) 
+	{
+		this.screenCallback = screenCallback;
+	}
+	
 	public void tick(CPU cpu,boolean clockHigh)
 	{
 		if ( clockHigh )
@@ -828,11 +839,6 @@ The flip flops are switched according to the following rules:
 	{
 		super.reset();
 		
-		synchronized( frontBuffer ) 
-		{
-			rendered = true;
-		}
-
 		displayEnabled = true;
 
 		textColumnCount=40;
@@ -862,13 +868,14 @@ The flip flops are switched according to the following rules:
 	{
 		synchronized( frontBuffer ) 
 		{
-			if ( ! rendered ) {				
-				System.out.println("VIC frame dropped");
-			}			
 			BufferedImage tmp = frontBuffer;
 			frontBuffer= backBuffer;
 			backBuffer = tmp;
-			rendered = false;
+			final IScreenCallback cb = screenCallback;
+			if ( cb != null ) 
+			{
+				cb.renderMeNow();
+			}
 		}
 	}
 
@@ -877,7 +884,6 @@ The flip flops are switched according to the following rules:
 		synchronized( frontBuffer ) 
 		{
 			graphics.drawImage( frontBuffer , 0 , 0 , width, height , null );
-			rendered = true;
 		}
 	}
 }

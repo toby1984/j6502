@@ -49,7 +49,6 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
-import javax.swing.Timer;
 import javax.swing.border.TitledBorder;
 import javax.swing.table.AbstractTableModel;
 
@@ -77,6 +76,7 @@ import de.codesourcery.j6502.emulator.Floppy;
 import de.codesourcery.j6502.emulator.IECBus.StateSnapshot;
 import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
+import de.codesourcery.j6502.emulator.VIC.IScreenCallback;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
 
@@ -134,7 +134,7 @@ public class Debugger
 	private final JDesktopPane desktop = new JDesktopPane();
 
 	private final KeyboardInputListener keyboardListener = new KeyboardInputListener(emulator);
-	
+
 	private final List<IDebuggerView> views = new ArrayList<>();
 
 	private final BreakpointModel bpModel = new BreakpointModel();
@@ -219,27 +219,16 @@ public class Debugger
 		desktop.add( busPanelFrame  );
 
 		final JFrame frame = new JFrame("");
-		frame.addWindowListener( new WindowAdapter() {
-			@Override
-			public void windowClosing(WindowEvent e) {
 
-				try {
-					onApplicationShutdown();
-				} catch(Exception e2) {
-					e2.printStackTrace();
-				} finally {
-					System.exit(0);
-				}
-			}
-		});
-
+		// register fake IDebuggerView to also track size and location
+		// of top-level frame
 		final IDebuggerView loc = new IDebuggerView() 
 		{
 			private boolean isDisplayed;
 
 			@Override
 			public void setLocationPeer(Component frame) {
-				throw new UnsupportedOperationException("setLocationPeer not implemented yet");
+				throw new UnsupportedOperationException("setLocationPeer not supported");
 			}
 
 			@Override
@@ -269,6 +258,22 @@ public class Debugger
 		views.add( loc );
 		locationHelper.applyLocation( loc );
 
+		// add window listener that saves application state before shutting down
+		frame.addWindowListener( new WindowAdapter() 
+		{
+			@Override
+			public void windowClosing(WindowEvent e) {
+
+				try {
+					onApplicationShutdown();
+				} catch(Exception e2) {
+					e2.printStackTrace();
+				} finally {
+					System.exit(0);
+				}
+			}
+		});
+
 		// add menu
 		frame.setJMenuBar( createMenu() );
 
@@ -282,15 +287,6 @@ public class Debugger
 
 		final Optional<D64File> current = doWithFloppyAndReturn( floppy -> floppy.getDisk() );
 		bamPanel.setDisk( current.orElse( null ) );
-		
-		final Timer timer = new Timer( 16 , ev -> 
-		{
-			if ( screenPanel.isDisplayed() ) 
-			{
-				screenPanel.repaint();
-			}
-		});
-		timer.start();
 	}
 
 	private JMenuBar createMenu()
@@ -482,6 +478,7 @@ public class Debugger
 		public final JButton resetButton = new JButton("Reset");
 		public final JButton stepOverButton = new JButton("Step over");
 		public final JButton loadButton = new JButton("Load");
+		public final JButton refreshUIButton = new JButton("Refresh UI");
 
 		private Component peer;
 		private boolean isDisplayed;
@@ -610,6 +607,10 @@ public class Debugger
 			stopButton.addActionListener( event -> driver.setMode(Mode.SINGLE_STEP) );
 
 			stepOverButton.addActionListener( ev -> driver.stepReturn() );
+			refreshUIButton.addActionListener( ev -> 
+			{
+				updateWindows( false );
+			});
 
 			setLayout( new FlowLayout() );
 			add( stopButton );
@@ -618,6 +619,7 @@ public class Debugger
 			add( stepOverButton );
 			add( resetButton );
 			add( loadButton );
+			add( refreshUIButton );
 
 			updateButtons();
 		}
@@ -635,23 +637,26 @@ public class Debugger
 
 	protected void updateWindows(boolean isTick)
 	{
-		if ( isTick ) 
+		synchronized ( emulator ) 
 		{
-			for ( int i = 0, len = views.size() ; i < len ; i++ ) 
+			if ( isTick ) 
 			{
-				final IDebuggerView view = views.get(i);
-				if ( view.isDisplayed() && view.isRefreshAfterTick() ) {
-					view.refresh( emulator );
+				for ( int i = 0, len = views.size() ; i < len ; i++ ) 
+				{
+					final IDebuggerView view = views.get(i);
+					if ( view.isDisplayed() && view.isRefreshAfterTick() ) {
+						view.refresh( emulator );
+					}
 				}
-			}
-		} 
-		else 
-		{
-			for ( int i = 0, len = views.size() ; i < len ; i++ ) 
+			} 
+			else 
 			{
-				final IDebuggerView view = views.get(i);
-				if ( view.isDisplayed()  ) {
-					view.refresh( emulator );
+				for ( int i = 0, len = views.size() ; i < len ; i++ ) 
+				{
+					final IDebuggerView view = views.get(i);
+					if ( view.isDisplayed()  ) {
+						view.refresh( emulator );
+					}
 				}
 			}
 		}
@@ -767,7 +772,7 @@ public class Debugger
 		}		
 	}
 
-	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.IDebuggerView {
+	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.IDebuggerView , IScreenCallback {
 
 		private Component frame;
 		private volatile boolean isDisplayed;
@@ -777,11 +782,12 @@ public class Debugger
 			setFocusable(true);
 			setRequestFocusEnabled(true);
 			keyboardListener.attach( this );
+			emulator.getVIC().setScreenCallback( this );
 		}
 
 		@Override
 		public boolean isRefreshAfterTick() {
-			return false; // handled via Swing Timer
+			return false; // repainting is done @ 60hz by Swing Timer
 		}		
 
 		@Override
@@ -812,23 +818,35 @@ public class Debugger
 		@Override
 		protected void paintComponent(Graphics g)
 		{
-			synchronized( emulator ) 
-			{
-				emulator.getVIC().render( (Graphics2D) g , getWidth() , getHeight() );
-			}
+			// no need to synchronized here since all
+			// elements of the call-chain (emulator , result of emulator.getVic(), render() method) 
+			// either only access final variables OR come with their own synchronization (render() method)
+			emulator.getVIC().render( (Graphics2D) g , getWidth() , getHeight() );
+		}
+
+		@Override
+		public void renderMeNow()
+		{
+			repaint(1);
 		}
 	}
 
 	// CPU status
-	protected final class CPUStatusPanel extends JPanel implements WindowLocationHelper.IDebuggerView
+	protected final class CPUStatusPanel extends BufferedView implements WindowLocationHelper.IDebuggerView
 	{
 		private Component peer;
 		private boolean isDisplayed;
+
+		// @GuardedBy( lines )
+		private final List<String> lines = new ArrayList<>();
 
 		@Override
 		public void setLocationPeer(Component frame) {
 			this.peer = frame;
 		}
+
+		@Override
+		protected void initGraphics(Graphics2D g) { setup( g ); }
 
 		@Override
 		public Component getLocationPeer() {
@@ -856,34 +874,35 @@ public class Debugger
 		}
 
 		@Override
-		public void refresh(Emulator emulator) {
-			repaint();
-		}
-
-		@Override
-		protected void paintComponent(Graphics g)
+		public void refresh(Emulator emulator) 
 		{
-			super.paintComponent( g );
+			lines.clear();
 
-			final List<String> lines = new ArrayList<>();
-			synchronized( emulator )
+			final CPU cpu = emulator.getCPU();
+			lines.add( "PC: "+HexDump.toAdr( cpu.pc() ) + "   Flags: "+ cpu.getFlagsString() );
+			lines.add("Cycles: "+cpu.cycles);
+			lines.add("Previous PC: "+HexDump.toAdr( cpu.previousPC ) );
+			lines.add(" A: "+HexDump.byteToString( (byte) cpu.getAccumulator() ) );
+			lines.add(" X: $"+HexDump.byteToString( (byte) cpu.getX()) );
+			lines.add(" Y: $"+HexDump.byteToString( (byte) cpu.getY()) );
+			lines.add("SP: "+HexDump.toAdr( cpu.sp ) );
+
+			final Graphics2D g = getBackBufferGraphics();
+			try 
 			{
-				final CPU cpu = emulator.getCPU();
-				lines.add( "PC: "+HexDump.toAdr( cpu.pc() ) + "   Flags: "+ cpu.getFlagsString() );
-				lines.add("Cycles: "+cpu.cycles);
-				lines.add("Previous PC: "+HexDump.toAdr( cpu.previousPC ) );
-				lines.add(" A: "+HexDump.byteToString( (byte) cpu.getAccumulator() ) );
-				lines.add(" X: $"+HexDump.byteToString( (byte) cpu.getX()) );
-				lines.add(" Y: $"+HexDump.byteToString( (byte) cpu.getY()) );
-				lines.add("SP: "+HexDump.toAdr( cpu.sp ) );
+				g.setColor( FG_COLOR );
+				int y = 15;
+				for ( final String line : lines )
+				{
+					g.drawString( line , 5 , y );
+					y += 15;
+				}			
+			} 
+			finally {
+				swapBuffers();
 			}
-			g.setColor( FG_COLOR );
-			int y = 15;
-			for ( final String line : lines )
-			{
-				g.drawString( line , 5 , y );
-				y += 15;
-			}
+
+			repaint();
 		}
 	}
 
@@ -907,6 +926,12 @@ public class Debugger
 		c.setFont( MONO_FONT );
 	}
 
+	public static void setup(Graphics2D g) {
+		g.setFont( MONO_FONT ); 
+		g.setColor( FG_COLOR );
+		g.setBackground( BG_COLOR );
+	}
+
 	public static void setColors(JComponent c) {
 		c.setBackground( BG_COLOR );
 		c.setForeground( FG_COLOR );
@@ -928,7 +953,7 @@ public class Debugger
 		}
 	}
 
-	protected final class HexDumpPanel extends JPanel implements WindowLocationHelper.IDebuggerView
+	protected final class HexDumpPanel extends BufferedView implements WindowLocationHelper.IDebuggerView
 	{
 		private final int bytesToDisplay = 25*40;
 
@@ -968,47 +993,51 @@ public class Debugger
 		}
 
 		@Override
+		protected void initGraphics(Graphics2D g) { setup( g ); }		
+
+		@Override
 		public boolean isRefreshAfterTick() {
 			return true;
 		}		
 
 		@Override
-		public void refresh(Emulator emulator) {
+		public void refresh(Emulator emulator) 
+		{
+			final Graphics2D g = getBackBufferGraphics();
+			try {
+				synchronized( emulator ) 
+				{
+					final String[] lines = hexdump.dump( startAddress , emulator.getMemory() , startAddress , bytesToDisplay).split("\n");
+
+					int y = 15;
+
+					g.setColor( Color.GREEN );
+					for ( String line : lines ) {
+						g.drawString( line , 5 , y );
+						y += LINE_HEIGHT;
+					}				
+				}
+			} 
+			finally {
+				swapBuffers();
+			}
+
 			repaint();
 		}
 
 		public void setAddress(short adr) {
 			this.startAddress = adr;
-			repaint();
+			refresh( emulator );
 		}
 
 		public void nextPage() {
 			startAddress = (short) ( (startAddress + bytesToDisplay) & 0xffff);
-			repaint();
+			refresh( emulator );
 		}
 
 		public void previousPage() {
 			startAddress = (short) ( (startAddress- bytesToDisplay) & 0xffff);
-			repaint();
-		}
-
-		@Override
-		protected void paintComponent(Graphics g)
-		{
-			super.paintComponent(g);
-
-			final String[] lines;
-			synchronized( emulator )
-			{
-				lines = hexdump.dump( startAddress , emulator.getMemory() , startAddress , bytesToDisplay).split("\n");
-			}
-
-			int y = 15;
-			g.setColor( Color.GREEN );
-			for ( String line : lines ) {
-				g.drawString( line , 5 , y );
-				y += LINE_HEIGHT;
-			}
+			refresh( emulator );
 		}
 
 		@Override
@@ -1032,7 +1061,7 @@ public class Debugger
 		}		
 	}
 
-	protected final class DisassemblyPanel extends JPanel implements WindowLocationHelper.IDebuggerView , IBreakpointLister
+	protected final class DisassemblyPanel extends BufferedView implements WindowLocationHelper.IDebuggerView , IBreakpointLister
 	{
 		private final Disassembler dis = new Disassembler().setAnnotate(true);
 
@@ -1048,6 +1077,9 @@ public class Debugger
 
 		private boolean isDisplayed;
 		private Component peer;
+
+		@Override
+		protected void initGraphics(Graphics2D g) { setup( g ); }
 
 		@Override
 		public void setLocationPeer(Component frame) {
@@ -1077,9 +1109,49 @@ public class Debugger
 		@Override
 		public void refresh(Emulator emulator) 
 		{
-			final int pc = emulator.getCPU().pc();
-			setAddress( (short) pc , (short) pc );
+			synchronized( emulator ) 
+			{
+				doRefresh( emulator );
+			}
 			repaint();
+		}
+
+		private void doRefresh(Emulator emulator) 
+		{
+			final Graphics2D g = getBackBufferGraphics();
+			try 
+			{
+				final int pc = emulator.getCPU().pc();
+
+				internalSetAddress( (short) pc , (short) pc );
+
+				maybeDisassemble( g );
+
+				for ( int i = 0, y = LINE_HEIGHT ; i < lines.size() ; i++ , y+= LINE_HEIGHT )
+				{
+					final LineWithBounds line = lines.get(i);
+
+					g.setColor(FG_COLOR);
+					g.drawString( line.line.toString() , X_OFFSET , y );
+					if ( addressToMark != null && line.line.address == addressToMark )
+					{
+						g.setColor(Color.RED);
+						g.drawRect( line.bounds.x , line.bounds.y , line.bounds.width , line.bounds.height );
+					}
+
+					final int lineHeight = line.bounds.height;
+					final int circleX = 5;
+					final int circleY = line.bounds.y;
+
+					if ( driver.getBreakpoint( line.line.address ) != null ) {
+						g.fillArc( circleX , circleY , lineHeight , lineHeight , 0 , 360 );
+					} else {
+						g.drawArc( circleX , circleY , lineHeight , lineHeight , 0 , 360 );
+					}
+				}	
+			} finally {
+				swapBuffers();
+			}
 		}
 
 		public DisassemblyPanel()
@@ -1137,35 +1209,41 @@ public class Debugger
 		public void pageUp() {
 			this.currentAddress = (short) ( this.currentAddress - bytesToDisassemble/2 );
 			lines.clear();
-			repaint();
+			refresh(emulator);
 		}
 
 		public void lineUp() {
 			this.currentAddress = (short) ( ( this.currentAddress -1 ));
 			this.addressToMark = null;
 			lines.clear();
-			repaint();
+			refresh(emulator);
 		}
 
 		public void lineDown() {
 			this.currentAddress = (short) (  this.currentAddress + 1 );
 			this.addressToMark = null;
 			lines.clear();
-			repaint();
+			refresh(emulator);
 		}
 
 		public void pageDown() {
 			this.currentAddress = (short) ( this.currentAddress + bytesToDisassemble/2 );
 			lines.clear();
-			repaint();
+			refresh(emulator);
 		}
 
-		public void setAddress(short adr,Short addressToMark) {
+		public void setAddress(short adr,Short addressToMark) 
+		{
+			internalSetAddress(adr, addressToMark);
+			refresh(emulator);
+		}
+
+		private void internalSetAddress(short adr,Short addressToMark) 
+		{
 			this.addressToMark = addressToMark;
 			this.currentAddress = adr;
 			lines.clear();
-			repaint();
-		}
+		}		
 
 		private void disassemble(Graphics g)
 		{
@@ -1226,37 +1304,6 @@ public class Debugger
 				}
 			}
 			return null;
-		}
-
-		@Override
-		protected void paintComponent(Graphics g)
-		{
-			super.paintComponent(g);
-
-			maybeDisassemble( g );
-
-			for ( int i = 0, y = LINE_HEIGHT ; i < lines.size() ; i++ , y+= LINE_HEIGHT )
-			{
-				final LineWithBounds line = lines.get(i);
-
-				g.setColor(FG_COLOR);
-				g.drawString( line.line.toString() , X_OFFSET , y );
-				if ( addressToMark != null && line.line.address == addressToMark )
-				{
-					g.setColor(Color.RED);
-					g.drawRect( line.bounds.x , line.bounds.y , line.bounds.width , line.bounds.height );
-				}
-
-				final int lineHeight = line.bounds.height;
-				final int circleX = 5;
-				final int circleY = line.bounds.y;
-
-				if ( driver.getBreakpoint( line.line.address ) != null ) {
-					g.fillArc( circleX , circleY , lineHeight , lineHeight , 0 , 360 );
-				} else {
-					g.drawArc( circleX , circleY , lineHeight , lineHeight , 0 , 360 );
-				}
-			}
 		}
 
 		@Override

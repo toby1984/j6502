@@ -12,12 +12,12 @@ import de.codesourcery.j6502.utils.SourceHelper;
 public abstract class EmulatorDriver extends Thread
 {
 	private static final AtomicLong CMD_ID = new AtomicLong(0);
-	private static final long CALLBACK_INVOKE_CYCLES = 500_000;
+	private static final long CALLBACK_INVOKE_CYCLES = 300_000;
 
 	public volatile Throwable lastException;
 
 	public static final boolean DELAY_LOOP_ENABLED = true;
-	public static final boolean PRINT_SPEED = false;
+	public static final boolean PRINT_SPEED = true;
 
 	public static enum Mode { SINGLE_STEP , CONTINOUS; }
 
