@@ -34,8 +34,14 @@ public class KeyboardInputListener extends KeyAdapter
 	private final Emulator emulator;
 	private Component peer;
 	
-	private volatile boolean pasteEnabled = true;
+	private boolean pasteEnabled = true;
+	
+	public static enum JoystickPort {
+		PORT_1,PORT_2;
+	}
 
+	private JoystickPort joystickPort=JoystickPort.PORT_2;
+	
 	private JoyDirection joyDirection = JoyDirection.CENTER;
 	private boolean joyFire = false;
 	
@@ -110,10 +116,38 @@ public class KeyboardInputListener extends KeyAdapter
 	
 	private void joystickChanged() 
 	{
-		synchronized( emulator ) {
-			emulator.getMemory().ioArea.setJoystick2( joyDirection , joyFire );
+		synchronized( emulator ) 
+		{
+			switch ( joystickPort ) 
+			{
+				case PORT_1:
+					emulator.getMemory().ioArea.setJoystick1( joyDirection , joyFire );
+					break;
+				case PORT_2:
+					emulator.getMemory().ioArea.setJoystick2( joyDirection , joyFire );
+					break;
+				default:
+					throw new RuntimeException("Unreachable code reached");
+			}
 		}
 	}	
+	
+	public JoystickPort getJoystickPort() 
+	{
+		return joystickPort;
+	}
+	
+	public void setJoystickPort(JoystickPort port) 
+	{
+		if ( this.joystickPort != port ) 
+		{
+			// clear old direction
+			joyDirection = JoyDirection.CENTER;
+			joyFire = false;
+			joystickChanged();
+		}
+		this.joystickPort = port;
+	}
 	
 	@Override
 	public void keyReleased(java.awt.event.KeyEvent e)

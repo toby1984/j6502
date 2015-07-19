@@ -77,6 +77,7 @@ import de.codesourcery.j6502.emulator.IECBus.StateSnapshot;
 import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.emulator.VIC.IScreenCallback;
+import de.codesourcery.j6502.ui.KeyboardInputListener.JoystickPort;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
 
@@ -326,7 +327,33 @@ public class Debugger
 			});
 			views.add(viewItem );
 		});
+		
+		// create I/O menu
+		final JMenu io = new JMenu("I/O");
+		menuBar.add( io );
 
+		final JCheckBoxMenuItem joyPort1 = new JCheckBoxMenuItem( "Joystick port #1" , keyboardListener.getJoystickPort() == JoystickPort.PORT_1);
+		final JCheckBoxMenuItem joyPort2 = new JCheckBoxMenuItem( "Joystick port #2" , keyboardListener.getJoystickPort() == JoystickPort.PORT_2);
+		
+		io.add( joyPort1 );
+		io.add( joyPort2 );
+		
+		joyPort1.addActionListener( ev -> 
+		{
+			if ( joyPort1.isSelected() ) 
+			{
+				joyPort2.setSelected( false );
+				keyboardListener.setJoystickPort( KeyboardInputListener.JoystickPort.PORT_1 );
+			}
+		});
+		joyPort2.addActionListener( ev -> 
+		{
+			if ( joyPort2.isSelected() ) 
+			{
+				joyPort1.setSelected( false );
+				keyboardListener.setJoystickPort( KeyboardInputListener.JoystickPort.PORT_1 );
+			}
+		});
 		return menuBar;
 	}
 

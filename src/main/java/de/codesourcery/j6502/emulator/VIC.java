@@ -25,8 +25,8 @@ public class VIC extends SlowMemory
 	public static final Color Lightblue   = color( 0, 136, 255 ); // 14
 	public static final Color Lightgrey   = color(  187, 187, 187); // 15
 
-	protected static final boolean DEBUG_MEMORY_LAYOUT = false;
-	protected static final boolean DEBUG_SET_GRAPHICS_MODE = false;
+	protected static final boolean DEBUG_MEMORY_LAYOUT = true;
+	protected static final boolean DEBUG_SET_GRAPHICS_MODE = true;
 	
 	protected static final int SPRITE_WIDTH = 24;
 	protected static final int SPRITE_HEIGHT = 21;
@@ -34,10 +34,9 @@ public class VIC extends SlowMemory
 	protected static final int SPRITE_DOUBLE_WIDTH = SPRITE_WIDTH*2;
 	protected static final int SPRITE_DOUBLE_HEIGHT = SPRITE_HEIGHT*2;	
 	
-	private static final int CPU_CLOCK_CYCLES_PER_LINE = 63;
+	// private static final int CPU_CLOCK_CYCLES_PER_LINE = 63;
 
-	private static final int LAST_CPU_CYLE_IN_LINE = CPU_CLOCK_CYCLES_PER_LINE-1;
-	
+	// special marker color
 	protected static final int SPRITE_TRANSPARENT_COLOR = 0xdeadbeef;
 
 	@FunctionalInterface
@@ -112,26 +111,11 @@ public class VIC extends SlowMemory
 	private static final GraphicsMode[] GRAPHIC_MODES = { GraphicsMode.MODE_0,GraphicsMode.MODE_1,GraphicsMode.MODE_2,GraphicsMode.MODE_3,GraphicsMode.MODE_4,GraphicsMode.MODE_5,
 			GraphicsMode.MODE_6,GraphicsMode.MODE_7};
 
-	private GraphicsMode getGraphicsMode(boolean extendedColorMode, boolean bitMapMode, boolean multiColorMode) 
-	{
-		int index = 0;
-		if ( extendedColorMode ) {
-			index |= 1<<2;
-		}
-		if ( bitMapMode ) {
-			index |= 1<<1;
-		}
-		if ( multiColorMode ) {
-			index |= 1<<0;
-		}
-		return GRAPHIC_MODES[ index ];
-	}
-
 	private GraphicsMode graphicsMode = GraphicsMode.MODE_0;
 
 	public static final Color[] AWT_COLORS = { Black,White,Red,Cyan,Violet,Green,Blue,Yellow,Orange,Brown,Lightred,Grey1,Grey2,Lightgreen,Lightblue,Lightgrey};
 
-	public  static final int[] INT_COLORS = new int[16];
+	public static final int[] INT_COLORS = new int[16];
 
 	static {
 		for ( int i = 0 ; i < AWT_COLORS.length ; i++ )
@@ -192,7 +176,7 @@ public class VIC extends SlowMemory
 				of the corresponding sprite pointer address to A divided by 64. For instance, if the sprite pattern begins at address 704, the pointer value will be 704 / 64 = 11. 			 
 							 */
 				final int dataPtr = vic.videoRAMAdr+1016+no;
-				final int dataAdr = 64*vic.mainMemory.readByte( dataPtr );
+				final int dataAdr = 64 * vic.mainMemory.readByte( dataPtr );
 				
 				if ( multiColor ) 
 				{
@@ -205,10 +189,10 @@ public class VIC extends SlowMemory
 					/*
                      * Bit-Paar  Farbe
                      * 
-                     *  %00 	 transparent
-                     *  %10 	 Sprite-Farbenregister ($D027-$D02E)
-                     *  %01 	 Mehrfarbenregister #0 ($D025)
-                     *  %11 	 Mehrfarbenregister #1 ($D026) 					 
+                     * "00": Transparent                     | MxMC = 1
+                     * "01": Sprite multicolor 0 ($d025)     |
+                     * "10": Sprite color ($d027-$d02e)      |
+                     * "11": Sprite multicolor 1 ($d026) 				 
 					 */					
 					switch( (colorBits & mask) >> 2*bitOffset ) 
 					{
@@ -476,8 +460,6 @@ public class VIC extends SlowMemory
 	private boolean displayEnabled; // aka 'DEN'
 	private boolean badLinePossible;
 
-	private int cycleOnCurrentLine;
-
 	private int xScroll;
 	private int yScroll;
 	
@@ -534,13 +516,7 @@ public class VIC extends SlowMemory
 	
 	public void tick(CPU cpu,boolean clockHigh)
 	{
-		if ( clockHigh )
-		{
-			render(cpu,clockHigh);
-			cycleOnCurrentLine++;
-		} else {
-			render(cpu,clockHigh);
-		}
+		render(cpu,clockHigh);
 	}
 
 	private void render(CPU cpu,boolean clockHigh)
@@ -757,7 +733,7 @@ public class VIC extends SlowMemory
 		if ( DEBUG_MEMORY_LAYOUT ) {
 			System.out.println("VIC: mem_mapping is "+HexDump.toBinaryString( (byte) value ) );
 		}
-		final int videoRAMOffset = 1024 * ( ( value & 0b1111_0000) >>4 ); // The four most significant bits form a 4-bit number in the range 0 thru 15: Multiplied with 1024 this gives the start address for the screen character RAM.
+		final int videoRAMOffset = 1024 * ( ( value & 0b1111_0000) >> 4 ); // The four most significant bits form a 4-bit number in the range 0 thru 15: Multiplied with 1024 this gives the start address for the screen character RAM.
 		final int glyphRAMOffset = 2048 * ( ( value & 0b0000_1110) >> 1); // Bits 1 thru 3 (weights 2 thru 8) form a 3-bit number in the range 0 thru 7: Multiplied with 2048 this gives the start address for the character set.
 
 		final int bankAdr;
@@ -1014,14 +990,12 @@ public class VIC extends SlowMemory
 			return borderColor;
 		}
 
-		int backgroundColor = calcBackgroundColor(beamX, beamY);
-		
-		//  draw order: Sprite 0 has the highest priority (drawn last) while Sprite 7 has the lowest priority (drawn first);
+		final int backgroundColor = calcBackgroundColor(beamX, beamY);
 		
 		int colorFromSprites = SPRITE_TRANSPARENT_COLOR;
 		int collisionColor = SPRITE_TRANSPARENT_COLOR;
-		int collisions = 0;
-		for ( int i = 7 ; i >= 0 ; i-- ) 
+		int collisionsMask = 0;
+		for ( int i = 7 ; i >= 0 ; i-- ) //  draw order: Sprite 0 has the highest priority (drawn last) while Sprite 7 has the lowest priority (drawn first);
 		{
 			if ( sprites[i].enabled ) 
 			{
@@ -1029,7 +1003,7 @@ public class VIC extends SlowMemory
 				if ( col != SPRITE_TRANSPARENT_COLOR ) 
 				{
 					if ( collisionColor != SPRITE_TRANSPARENT_COLOR ) {
-						collisions |= 1<< i;
+						collisionsMask |= 1<< i;
 					}
 					collisionColor = col;
 					if ( ! sprites[i].behindBackground ) 
@@ -1075,7 +1049,7 @@ public class VIC extends SlowMemory
 					word = mainMemory.readByte( charROMAdr + glyphAdr + (y%8) );
 				}
 
-				int color =mainMemory.getColorRAMBank().readByte( 0x800 + byteOffset ) % 0b1111; // ignore upper 4 bits, color ram is actually a 4-bit static RAM				
+				int color =mainMemory.getColorRAMBank().readByte( 0x800 + byteOffset ) & 0b1111; // ignore upper 4 bits, color ram is actually a 4-bit static RAM				
 				if ( graphicsMode == GraphicsMode.MODE_0) // text mode , 8x8 pixel per glyph
 				{
 					final int bitOffset = 7-(x%8);
@@ -1224,8 +1198,6 @@ The flip flops are switched according to the following rules:
 		textColumnCount=40;
 		textRowCount=25;
 
-		cycleOnCurrentLine = 0;
-
 		rasterIRQEnabled = false;
 		irqOnRaster = -1;
 
@@ -1276,4 +1248,19 @@ The flip flops are switched according to the following rules:
 			graphics.drawImage( frontBuffer , 0 , 0 , width, height , null );
 		}
 	}
+	
+	private static GraphicsMode getGraphicsMode(boolean extendedColorMode, boolean bitMapMode, boolean multiColorMode) 
+	{
+		int index = 0;
+		if ( extendedColorMode ) {
+			index |= 1<<2;
+		}
+		if ( bitMapMode ) {
+			index |= 1<<1;
+		}
+		if ( multiColorMode ) {
+			index |= 1<<0;
+		}
+		return GRAPHIC_MODES[ index ];
+	}	
 }
