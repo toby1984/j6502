@@ -1206,41 +1206,19 @@ public class VIC extends SlowMemory
 			}
 			case MODE_3: // LORES -- extendedColor = false | bitmap = true | multiColor = true
 			{
-				/*
-				 * Pixel data is divided into 8x8 (4x8) blocks just like in
-				 * character ROM.
-				 * 
-				 * So pixel (0,0) is MSB (bit 7) of the first byte ,
-				 * pixel (7,7) is LSB (bit 0) of the 8th byte and
-				 * pixel (15,7) is LSB of byte 0x0f etc.
-				 * 
-				 *  The start of the display memory area is known as the BASE, The row number (from 0 to 24) of your dot is:
-                 * 
-                 *    ROW = INT(Y/8) (There are 320 bits per line.)
-                 * 
-                 * The character position on that line (from 0 to 39) is:
-                 * 
-                 *    CHAR = INT(X/8) (There are 8 bytes per character.)
-                 * 
-                 * The line of that character position (from 0 to 7) is:
-                 * 
-                 *    LINE = Y AND 7
-                 *    
-                 * BYTE = BITMAP_BASE + INT(Y/8) *320+  INT(X/8)*8 + (Y AND 7)
-				 */
 				final int row = y/8;
 				final int col = x/8;
 				
 				final int cellByteOffset = row*40*8 + col*8+(y & 7);
-				System.out.println("("+x+","+y+") maps to "+cellByteOffset);
-				
-				final int scrOffset = (y/8)*40+(x/8);
-				
-				final int screenRAMColor = mainMemory.readByte( videoRAMAdr + scrOffset );
 				
 				final int pixelColor = mainMemory.readByte( bitmapRAMAdr + cellByteOffset );
-
-				final int bitOffset = 3-(x/2)%4;
+				
+				final int scrOffset = (y/8)*40+(x/8);
+				final int color = mainMemory.readByte( videoRAMAdr + scrOffset ); 
+				
+				int bitOffset = 7-(x & 7);
+				bitOffset = bitOffset % 4;
+				
 				final int mask = 0b11 << 2*bitOffset;
 				
 				switch( ( pixelColor & mask ) >> 2*bitOffset ) 
@@ -1249,10 +1227,10 @@ public class VIC extends SlowMemory
 						out.background(  backgroundColor ); 
 						break;
 					case 0b01: 
-						out.background( RGB_COLORS[ (screenRAMColor >> 4) & 0b1111 ] ); 
+						out.background( RGB_COLORS[ (color >> 4) & 0b1111 ] ); 
 						break;
 					case 0b10: 
-						out.foreground( RGB_COLORS[ screenRAMColor & 0b1111 ] ); 
+						out.foreground( RGB_COLORS[ color & 0b1111 ] ); 
 						break;
 					case 0b11: 
 						out.foreground( RGB_COLORS[ mainMemory.getColorRAMBank().readByte( 0x800 + scrOffset ) & 0b1111 ] ); 
