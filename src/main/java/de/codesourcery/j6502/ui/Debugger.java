@@ -78,6 +78,7 @@ import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.emulator.VIC.IScreenCallback;
 import de.codesourcery.j6502.ui.KeyboardInputListener.JoystickPort;
+import de.codesourcery.j6502.ui.SpriteViewer.SpriteView;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
 
@@ -147,6 +148,7 @@ public class Debugger
 	private final ScreenPanel screenPanel = new ScreenPanel();
 	private final BlockAllocationPanel bamPanel = new BlockAllocationPanel();
 	private final CalculatorPanel calculatorPanel = new CalculatorPanel();
+	private final SpriteViewer spriteView = new SpriteViewer(emulator);
 
 	private final AsmPanel asmPanel = new AsmPanel(desktop) {
 
@@ -201,6 +203,9 @@ public class Debugger
 
 		final JInternalFrame bamPanelFrame = wrap( "BAM" , bamPanel );
 		desktop.add( bamPanelFrame  );			
+		
+		final JInternalFrame spriteViewerFrame = wrap( "Sprite view" , spriteView );
+		desktop.add( spriteViewerFrame  );	
 
 		final JInternalFrame asmPanelFrame = wrap( AsmPanel.PANEL_TITLE , asmPanel );
 		asmPanel.setEmulator( emulator );

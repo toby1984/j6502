@@ -28,11 +28,11 @@ public class VIC extends SlowMemory
 	protected static final boolean DEBUG_MEMORY_LAYOUT = true;
 	protected static final boolean DEBUG_SET_GRAPHICS_MODE = true;
 	
-	protected static final int SPRITE_WIDTH = 24;
-	protected static final int SPRITE_HEIGHT = 21;
+	public static final int SPRITE_WIDTH = 24;
+	public static final int SPRITE_HEIGHT = 21;
 	
-	protected static final int SPRITE_DOUBLE_WIDTH = SPRITE_WIDTH*2;
-	protected static final int SPRITE_DOUBLE_HEIGHT = SPRITE_HEIGHT*2;	
+	public static final int SPRITE_DOUBLE_WIDTH = SPRITE_WIDTH*2;
+	public static final int SPRITE_DOUBLE_HEIGHT = SPRITE_HEIGHT*2;	
 	
 	// private static final int CPU_CLOCK_CYCLES_PER_LINE = 63;
 
@@ -47,6 +47,29 @@ public class VIC extends SlowMemory
 	
 	private static Color color(int r,int g,int b) {
 		return new Color(r,g,b);
+	}
+	
+	/**
+	 * Wrapper to return a text-mode pixel color and the fact whether
+	 * this color should be considered to be 'foreground' 
+	 * or 'background' with regards to sprite display priority.
+	 *
+	 * @author tobias.gierke@code-sourcery.de
+	 */
+	protected static final class ColorAndKind 
+	{
+		public int rgbColor;
+		public boolean isForeground;
+		
+		public void foreground(int rgbColor) {
+			this.rgbColor = rgbColor;
+			this.isForeground = true;
+		}
+		
+		public void background(int rgbColor) {
+			this.rgbColor = rgbColor;
+			this.isForeground = false;
+		}		
 	}
 
 	/**
@@ -115,37 +138,57 @@ public class VIC extends SlowMemory
 
 	public static final Color[] AWT_COLORS = { Black,White,Red,Cyan,Violet,Green,Blue,Yellow,Orange,Brown,Lightred,Grey1,Grey2,Lightgreen,Lightblue,Lightgrey};
 
-	public static final int[] INT_COLORS = new int[16];
+	public static final int[] RGB_COLORS = new int[16];
 
-	static {
+	static 
+	{
 		for ( int i = 0 ; i < AWT_COLORS.length ; i++ )
 		{
-			final int rgb = AWT_COLORS[i].getRGB();
-			INT_COLORS[i] = rgb;
+			RGB_COLORS[i] = AWT_COLORS[i].getRGB();
 		}
 	}
 	
 	protected final Sprite[] sprites;
 	
-	protected static final class Sprite 
+	public static final class Sprite 
 	{
-		public boolean enabled;	
+		public boolean isEnabled;	
+		
 		public int x;
 		public int y;
+
+		public final int spriteNo;
 	
 		public int color; // this is the C64 color (0...f) and NOT the actual RGB color
 		public int rgbColor;
 		
-		public final int no;
 		public boolean multiColor;
-		public boolean behindBackground;
+		public boolean behindForeground;
 		
 		private int spriteWidth=SPRITE_WIDTH;
 		private int spriteHeight=SPRITE_HEIGHT;
 		
 		public Sprite(int no)  {
-			this.no = no;
+			this.spriteNo = no;
 			reset();
+		}
+		
+		public Sprite(Sprite other) 
+		{
+			this.isEnabled = other.isEnabled;
+			this.x = other.x;
+			this.y = other.y;
+			this.spriteNo = other.spriteNo;
+			this.color = other.color;
+			this.rgbColor = other.rgbColor;
+			this.multiColor = other.multiColor;
+			this.behindForeground = other.behindForeground;
+			this.spriteHeight = other.spriteHeight;
+			this.spriteWidth = other.spriteWidth;
+		}
+		
+		public Sprite createCopy() {
+			return new Sprite(this);
 		}
 		
 		public int getPixelColor(VIC vic,int scrX,int scrY) 
@@ -175,14 +218,14 @@ public class VIC extends SlowMemory
 				To make a given sprite show the pattern that's stored in RAM at an address A (which must be divisible with 64), set the contents 
 				of the corresponding sprite pointer address to A divided by 64. For instance, if the sprite pattern begins at address 704, the pointer value will be 704 / 64 = 11. 			 
 							 */
-				final int dataPtr = vic.videoRAMAdr+1016+no;
-				final int dataAdr = 64 * vic.mainMemory.readByte( dataPtr );
+				final int dataPtrLocation = vic.videoRAMAdr+1016+spriteNo;
+				final int dataAdr = vic.bankAdr + 64 * vic.mainMemory.readByte( dataPtrLocation );
+
+				final int byteOffset = localY*3 + localX / 8; // y*24 bits 
+				final int colorBits = vic.mainMemory.readByte( dataAdr+byteOffset );
 				
 				if ( multiColor ) 
 				{
-					// multi-color mode enabled for this character
-					final int byteOffset = localY*3 + localX / 8; // y*24 bits 
-					final int colorBits = vic.mainMemory.readByte( dataAdr+byteOffset );
 					final int bitOffset = 3-((localX/2)%4);
 					final int mask = 0b11 << 2*bitOffset;
 					
@@ -199,17 +242,14 @@ public class VIC extends SlowMemory
 						case 0: // %00
 							return SPRITE_TRANSPARENT_COLOR;
 						case 1: // %01
-							return INT_COLORS[ vic.readByte( VIC_SPRITE_COLOR01_MULTICOLOR_MODE ) & 0b1111 ];
+							return RGB_COLORS[ vic.readByte( VIC_SPRITE_COLOR01_MULTICOLOR_MODE ) & 0b1111 ];
 						case 2: // %10
 							return rgbColor;
 						case 3: // %11
-							return INT_COLORS[ vic.readByte( VIC_SPRITE_COLOR11_MULTICOLOR_MODE ) & 0b1111 ];
+							return RGB_COLORS[ vic.readByte( VIC_SPRITE_COLOR11_MULTICOLOR_MODE ) & 0b1111 ];
 					}
 					throw new RuntimeException("Unreachable code reached");
 				} 
-				
-				final int byteOffset = localY*3 + localX/8; // y*24 bits 
-				final int colorBits = vic.mainMemory.readByte( dataAdr+byteOffset );
 				
 				final int bitInByte = 7-localX%8;
 				
@@ -226,15 +266,25 @@ public class VIC extends SlowMemory
 		public void reset() {
 			x = 0;
 			y = 0;
-			enabled = false;
+			isEnabled = false;
 			color = 1;
-			rgbColor = INT_COLORS[color];
+			rgbColor = RGB_COLORS[color];
 			
 			multiColor = false;
-			behindBackground = false;
+			behindForeground = false;
 			
 			spriteWidth=SPRITE_WIDTH;
 			spriteHeight=SPRITE_HEIGHT;
+		}
+
+		@Override
+		public String toString() {
+			return "Sprite #"+spriteNo+" [enabled:" + isEnabled + ", x:" + x + ", y:" + y
+					+", multiColor=" + multiColor
+					+ ", width=" + spriteWidth + ", height="+ spriteHeight
+					+ ", behindBackground:" + behindForeground
+					+ ", color:" + color + 
+					", rgbColor:"+ rgbColor +"]";
 		}
 	}
 
@@ -435,7 +485,9 @@ public class VIC extends SlowMemory
 	private BufferedImage frontBuffer;
 	private BufferedImage backBuffer;
 
-	protected int videoRAMAdr;
+	public int bankAdr;
+	public int videoRAMAdr;
+	public int bitmapRAMAdr;
 	protected int charROMAdr;
 
 	private int textColumnCount=40;
@@ -582,11 +634,9 @@ public class VIC extends SlowMemory
 			case VIC_CTRL1: // $d011 , bit 7 is bit 8 of beamY
 				int value = super.readByte( VIC_CTRL1 );
 				if ( (beamY & 1<<8) != 0 ) {
-					value |= 0b1000_0000;
-				} else {
-					value &= 0b0111_1111;
-				}					
-				return value;
+					return value | 0b1000_0000;
+				} 
+				return value & 0b0111_1111;
 			case VIC_SCANLINE:
 				return (byte) beamY;
 				
@@ -626,7 +676,7 @@ public class VIC extends SlowMemory
 				for ( int i = 0 ; i < 8 ; i++ ) 
 				{
 					enabledBits = enabledBits >> 1;
-					if ( sprites[i].enabled ) {
+					if ( sprites[i].isEnabled ) {
 						enabledBits |= 1<<7;
 					}
 				}
@@ -648,15 +698,15 @@ public class VIC extends SlowMemory
 			case VIC_SPRITE_DOUBLE_WIDTH:
 			{
 				//  The least significant bit refers to sprite #0, and the most sigificant bit to sprite #7.
-				int heightBits = 0;
+				int widthBits = 0;
 				for ( int i = 0 ; i < 8 ; i++ ) 
 				{
-					heightBits = heightBits >> 1;
+					widthBits = widthBits >> 1;
 					if ( sprites[i].spriteWidth == SPRITE_DOUBLE_WIDTH ) {
-						heightBits |= 1<<7;
+						widthBits |= 1<<7;
 					}
 				}
-				return heightBits;					
+				return widthBits;					
 			}		
 			case VIC_SPRITE_PRIORITY:
 			{
@@ -666,7 +716,7 @@ public class VIC extends SlowMemory
 				for ( int i = 0 ; i < 8 ; i++ ) 
 				{
 					bgBits = bgBits >> 1;
-					if ( sprites[i].behindBackground ) {
+					if ( sprites[i].behindForeground ) {
 						bgBits |= 1<<7;
 					}
 				}
@@ -736,7 +786,6 @@ public class VIC extends SlowMemory
 		final int videoRAMOffset = 1024 * ( ( value & 0b1111_0000) >> 4 ); // The four most significant bits form a 4-bit number in the range 0 thru 15: Multiplied with 1024 this gives the start address for the screen character RAM.
 		final int glyphRAMOffset = 2048 * ( ( value & 0b0000_1110) >> 1); // Bits 1 thru 3 (weights 2 thru 8) form a 3-bit number in the range 0 thru 7: Multiplied with 2048 this gives the start address for the character set.
 
-		final int bankAdr;
 		switch( bankNo ) {
 			case 0: 
 				bankAdr = 0xc000;
@@ -754,12 +803,24 @@ public class VIC extends SlowMemory
 				throw new RuntimeException("Unreachable code reached");
 		}
 
-		videoRAMAdr = bankAdr+videoRAMOffset;
-		charROMAdr  = bankAdr+glyphRAMOffset;
+		/*
+	 *  ( ) _oder_ im Bitmapmodus
+	 *  ( ) 
+	 *  ( )                       Bit 3: Basisadresse der Bitmap = 1024*8 (Bit 3)
+	 *  ( )                       (8kB-Schritte in VIC-Bank)
+	 *  ( )                       Bit 0 ist immer 1: nur 2 kB Schritte in VIC-Bank[3]
+	 *  ( ) 
+	 *  ( )                       Beachte: Das Character-ROM wird nur in VIC-Bank 0 und 2 ab 4096 eingeblendet		 
+		 */
+		
+		bitmapRAMAdr = bankAdr + ( (value & 0b1000) == 0 ? 0 : 0x2000 ); 
+		videoRAMAdr = bankAdr + videoRAMOffset;
+		charROMAdr  = bankAdr + glyphRAMOffset;
 
 		if ( DEBUG_MEMORY_LAYOUT ) {
 			System.out.println("VIC: Bank #"+bankNo+" ("+HexDump.toAdr( bankAdr )+")");
 			System.out.println("VIC: Video RAM @ "+HexDump.toAdr( videoRAMAdr ) );
+			System.out.println("VIC: Bitmap RAM @ "+HexDump.toAdr( bitmapRAMAdr ) );
 			System.out.println("VIC: Char ROM @ "+HexDump.toAdr( charROMAdr )  );
 		}
 	}
@@ -866,10 +927,10 @@ public class VIC extends SlowMemory
 //				System.out.println("Write to $D016: value="+Integer.toBinaryString( value & 0xff)+" , text columns: "+textColumnCount+" , text rows: "+textRowCount);
 				break;
 			case VIC_BORDER_COLOR:
-				borderColor = INT_COLORS[ (value & 0xf) ];
+				borderColor = RGB_COLORS[ (value & 0xf) ];
 				break;
 			case VIC_BACKGROUND_COLOR:
-				backgroundColor = INT_COLORS[ (value & 0xf ) ];
+				backgroundColor = RGB_COLORS[ (value & 0xf ) ];
 				break;
 				
 				// =============== SPRITES ===============
@@ -911,7 +972,7 @@ public class VIC extends SlowMemory
 				int hibits = value;
 				for ( int i = 0 ; i < 8 ; i++ ) 
 				{
-					sprites[i].enabled = (hibits & 1 ) != 0;
+					sprites[i].isEnabled = (hibits & 1 ) != 0;
 					hibits = hibits >> 1;
 				}
 				return;	
@@ -953,7 +1014,7 @@ public class VIC extends SlowMemory
 				int hibits = value;
 				for ( int i = 0 ; i < 8 ; i++ ) 
 				{
-					sprites[i].behindBackground = (hibits & 1 ) != 0;
+					sprites[i].behindForeground = (hibits & 1 ) != 0;
 					hibits = hibits >> 1;
 				}
 				return;			
@@ -970,14 +1031,14 @@ public class VIC extends SlowMemory
 				}
 				return;			
 			}
-			case VIC_SPRITE0_COLOR10: sprites[0].color=value & 0xf; sprites[0].rgbColor = INT_COLORS[ value & 0xf ]; return;
-			case VIC_SPRITE1_COLOR10: sprites[1].color=value & 0xf; sprites[1].rgbColor = INT_COLORS[ value & 0xf ]; return;
-			case VIC_SPRITE2_COLOR10: sprites[2].color=value & 0xf; sprites[2].rgbColor = INT_COLORS[ value & 0xf ]; return;
-			case VIC_SPRITE3_COLOR10: sprites[3].color=value & 0xf; sprites[3].rgbColor = INT_COLORS[ value & 0xf ]; return;
-			case VIC_SPRITE4_COLOR10: sprites[4].color=value & 0xf; sprites[4].rgbColor = INT_COLORS[ value & 0xf ]; return;
-			case VIC_SPRITE5_COLOR10: sprites[5].color=value & 0xf; sprites[5].rgbColor = INT_COLORS[ value & 0xf ]; return;
-			case VIC_SPRITE6_COLOR10: sprites[6].color=value & 0xf; sprites[6].rgbColor = INT_COLORS[ value & 0xf ]; return;
-			case VIC_SPRITE7_COLOR10: sprites[7].color=value & 0xf; sprites[7].rgbColor = INT_COLORS[ value & 0xf ]; return;				
+			case VIC_SPRITE0_COLOR10: sprites[0].color=value & 0xf; sprites[0].rgbColor = RGB_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE1_COLOR10: sprites[1].color=value & 0xf; sprites[1].rgbColor = RGB_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE2_COLOR10: sprites[2].color=value & 0xf; sprites[2].rgbColor = RGB_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE3_COLOR10: sprites[3].color=value & 0xf; sprites[3].rgbColor = RGB_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE4_COLOR10: sprites[4].color=value & 0xf; sprites[4].rgbColor = RGB_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE5_COLOR10: sprites[5].color=value & 0xf; sprites[5].rgbColor = RGB_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE6_COLOR10: sprites[6].color=value & 0xf; sprites[6].rgbColor = RGB_COLORS[ value & 0xf ]; return;
+			case VIC_SPRITE7_COLOR10: sprites[7].color=value & 0xf; sprites[7].rgbColor = RGB_COLORS[ value & 0xf ]; return;				
 			default:
 				// $$FALL-THROUGH$$
 		}
@@ -989,25 +1050,27 @@ public class VIC extends SlowMemory
 		{
 			return borderColor;
 		}
-
-		final int backgroundColor = calcBackgroundColor(beamX, beamY);
+		
+		final ColorAndKind textModeColor = new ColorAndKind();
+		getBackgroundColor(beamX, beamY, textModeColor );
 		
 		int colorFromSprites = SPRITE_TRANSPARENT_COLOR;
 		int collisionColor = SPRITE_TRANSPARENT_COLOR;
 		int collisionsMask = 0;
 		for ( int i = 7 ; i >= 0 ; i-- ) //  draw order: Sprite 0 has the highest priority (drawn last) while Sprite 7 has the lowest priority (drawn first);
 		{
-			if ( sprites[i].enabled ) 
+			final Sprite sprite = sprites[i];
+			if ( sprite.isEnabled ) 
 			{
-				final int col = sprites[i].getPixelColor( this , beamX , beamY );
+				final int col = sprite.getPixelColor( this , beamX , beamY );
 				if ( col != SPRITE_TRANSPARENT_COLOR ) 
 				{
 					if ( collisionColor != SPRITE_TRANSPARENT_COLOR ) {
 						collisionsMask |= 1<< i;
 					}
 					collisionColor = col;
-					if ( ! sprites[i].behindBackground ) 
-					{						
+					if ( ! sprite.behindForeground || ! textModeColor.isForeground) 
+					{
 						colorFromSprites = col;
 					}
 				}
@@ -1015,10 +1078,10 @@ public class VIC extends SlowMemory
 		}
 		
 		// TODO: Handle sprite collision IRQ
-		return colorFromSprites == SPRITE_TRANSPARENT_COLOR ? backgroundColor : colorFromSprites;
+		return colorFromSprites == SPRITE_TRANSPARENT_COLOR ? textModeColor.rgbColor : colorFromSprites;
 	}
 
-	private int calcBackgroundColor(int beamX, int beamY) 
+	private void getBackgroundColor(int beamX, int beamY,ColorAndKind out) 
 	{
 		int x = beamX - leftBorder;
 		int y = beamY - topBorder;
@@ -1056,13 +1119,15 @@ public class VIC extends SlowMemory
 					final int mask = 1 << bitOffset;
 					if ( (word & mask) != 0 ) 
 					{
-						return INT_COLORS[ color ];
-					}			
-					return backgroundColor;
+						out.foreground( RGB_COLORS[ color ] );
+					} else {			
+						out.background( backgroundColor );
+					}
+					return;
 				} 
 
 				// multi-color text mode, 2 bits per pixel => 4x8 pixel per glyph
-
+				
 				/*
 				 * Farb-Bits 	Entsprechende Farbe 	Speicheradresse
 				 * 00 	        Bildschirmfarbe 	          53281   $D021
@@ -1076,36 +1141,134 @@ public class VIC extends SlowMemory
 				 *    $D024 	53284 	36 	Bildschirmhintergrundfarbe 3 bei Extended Color Mode (0..15)                 				 
 				 */
 				if ( color <= 7) { // 0111 bits => use regular color
-					return INT_COLORS[ color ];
+					out.foreground( RGB_COLORS[ color ] );
+					return;
 				}
 
 				final int bitOffset = 3-((x/2)%4);
 				final int mask = 0b11 << 2*bitOffset;
 
+				/*
+                 *              | MCM=0 |   MCM=1
+                 *  ------------+-------+-----------
+                 *  Bits/pixel  |   1   |     2
+                 *  Pixels/byte |   8   |     4
+                 *  Background  |  "0"  | "00", "01"
+                 *  Foreground  |  "1"  | "10", "11"
+                 * 
+                 * In multicolor mode (MCM=1), the bit combinations "00" and "01" belong to 
+                 * * the background and "10" and "11" to the foreground whereas in standard mode
+                 * (MCM=0), cleared pixels belong to the background and set pixels to the
+                 * foreground. It should be noted that this is also valid for the graphics
+                 * generated in idle state.
+				 */				
 				switch( (word & mask) >> 2*bitOffset ) 
 				{
-					case 0:
-						return INT_COLORS[ readByte( 0x21 ) & 0b1111 ];
-					case 1:
-						return INT_COLORS[ readByte( 0x22 ) & 0b1111 ];
-					case 2:
-						return INT_COLORS[ readByte( 0x23 ) & 0b1111 ];
-					case 3:
-						return INT_COLORS[ color & 0b0111 ]; // clear upper bit
+					case 0b00:
+						out.background( RGB_COLORS[ readByte( 0x21 ) & 0b1111 ] ); // In multicolor mode (MCM=1), the bit combinations "00" and "01" belong to the background and "10" and "11" to the foreground 
+						break;
+					case 0b01:
+						out.background( RGB_COLORS[ readByte( 0x22 ) & 0b1111 ] ); // In multicolor mode (MCM=1), the bit combinations "00" and "01" belong to the background and "10" and "11" to the foreground 
+						break;
+					case 0b10:
+						out.foreground( RGB_COLORS[ readByte( 0x23 ) & 0b1111 ] );
+						break;
+					case 0b11:
+						out.foreground( RGB_COLORS[ color & 0b0111 ] ); // clear upper bit
+						break;
 					default:
 						throw new RuntimeException("Unreachable code reached");
 				}
+				return;
 			}
 			case MODE_2: // HIRES -- extendedColor = false | bitmap = true | multiColor = false
 			{
-				// TODO: Implement me
+				final int row = y/8;
+				final int col = x/8;
+				
+				final int cellByteOffset = row*40*8 + col*8+(y & 7);
+				
+				final int pixelSet = mainMemory.readByte( bitmapRAMAdr + cellByteOffset );
+				
+				final int scrOffset = (y/8)*40+(x/8);
+				final int color = mainMemory.readByte( videoRAMAdr + scrOffset ); 
+				
+				final int bitOffset = 7-(x & 7);
+				
+				final int mask = 1 << bitOffset;
+				if ( (pixelSet & mask) != 0 ) 
+				{
+					out.foreground( RGB_COLORS[ (color >> 4) & 0b1111 ] );
+				} else {		
+					out.background( RGB_COLORS[ color & 0b1111 ] );
+				}
+				return;
 			}
+			case MODE_3: // LORES -- extendedColor = false | bitmap = true | multiColor = true
+			{
+				/*
+				 * Pixel data is divided into 8x8 (4x8) blocks just like in
+				 * character ROM.
+				 * 
+				 * So pixel (0,0) is MSB (bit 7) of the first byte ,
+				 * pixel (7,7) is LSB (bit 0) of the 8th byte and
+				 * pixel (15,7) is LSB of byte 0x0f etc.
+				 * 
+				 *  The start of the display memory area is known as the BASE, The row number (from 0 to 24) of your dot is:
+                 * 
+                 *    ROW = INT(Y/8) (There are 320 bits per line.)
+                 * 
+                 * The character position on that line (from 0 to 39) is:
+                 * 
+                 *    CHAR = INT(X/8) (There are 8 bytes per character.)
+                 * 
+                 * The line of that character position (from 0 to 7) is:
+                 * 
+                 *    LINE = Y AND 7
+                 *    
+                 * BYTE = BITMAP_BASE + INT(Y/8) *320+  INT(X/8)*8 + (Y AND 7)
+				 */
+				final int row = y/8;
+				final int col = x/8;
+				
+				final int cellByteOffset = row*40*8 + col*8+(y & 7);
+				System.out.println("("+x+","+y+") maps to "+cellByteOffset);
+				
+				final int scrOffset = (y/8)*40+(x/8);
+				
+				final int screenRAMColor = mainMemory.readByte( videoRAMAdr + scrOffset );
+				
+				final int pixelColor = mainMemory.readByte( bitmapRAMAdr + cellByteOffset );
+
+				final int bitOffset = 3-(x/2)%4;
+				final int mask = 0b11 << 2*bitOffset;
+				
+				switch( ( pixelColor & mask ) >> 2*bitOffset ) 
+				{
+					case 0b00: 
+						out.background(  backgroundColor ); 
+						break;
+					case 0b01: 
+						out.background( RGB_COLORS[ (screenRAMColor >> 4) & 0b1111 ] ); 
+						break;
+					case 0b10: 
+						out.foreground( RGB_COLORS[ screenRAMColor & 0b1111 ] ); 
+						break;
+					case 0b11: 
+						out.foreground( RGB_COLORS[ mainMemory.getColorRAMBank().readByte( 0x800 + scrOffset ) & 0b1111 ] ); 
+						break;
+					default:
+						throw new RuntimeException("Unreachable code reached");
+				}
+				return;
+			}				
 			case MODE_4: // HIRES -- extendedColor = true | bitmap = false | multiColor = false
 			{
 				// TODO: Implement me
 			}
 			default:
-				return INT_COLORS[ beamX%2 ];
+				out.foreground( RGB_COLORS[ beamX%2 ] ); // display checkered pattern to indicate an unsupported graphics mode
+				return;
 		}
 	}
 
@@ -1218,7 +1381,7 @@ The flip flops are switched according to the following rules:
 		if ( DEBUG_SET_GRAPHICS_MODE ) {
 			System.out.println( "VIC: Setting graphics mode "+newMode);
 		}
-		if ( newMode.bitMapMode  || newMode.extendedColorMode ) {
+		if ( newMode.extendedColorMode ) {
 			System.err.println( "VIC: Setting NOT IMPLEMENTED graphics mode "+newMode);
 		}
 	}
@@ -1260,5 +1423,17 @@ The flip flops are switched according to the following rules:
 			index |= 1<<0;
 		}
 		return GRAPHIC_MODES[ index ];
-	}	
+	}
+	
+	public Sprite getSprite(int no) 
+	{
+		return sprites[no].createCopy();
+	}
+	
+	public int getSpriteDataAddr(Sprite sprite) 
+	{
+		final int dataPtrLocation = videoRAMAdr+1016+sprite.spriteNo;
+		return bankAdr + 64 * mainMemory.readByte( dataPtrLocation );
+	}
+	
 }

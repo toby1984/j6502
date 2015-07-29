@@ -23,5 +23,6 @@ public enum TokenType
 	WHITESPACE,
 	OPERATOR,
 	META_BYTE,
-	META_EQU;
+	META_EQU,
+	META_INCBIN;
 }

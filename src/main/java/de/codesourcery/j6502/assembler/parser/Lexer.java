@@ -249,6 +249,11 @@ public class Lexer {
 			addToken(TokenType.DIGITS , s , bufferStartOffset );
 			return;
 		}
+		
+		if ( ".incbin".equalsIgnoreCase( s ) ) {
+			addToken(TokenType.META_INCBIN, s , bufferStartOffset );
+			return;
+		}
 
 		if ( ".byte".equalsIgnoreCase( s ) ) {
 			addToken(TokenType.META_BYTE , s , bufferStartOffset );

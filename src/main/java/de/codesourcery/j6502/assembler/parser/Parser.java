@@ -15,6 +15,7 @@ import de.codesourcery.j6502.assembler.parser.ast.EquNode;
 import de.codesourcery.j6502.assembler.parser.ast.IASTNode;
 import de.codesourcery.j6502.assembler.parser.ast.IdentifierReferenceNode;
 import de.codesourcery.j6502.assembler.parser.ast.ImmediateOperand;
+import de.codesourcery.j6502.assembler.parser.ast.IncludeBinaryNode;
 import de.codesourcery.j6502.assembler.parser.ast.IndirectOperand;
 import de.codesourcery.j6502.assembler.parser.ast.IndirectOperandX;
 import de.codesourcery.j6502.assembler.parser.ast.IndirectOperandY;
@@ -226,6 +227,39 @@ public class Parser
 			}
 			lexer.push( tok );
 		}
+		
+		if ( lexer.peek(TokenType.META_INCBIN ) ) // .incbin "file"
+		{
+			final Token startingQuotes = lexer.next();
+			if ( ! lexer.peek( TokenType.DOUBLE_QUOTE ) ) 
+			{
+				fail(".incbin requires a file name in double quotes"); // always throws ParseException
+				return false; // make compiler happy
+			}
+
+			lexer.next( TokenType.DOUBLE_QUOTE );
+			
+			lexer.setSkipWhitespace( false );
+			try 
+			{
+				final StringBuilder buffer = new StringBuilder();
+				while ( ! lexer.eof() && ! lexer.peek( TokenType.DOUBLE_QUOTE ) && ! lexer.peek( TokenType.EOL) ) 
+				{
+					buffer.append( lexer.next().text );
+				}
+				if ( ! lexer.peek( TokenType.DOUBLE_QUOTE ) ) 
+				{
+					fail("Unterminated string"); // always throws ParseException
+					return false; // make compiler happy
+				}
+				lexer.next( TokenType.DOUBLE_QUOTE );
+				currentNode.addChild( new IncludeBinaryNode( buffer.toString(), new TextRegion( startingQuotes.offset , buffer.length()+2 ) ) );
+				return true;
+			} 
+			finally {
+				lexer.setSkipWhitespace( true );
+			}
+		}		
 
 		if ( lexer.peek(TokenType.META_BYTE ) ) // .byte
 		{

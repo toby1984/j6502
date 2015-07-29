@@ -188,7 +188,7 @@ public abstract class EmulatorDriver extends Thread
 		@SuppressWarnings("unused")
 		float dummy = 0; // used to prevent the compiler from optimizing away the delay loop
 		long startTime = System.currentTimeMillis();
-		long cyclesRemaining = CALLBACK_INVOKE_CYCLES;
+		long cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
 		while( true )
 		{
 			if ( isRunnable )
@@ -224,7 +224,7 @@ public abstract class EmulatorDriver extends Thread
 					}
 				}
 				lastException = null;
-				cyclesRemaining = CALLBACK_INVOKE_CYCLES;
+				cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
 				if ( PRINT_SPEED ) {
 					startTime = System.currentTimeMillis();
 				}
@@ -250,7 +250,7 @@ public abstract class EmulatorDriver extends Thread
 					lastException = null;
 
 					emulator.doOneCycle();
-					cyclesRemaining--;
+					cyclesUntilNextTick--;
 
 					Breakpoint bp = breakpoints[ cpu.pc() ];
 					if ( bp == null && ( oneShotBreakpoint != null && oneShotBreakpoint.address == cpu.pc() ) ) {
@@ -270,11 +270,11 @@ public abstract class EmulatorDriver extends Thread
 					e.printStackTrace();
 					isRunnable = false;
 					lastException = e;
-					cyclesRemaining = 0;
+					cyclesUntilNextTick = 0;
 					sendCmd( stopCommand( false ) );
 				}
 			}
-			if ( cyclesRemaining <= 0 )
+			if ( cyclesUntilNextTick <= 0 )
 			{
 				tick();
 				if ( PRINT_SPEED )
@@ -285,7 +285,7 @@ public abstract class EmulatorDriver extends Thread
 					System.out.println("CPU frequency: "+khz+" kHz "+dummy);
 					startTime = now;
 				}
-				cyclesRemaining = CALLBACK_INVOKE_CYCLES;
+				cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
 			}			
 		}
 	}
@@ -312,9 +312,9 @@ public abstract class EmulatorDriver extends Thread
 		boolean breakpointAdded = false;
 		synchronized( emulator )
 		{
-			if ( canStepOver() )
+			if ( canStepOver() ) // check whether PC is at a JSR $xxxx instruction
 			{
-				addBreakpoint( new Breakpoint( emulator.getCPU().pc()+3 , true  ) );
+				addBreakpoint( new Breakpoint( emulator.getCPU().pc()+3 , true  ) ); // JSR $xxxx occupies 3 bytes
 				breakpointAdded = true;
 			}
 		}
