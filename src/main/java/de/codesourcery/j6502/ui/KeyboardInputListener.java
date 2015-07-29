@@ -104,7 +104,7 @@ public class KeyboardInputListener extends KeyAdapter
 			return;
 		}
 		
-		final Key pressed = Keyboard.keyCodeToKey( e.getKeyCode() , location , modifiers);
+		final Key pressed = Keyboard.keyCodeToKey( e.getExtendedKeyCode() , location , modifiers);
 		if ( pressed != null ) 
 		{
 			synchronized( emulator ) 
@@ -167,7 +167,7 @@ public class KeyboardInputListener extends KeyAdapter
 				// $$FALL-THROUGH$$
 		}
 		
-		final Key released = Keyboard.keyCodeToKey( e.getKeyCode() , getLocation(e) , getModifiers(e) );
+		final Key released = Keyboard.keyCodeToKey( e.getExtendedKeyCode() , getLocation(e) , getModifiers(e) );
 		if ( released != null ) 
 		{
 			synchronized( emulator ) 
@@ -179,9 +179,13 @@ public class KeyboardInputListener extends KeyAdapter
 
 	private Set<Keyboard.Modifier> getModifiers(KeyEvent e)
 	{
-		int mask = e.getModifiersEx();
+		final int mask = e.getModifiersEx();
+		
 		boolean shiftPressed = false;
 		boolean controlPressed = false;
+		boolean altGrPressed = false;
+		boolean altPressed = false;
+		
 		if ( ( (mask & KeyEvent.SHIFT_DOWN_MASK) != 0 ) ||
 				( ( mask & KeyEvent.SHIFT_MASK ) != 0 )
 				)
@@ -195,7 +199,22 @@ public class KeyboardInputListener extends KeyAdapter
 		{
 			controlPressed = true;
 		}
-		if ( ! controlPressed && ! shiftPressed ) {
+		
+		if ( ( (mask & KeyEvent.ALT_GRAPH_DOWN_MASK) != 0 ) ||
+				( ( mask & KeyEvent.ALT_GRAPH_DOWN_MASK ) != 0 )
+				)
+		{
+			altGrPressed = true;
+		}
+		
+		if ( ( (mask & KeyEvent.ALT_DOWN_MASK) != 0 ) ||
+				( ( mask & KeyEvent.ALT_MASK ) != 0 )
+				)
+		{
+			altPressed = true;
+		}
+		
+		if ( ! controlPressed && ! shiftPressed && ! altGrPressed && ! altPressed ) {
 			return Collections.emptySet();
 		}
 		Set<Keyboard.Modifier> result = new HashSet<>();
@@ -204,6 +223,12 @@ public class KeyboardInputListener extends KeyAdapter
 		}
 		if ( shiftPressed ) {
 			result.add( Keyboard.Modifier.SHIFT );
+		}
+		if ( altPressed ) {
+			result.add( Keyboard.Modifier.ALT );
+		}
+		if ( altGrPressed) {
+			result.add( Keyboard.Modifier.ALT_GR);
 		}
 		return result;
 	}

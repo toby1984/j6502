@@ -340,7 +340,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 			handleKeyRelease(Key.KEY_RIGHT_SHIFT);
 		} else if ( key.fakeLeftShift() ) {
 			handleKeyPress(Key.KEY_LEFT_SHIFT);
-		}
+		} 
 	}
 
 	protected void handleKeyRelease(Key key)
@@ -348,7 +348,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		keyboardColumns[ key.colBitNo ] |= (1 << key.rowBitNo);	 // bits are low-active so set bit if key is released
 		if ( key.fakeLeftShift() ) {
 			handleKeyRelease(Key.KEY_LEFT_SHIFT);
-		}
+		} 
 	}
 
 	@Override

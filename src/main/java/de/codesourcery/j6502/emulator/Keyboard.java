@@ -58,89 +58,100 @@ public class Keyboard
 				return true;
 			}
 		},		
-		KEY_RETURN((char) 10,6,1,  0),
+		KEY_RETURN((char) 10,1,0),
 		KEY_DELETE(7,0,  0),	
 		// row #1 (idx , rowBit / PRB , columnBit / PRA )
 		KEY_LEFT_SHIFT(8 ,7,1),
-		KEY_E         ('e',9 ,6,1),
-		KEY_S         ('s',10,5,1),
-		KEY_Z         ('z',11,4,1),
-		KEY_4         ('4',12,3,1),
-		KEY_A         ('a',13,2,1),
-		KEY_W         ('w',14,1,1),
-		KEY_3         ('3',15,0,1),
+		KEY_E         ('e',6 ,1),
+		KEY_S         ('s',5,1),
+		KEY_Z         ('z',4,1),
+		KEY_4         ('4',3,1),
+		KEY_A         ('a',2,1),
+		KEY_W         ('w',1,1),
+		KEY_3         ('3',0,1),
 		// row #2 (idx , rowBit / PRB , columnBit / PRA )
-		KEY_X('x',16,7,2),
-		KEY_T('t',17,6,2),
-		KEY_F('f',18,5,2),
-		KEY_C('c',19,4,2),
-		KEY_6('6',20,3,2),
-		KEY_D('d',21,2,2),
-		KEY_R('r',22,1,2),
-		KEY_5('5',23,0,2),
+		KEY_X('x',7,2),
+		KEY_T('t',6,2),
+		KEY_F('f',5,2),
+		KEY_C('c',4,2),
+		KEY_6('6',3,2),
+		KEY_D('d',2,2),
+		KEY_R('r',1,2),
+		KEY_5('5',0,2),
 		// row #3 (idx , rowBit / PRB , columnBit / PRA )
-		KEY_V('v',24,7,3),
-		KEY_U('u',25,6,3),
-		KEY_H('h',26,5,3),
-		KEY_B('b',27,4,3),
-		KEY_8('8',28,3,3),
-		KEY_G('g',29,2,3),
-		KEY_Y('y',30,1,3),
-		KEY_7('7',31,0,3),
+		KEY_V('v',7,3),
+		KEY_U('u',6,3),
+		KEY_H('h',5,3),
+		KEY_B('b',4,3),
+		KEY_8('8',3,3),
+		KEY_G('g',2,3),
+		KEY_Y('y',1,3),
+		KEY_7('7',0,3),
 		// row #4 (idx , rowBit / PRB , columnBit / PRA )
-		KEY_N('n',32, 7,4),
-		KEY_O('o',33, 6,4),
-		KEY_K('k',34, 5,4),
-		KEY_M('m',35, 4,4),
-		KEY_0('0',36, 3,4),
-		KEY_J('j',37, 2,4),
-		KEY_I('i',38, 1,4),
-		KEY_9('9',39, 0,4),
+		KEY_N('n',7, 4),
+		KEY_O('o',6, 4),
+		KEY_K('k',5, 4),
+		KEY_M('m',4, 4),
+		KEY_0('0',3, 4),
+		KEY_J('j',2, 4),
+		KEY_I('i',1, 4),
+		KEY_9('9',0, 4),
 		// row #5 (idx , rowBit / PRB , columnBit / PRA )
-		KEY_COMMA (',',40, 7,5),
-		KEY_AT    ('@',41, 6,5),
-		KEY_COLON (':',42, 5,5),
-		KEY_PERIOD('.',43, 4,5),
-		KEY_MINUS ('-',44, 3,5),
-		KEY_L     ('l',45, 2,5),
-		KEY_P     ('p',46, 1,5),
-		KEY_PLUS  ('+',47, 0,5),
+		KEY_COMMA (',',7, 5),
+		KEY_AT    ('@',6, 5),
+		KEY_COLON (':',5, 5),
+		KEY_PERIOD('.',4, 5),
+		KEY_MINUS ('-',3, 5),
+		KEY_L     ('l',2, 5),
+		KEY_P     ('p',1, 5),
+		KEY_PLUS  ('+',0, 5),
 		// row #6 (idx , rowBit / PRB , columnBit / PRA )
-		KEY_SLASH       ('/',48, 7,6),
-		KEY_CIRCUMFLEX  ('^',49, 6,6),
-		KEY_EQUALS      ('=',50, 5,6),
-		KEY_RIGHT_SHIFT (51, 4,6),
-		KEY_HOME        (52, 3,6),
-		KEY_SEMICOLON   (';',53, 2,6) {
+		KEY_SLASH       ('/',7, 6) {
 			@Override
 			public boolean clearShift() {
 				return true;
 			}
 		},
-		KEY_MULTIPLY    ('*',54, 1,6),
-		KEY_BACK_SLASH  ('\\',55, 0,6),
+		KEY_CIRCUMFLEX  ('^',6, 6),
+		KEY_EQUALS      ('=',5, 6),
+		KEY_RIGHT_SHIFT (51, 4,6),
+		KEY_HOME        (52, 3,6),
+		KEY_SEMICOLON   (';',2, 6) {
+			@Override
+			public boolean clearShift() {
+				return true;
+			}
+		},
+		KEY_MULTIPLY    ('*',1, 6),
+		KEY_POUND  ('\\',0, 6), 
 		// row #7 (idx , rowBit / PRB , columnBit / PRA )
 		KEY_STOP      (56, 7,7),
-		KEY_Q         ('q',57, 6,7),
+		KEY_Q         ('q',6, 7),
 		KEY_COMMODORE (58, 5,7),
-		KEY_SPACE     (' ',59, 4,7),
-		KEY_2         ('2',60, 3,7),
+		KEY_SPACE     (' ',4, 7),
+		KEY_2         ('2',3, 7),
 		KEY_CONTROL   (61, 2,7),
-		KEY_UNDERSCORE('_',62, 1,7),
-		KEY_1         ('1',63, 0,7);			
+		KEY_UNDERSCORE('_',1, 7),
+		KEY_1         ('1',0, 7),
+		// VIRTUAL KEYS (NON-EXISTANT ONES)
+		KEY_BACKSLASH('\\',4, 4) 
+		{
+			@Override
+			public boolean fakeLeftShift() {
+				return true;
+			}
+		};
 		
 		public final char c;
-		public final int index;
 		public final int rowBitNo;
 		public final int colBitNo;
 		
 		private Key(int idx,int rowBitNo,int colBitNo) {
-			this((char) 0,idx,rowBitNo,colBitNo);
+			this((char) 0,rowBitNo,colBitNo);
 		}
 		
-		private Key(char c,int idx,int rowBitNo,int colBitNo) {
+		private Key(char c,int rowBitNo,int colBitNo) {
 			this.c = c;
-			this.index = idx;
 			this.rowBitNo = rowBitNo;
 			this.colBitNo = colBitNo;
 		}
@@ -159,12 +170,12 @@ public class Keyboard
 	}
 	
 	public static enum Modifier {
-		SHIFT,CONTROL,NONE;
+		SHIFT,CONTROL,NONE,ALT_GR,ALT;
 	}
-
-	public static Key keyCodeToKey(int keyCode,KeyLocation location,Set<Modifier> modifiers) 
+	
+	public static Key keyCodeToKey(int extendedKeyCode,KeyLocation location,Set<Modifier> modifiers) 
 	{
-		switch( keyCode ) 
+		switch( extendedKeyCode ) 
 		{
 			// row #0
 			case KeyEvent.VK_DOWN:   return Key.KEY_DOWN;
@@ -208,7 +219,11 @@ public class Keyboard
 			case KeyEvent.VK_8:     return Key.KEY_8;
 			case KeyEvent.VK_G:     return Key.KEY_G;
 			case KeyEvent.VK_Y:     return Key.KEY_Y;
-			case KeyEvent.VK_7:     return Key.KEY_7;	
+			case KeyEvent.VK_7:     
+				if ( modifiers.contains( Modifier.SHIFT ) ) {
+					return Key.KEY_SLASH;
+				}
+				return Key.KEY_7;	
 			// row #4
 			case KeyEvent.VK_N:     return Key.KEY_N;
 			case KeyEvent.VK_O:     return Key.KEY_O;
@@ -242,7 +257,8 @@ public class Keyboard
 			case KeyEvent.VK_HOME: return Key.KEY_HOME;
 			case KeyEvent.VK_SEMICOLON:     return Key.KEY_SEMICOLON;
 			case KeyEvent.VK_MULTIPLY:     return Key.KEY_MULTIPLY;
-			case KeyEvent.VK_BACK_SLASH:  return Key.KEY_BACK_SLASH;
+			case KeyEvent.VK_BACK_SLASH:  
+				return Key.KEY_BACKSLASH;
 			// row #7
 			case KeyEvent.VK_PAUSE: return Key.KEY_STOP;
 			case KeyEvent.VK_Q:    return Key.KEY_Q;
