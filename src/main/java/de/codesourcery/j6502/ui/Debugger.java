@@ -692,6 +692,20 @@ public class Debugger
 				}
 			}
 		}
+		if ( ! isTick ) 
+		{
+			SwingUtilities.invokeLater( () -> 
+			{
+				for ( int i = 0, len = views.size() ; i < len ; i++ ) 
+				{
+					final IDebuggerView view = views.get(i);
+					if ( view.isDisplayed() && view instanceof Component) 
+					{
+						((Component) view).repaint();
+					}
+				}
+			});
+		}
 	}
 
 	protected final class CalculatorPanel extends JPanel implements IDebuggerView {

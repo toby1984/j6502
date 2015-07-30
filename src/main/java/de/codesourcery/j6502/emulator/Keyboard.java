@@ -41,23 +41,11 @@ public class Keyboard
 	{
 		// row #0 (idx , rowBit / PRB , columnBit / PRA )
 		KEY_DOWN  (0,7,  0),
-		KEY_UP (0,7,  0) { // not represented on keyboard matrix, actually a combination of SHIFT + KEY_DOWN
-			@Override
-			public boolean fakeLeftShift() {
-				return true;
-			}
-		},
 		KEY_F5    (1,6,  0),
 		KEY_F3    (2,5,  0),
 		KEY_F1    (3,4,  0),
 		KEY_F7    (4,3,  0),
 		KEY_RIGHT (5,2,  0),
-		KEY_LEFT  (5,2,  0) { // not represented on keyboard matrix, actually a combination of SHIFT + KEY_RIGHT
-			@Override
-			public boolean fakeLeftShift() {
-				return true;
-			}
-		},		
 		KEY_RETURN((char) 10,1,0),
 		KEY_DELETE(7,0,  0),	
 		// row #1 (idx , rowBit / PRB , columnBit / PRA )
@@ -116,7 +104,8 @@ public class Keyboard
 		KEY_EQUALS      ('=',5, 6),
 		KEY_RIGHT_SHIFT (51, 4,6),
 		KEY_HOME        (52, 3,6),
-		KEY_SEMICOLON   (';',2, 6) {
+		KEY_SEMICOLON   (';',2, 6) 
+		{
 			@Override
 			public boolean clearShift() {
 				return true;
@@ -133,9 +122,21 @@ public class Keyboard
 		KEY_CONTROL   (61, 2,7),
 		KEY_UNDERSCORE('_',1, 7),
 		KEY_1         ('1',0, 7),
-		// VIRTUAL KEYS (NON-EXISTANT ONES)
-		KEY_BACKSLASH('\\',4, 4) 
+		// VIRTUAL KEYS (These don't actually exist on the C64 keyboard)
+		KEY_BACKSLASH('\\',4, 4) // actually SHIFT+M
 		{
+			@Override
+			public boolean fakeLeftShift() {
+				return true;
+			}
+		},
+		KEY_LEFT  (5,2,  0) { // not represented on keyboard matrix, actually a combination of SHIFT + KEY_RIGHT
+			@Override
+			public boolean fakeLeftShift() {
+				return true;
+			}
+		},
+		KEY_UP (0,7,  0) { // not represented on keyboard matrix, actually a combination of SHIFT + KEY_DOWN
 			@Override
 			public boolean fakeLeftShift() {
 				return true;

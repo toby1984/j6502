@@ -12,8 +12,6 @@ public final class MemorySubsystem extends IMemoryRegion
 	private static final boolean DEBUG_WRITES = false;
 	private static final boolean DEBUG_ROM_IMAGES = false;
 
-	public static boolean mayWriteToStack = true;
-
 	public static enum Bank
 	{
 		/**
@@ -156,8 +154,6 @@ public final class MemorySubsystem extends IMemoryRegion
 	@Override
 	public void reset()
 	{
-		mayWriteToStack = true;
-
 		exrom = true; // line is LOW = ACTIVE so setting it to 'true' means disabled/not present
 		game = true;  // line is LOW = ACTIVE so setting it to 'true' means disabled/not present
 
@@ -515,14 +511,6 @@ public final class MemorySubsystem extends IMemoryRegion
 				}
 				break;
 			default:
-				if ( ! mayWriteToStack && (wrappedOffset >= 0x0102 && wrappedOffset <= 0x01ff ) )
-				{
-					System.out.flush();
-					System.err.flush();
-					System.err.println("WRITE TO STACK: "+HexDump.toAdr( wrappedOffset )+" = "+HexDump.byteToString( (byte) (value & 0xff) ));
-					System.err.flush();
-//					throw new RuntimeException("REFUSING TO WRITE TO STACK at "+HexDump.toAdr( wrappedOffset ) );
-				}
 				final IMemoryRegion region = writeRegions[ writeMap[ wrappedOffset ] ];
 				final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
 				if ( DEBUG_WRITES) {

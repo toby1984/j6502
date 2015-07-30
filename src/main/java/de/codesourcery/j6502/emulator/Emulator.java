@@ -5,7 +5,6 @@ import java.util.function.Consumer;
 import de.codesourcery.j6502.assembler.parser.Opcode;
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.Disassembler.Line;
-import de.codesourcery.j6502.emulator.Keyboard.Key;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
 import de.codesourcery.j6502.utils.HexDump;
 
@@ -62,8 +61,6 @@ public class Emulator
 
 		// reset CPU, will initialize PC from RESET_VECTOR_LOCATION
 		cpu.reset();
-
-		MemorySubsystem.mayWriteToStack = false;
 	}
 
 	public void doOneCycle()
@@ -115,6 +112,7 @@ public class Emulator
 			}
 			
 			final int oldPc = cpu.pc();
+			
 			doSingleStep();
 			
 			if ( PRINT_DISASSEMBLY ) {

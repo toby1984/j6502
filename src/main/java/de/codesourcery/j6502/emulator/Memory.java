@@ -37,7 +37,8 @@ public class Memory extends IMemoryRegion
 	}	
 
 	@Override
-	public void writeWord(int offset, short value) {
+	public void writeWord(int offset, short value) 
+	{
 		final byte low = (byte) value;
 		final byte hi = (byte) (value>>8);
 

@@ -38,7 +38,7 @@ public class VIC extends SlowMemory
 
 	// special marker color
 	protected static final int SPRITE_TRANSPARENT_COLOR = 0xdeadbeef;
-
+	
 	@FunctionalInterface
 	public interface IScreenCallback 
 	{
@@ -59,16 +59,16 @@ public class VIC extends SlowMemory
 	protected static final class ColorAndKind 
 	{
 		public int rgbColor;
-		public boolean isForeground;
+		public boolean hasForegroundColor;
 
 		public void foreground(int rgbColor) {
 			this.rgbColor = rgbColor;
-			this.isForeground = true;
+			this.hasForegroundColor = true;
 		}
 
 		public void background(int rgbColor) {
 			this.rgbColor = rgbColor;
-			this.isForeground = false;
+			this.hasForegroundColor = false;
 		}		
 	}
 
@@ -581,13 +581,15 @@ public class VIC extends SlowMemory
 		{
 			backBuffer.setRGB( tmpBeamX , tmpBeamY , getNextPixel(tmpBeamX,tmpBeamY) );
 			tmpBeamX++;
-			if ( tmpBeamX == 504 ) {
+			if ( tmpBeamX == 504 ) 
+			{
 				tmpBeamX = 0;
 				tmpBeamY++;
 				if ( tmpBeamY == 312 ) 
 				{
 					tmpBeamY = 0;
-					if ( clockHigh ) {
+					if ( clockHigh ) 
+					{
 						swapBuffers();
 					}
 				}
@@ -1043,6 +1045,8 @@ public class VIC extends SlowMemory
 				// $$FALL-THROUGH$$
 		}
 	}
+	
+	protected final ColorAndKind calculatedBGColor = new ColorAndKind();
 
 	private int getNextPixel(int beamX,int beamY)
 	{
@@ -1051,8 +1055,8 @@ public class VIC extends SlowMemory
 			return borderColor;
 		}
 
-		final ColorAndKind textModeColor = new ColorAndKind();
-		getBackgroundColor(beamX, beamY, textModeColor );
+		final ColorAndKind bgPixel = calculatedBGColor;
+		getBackgroundColor( graphicsMode , beamX, beamY, bgPixel );
 
 		int colorFromSprites = SPRITE_TRANSPARENT_COLOR;
 		int collisionColor = SPRITE_TRANSPARENT_COLOR;
@@ -1069,7 +1073,7 @@ public class VIC extends SlowMemory
 						collisionsMask |= 1<< i;
 					}
 					collisionColor = col;
-					if ( ! sprite.behindForeground || ! textModeColor.isForeground) 
+					if ( ! sprite.behindForeground || ! bgPixel.hasForegroundColor) 
 					{
 						colorFromSprites = col;
 					}
@@ -1078,13 +1082,13 @@ public class VIC extends SlowMemory
 		}
 
 		// TODO: Handle sprite collision IRQ
-		return colorFromSprites == SPRITE_TRANSPARENT_COLOR ? textModeColor.rgbColor : colorFromSprites;
+		return colorFromSprites == SPRITE_TRANSPARENT_COLOR ? bgPixel.rgbColor : colorFromSprites;
 	}
-
-	private void getBackgroundColor(int beamX, int beamY,ColorAndKind out) 
+	
+	private void getBackgroundColor(GraphicsMode graphicsMode,int beamX, int beamY,ColorAndKind out) 
 	{
-		int x = beamX - leftBorder;
-		int y = beamY - topBorder;
+		final int x = beamX - leftBorder;
+		final int y = beamY - topBorder;
 
 		switch( graphicsMode ) 
 		{
@@ -1097,8 +1101,6 @@ public class VIC extends SlowMemory
 
 				final int glyphAdr = character*8; // *8 bytes per glyph
 
-				final int word;
-
 				/*
 				 * Bank no.	Bit pattern in 56576/$DD00        Character ROM available?
 				 * 0	xxxxxx00	49152–65535	$C000–$FFFF	  No
@@ -1106,10 +1108,15 @@ public class VIC extends SlowMemory
 				 * 2	xxxxxx10	16384–32767	$4000–$7FFF	  No
 				 * 3	xxxxxx11	0–16383	$0000–$3FFF	      Yes, at 4096–8192 $1000–$1FFF
 				 */
-				if ( charROMAdr == 0x1000 || charROMAdr == 0x9000) {
-					word = mainMemory.getCharacterROM().readByte( glyphAdr + (y%8) );
-				} else {
-					word = mainMemory.readByte( charROMAdr + glyphAdr + (y%8) );
+				final int word;
+				switch( charROMAdr ) 
+				{
+					case 0x1000:
+					case 0x9000:
+						word = mainMemory.getCharacterROM().readByte( glyphAdr + (y%8) );
+						break;
+					default:
+						word = mainMemory.readByte( charROMAdr + glyphAdr + (y%8) );
 				}
 
 				int color =mainMemory.getColorRAMBank().readByte( 0x800 + byteOffset ) & 0b1111; // ignore upper 4 bits, color ram is actually a 4-bit static RAM				
@@ -1140,7 +1147,7 @@ public class VIC extends SlowMemory
 				 *    $D023 	53283 	35 	Bildschirmhintergrundfarbe 2 bei Extended Color Mode (0..15)
 				 *    $D024 	53284 	36 	Bildschirmhintergrundfarbe 3 bei Extended Color Mode (0..15)                 				 
 				 */
-				if ( color <= 7) { // 0111 bits => use regular color
+				if ( color <= 7) { // only 0111 bits set => use regular color
 					out.foreground( RGB_COLORS[ color ] );
 					return;
 				}

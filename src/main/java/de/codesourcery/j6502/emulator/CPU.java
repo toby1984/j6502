@@ -122,13 +122,8 @@ public class CPU
 
 	public void pushByte(byte value,IMemoryRegion region)
 	{
-		MemorySubsystem.mayWriteToStack = true;
-		try {
-			region.writeByte( sp , value );
-			decSP();
-		} finally {
-			MemorySubsystem.mayWriteToStack = false;
-		}
+		region.writeByte( sp , value );
+		decSP();
 	}
 
 	public int pop(IMemoryRegion region)
