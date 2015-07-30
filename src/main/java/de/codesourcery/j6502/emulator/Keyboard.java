@@ -174,7 +174,14 @@ public class Keyboard
 		SHIFT,CONTROL,NONE,ALT_GR,ALT;
 	}
 	
-	public static Key keyCodeToKey(int extendedKeyCode,KeyLocation location,Set<Modifier> modifiers) 
+	   public static Key keyCodeToKey(int extendedKeyCode,KeyLocation location,Set<Modifier> modifiers) 
+	    {
+	       Key key = internalKeyCodeToKey(extendedKeyCode, location, modifiers);
+	       System.out.println("Mapped "+extendedKeyCode+",loc: "+location+",mod: "+modifiers+" => "+key);
+	       return key;
+	    }
+	
+	private static Key internalKeyCodeToKey(int extendedKeyCode,KeyLocation location,Set<Modifier> modifiers) 
 	{
 		switch( extendedKeyCode ) 
 		{

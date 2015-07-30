@@ -117,8 +117,8 @@ public class VIC extends SlowMemory
      *  ( )                       Bit 0: 0 => Slow-Mode (1 MHz), 1 => Fast-Mode (2 MHz)
      */
 
-    public static final boolean DEBUG_RASTER_IRQ = true;
-    protected static final boolean DEBUG_MEMORY_LAYOUT = true;
+    public static final boolean DEBUG_RASTER_IRQ = false;
+    protected static final boolean DEBUG_MEMORY_LAYOUT = false;
     protected static final boolean DEBUG_SET_GRAPHICS_MODE = true;
 
     public static final int TOTAL_RASTER_LINES = 403; // PAL-B
@@ -185,8 +185,8 @@ public class VIC extends SlowMemory
     public  static final int VIC_SPRITE_BACKGROUND_COLLISIONS = 0x1f;
 
     public  static final int VIC_BORDER_COLOR = 0x20;
+    
     public  static final int VIC_BACKGROUND_COLOR = 0x21;
-
     public  static final int VIC_BACKGROUND0_EXT_COLOR = 0x22;
     public  static final int VIC_BACKGROUND1_EXT_COLOR = 0x23;
     public  static final int VIC_BACKGROUND2_EXT_COLOR = 0x24;
@@ -1287,9 +1287,60 @@ public class VIC extends SlowMemory
                 }     
                 return;
             }
-            case MODE_4: // HIRES -- extendedColor = true | bitmap = false | multiColor = false
+            case MODE_4: // extended color text mode-- extendedColor = true | bitmap = false | multiColor = false
             {
-                // TODO: Implement me
+                final int byteOffset = (y/8) * textColumnCount + (x/8);
+                final int character = mainMemory.readByte( videoRAMAdr + byteOffset );
+
+                final int glyphAdr = ( character & 0b0011_1111) *8; // *8 bytes per glyph, upper two bits indicate background color
+
+                /*
+                 * Bank no. Bit pattern in 56576/$DD00        Character ROM available?
+                 * 0 xxxxxx00 49152–65535 $C000–$FFFF   No
+                 * 1 xxxxxx01 32768–49151 $8000–$BFFF   Yes, at 36864–40959 $9000–$9FFF
+                 * 2 xxxxxx10 16384–32767 $4000–$7FFF   No
+                 * 3 xxxxxx11 0–16383 $0000–$3FFF       Yes, at 4096–8192 $1000–$1FFF
+                 */
+                final int word;
+                switch( charROMAdr ) 
+                {
+                    case 0x1000:
+                    case 0x9000:
+                        word = mainMemory.getCharacterROM().readByte( glyphAdr + (y%8) );
+                        break;
+                    default:
+                        word = mainMemory.readByte( charROMAdr + glyphAdr + (y%8) );
+                }
+                
+                final int bitOffset = 7-(x%8);
+                final int mask = 1 << bitOffset;
+                if ( (word & mask) != 0 ) 
+                {
+                    final int foregroundColor =mainMemory.getColorRAMBank().readByte( 0x800 + byteOffset ) & 0b1111; // ignore upper 4 bits, color ram is actually a 4-bit static RAM    
+                    out.foreground( RGB_COLORS[ foregroundColor ] );
+                } 
+                else 
+                {
+                    final int backgroundColor = (character & 0b11000000) >> 6;
+                    switch ( backgroundColor )                  
+                    {
+                        case 0b00:
+                            out.background( backgroundColor );
+                            break;
+                        case 0b01:
+                            out.background( RGB_COLORS[ readByte( VIC_BACKGROUND0_EXT_COLOR ) & 0b1111 ]  );
+                            break;
+                        case 0b10:
+                            out.background( RGB_COLORS[ readByte( VIC_BACKGROUND1_EXT_COLOR ) & 0b1111 ] );
+                            break;
+                        case 0b11:
+                            out.background( RGB_COLORS[ readByte( VIC_BACKGROUND2_EXT_COLOR ) & 0b1111 ] );
+                            break;
+                        default:
+                            throw new RuntimeException("Unreachable code reached");
+                    }
+                }
+                return;
             }
             default:
                 out.foreground( RGB_COLORS[ beamX%2 ] ); // display checkered pattern to indicate an unsupported/invalid graphics mode

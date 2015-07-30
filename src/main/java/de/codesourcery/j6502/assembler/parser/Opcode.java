@@ -633,7 +633,7 @@ ASL shifts all bits left one position. 0 is shifted into bit 0 and the original 
 					cpu.cycles += 7;
 					break;
 				default:
-					throw new RuntimeException("Unreachable code reached");
+					throw new RuntimeException("Unreachable code reached, opcode: "+Integer.toHexString( opcode ) );
 			}
 			memory.writeByte( adr , (byte) result );
 			cpu.setFlag(Flag.ZERO , (result & 0xff) == 0 );
@@ -1072,7 +1072,7 @@ BIT sets the Z flag as though the value in the address tested were ANDed with th
 					cpu.cycles += 4;
 					break;
 				default:
-					throw new RuntimeException("Unreachable code reached");
+					throw new RuntimeException("Unreachable code reached, opcode: $"+Integer.toHexString( opcode ));
 			}
 			final int value = memory.readByte( address );
 			final int result = (cpu.getAccumulator() & value);
@@ -1608,6 +1608,42 @@ Subroutines are normally terminated by a RTS op code.
 	// !!! ILLEGAL OPCODES !!!
 	// =======================
 	
+	SKW("SKW") // skip word 
+	{
+	    /* see http://www.ffd2.com/fridge/docs/6502-NMOS.extra.opcodes
+	     * 
+         * SKW skips next word (two bytes).
+         * Opcodes: 0C, 1C, 3C, 5C, 7C, DC, FC.
+         * Takes 4 cycles to execute.
+         *  
+         * To be dizzyingly precise, SKW actually performs a read operation.  It's 
+         * just that the value read is not stored in any register.  Further, opcode 0C 
+         * uses the absolute addressing mode.  
+         * The two bytes which follow it form the 
+         * absolute address.  All the other SKW opcodes use the absolute indexed X 
+         * addressing mode.  If a page boundary is crossed, the execution time of one 
+         * of these SKW opcodes is upped to 5 clock cycles.
+	     */
+        @Override
+        public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) 
+        {
+           switch( opcode ) 
+           {
+               case 0x0C:
+               case 0x1C:
+               case 0x3C:
+               case 0x5C:
+               case 0x7C:
+               case 0xDC:
+               case 0xFC:
+                   break;
+               default:
+                   throw new RuntimeException("Unreachable code reached");
+           }
+           cpu.incPC( 3 );
+           cpu.cycles += 4;
+        }
+	},
 	/* 
 	 * See http://www.retro-programming.de/?page_id=2248
 	 * 

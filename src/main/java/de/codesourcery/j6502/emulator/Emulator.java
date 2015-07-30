@@ -141,6 +141,15 @@ public class Emulator
 				}
 				Opcode.BRK.execute(op,cpu ,memory,this);
 				return;
+            case 0x0C: // "illegal opcode"
+            case 0x1C: // "illegal opcode"
+            case 0x3C: // "illegal opcode"
+            case 0x5C: // "illegal opcode"
+            case 0x7C: // "illegal opcode"
+            case 0xDC: // "illegal opcode"
+            case 0xFC: // "illegal opcode"
+                Opcode.SKW.execute(op,cpu ,memory,this); 
+                return;
 			case 0x20: Opcode.JSR.execute(op,cpu ,memory,this); return;
 			case 0x40: Opcode.RTI.execute(op,cpu ,memory,this); return;
 			case 0x60: Opcode.RTS.execute(op,cpu ,memory,this); return;
@@ -177,7 +186,6 @@ public class Emulator
 			// because they match some of the generic patterns I check for (mostly JMP instruction patterns)
 			case 0x64:
 			case 0x74:
-			case 0x7c:
 				unknownOpcode( op );
 				return;
 			default:
