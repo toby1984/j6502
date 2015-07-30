@@ -1263,7 +1263,7 @@ public class VIC extends SlowMemory
                 final int color = mainMemory.readByte( videoRAMAdr + scrOffset ); 
 
                 // multi-color mode (160x200)
-                int bitOffset = 7-(x & 7);
+                int bitOffset = 7-(x/2 & 7);
                 bitOffset = bitOffset % 4;
 
                 final int mask = 0b11 << 2*bitOffset;

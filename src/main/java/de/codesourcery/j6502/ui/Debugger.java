@@ -356,7 +356,7 @@ public class Debugger
 			if ( joyPort2.isSelected() ) 
 			{
 				joyPort1.setSelected( false );
-				keyboardListener.setJoystickPort( KeyboardInputListener.JoystickPort.PORT_1 );
+				keyboardListener.setJoystickPort( KeyboardInputListener.JoystickPort.PORT_2 );
 			}
 		});
 		return menuBar;

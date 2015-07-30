@@ -40,7 +40,7 @@ public class KeyboardInputListener extends KeyAdapter
 		PORT_1,PORT_2;
 	}
 
-	private JoystickPort joystickPort=JoystickPort.PORT_2;
+	private volatile JoystickPort joystickPort=JoystickPort.PORT_2;
 	
 	private JoyDirection joyDirection = JoyDirection.CENTER;
 	private boolean joyFire = false;
@@ -118,6 +118,7 @@ public class KeyboardInputListener extends KeyAdapter
 	{
 		synchronized( emulator ) 
 		{
+		    System.out.println("Joystick in port "+joystickPort+" changed: dir="+joyDirection+", fire="+joyFire);
 			switch ( joystickPort ) 
 			{
 				case PORT_1:
@@ -147,6 +148,7 @@ public class KeyboardInputListener extends KeyAdapter
 			joystickChanged();
 			this.joystickPort = port;			
 		}
+	      System.out.println("Switched to joystick port "+port);
 	}
 	
 	@Override
