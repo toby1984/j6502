@@ -16,8 +16,7 @@ public abstract class EmulatorDriver extends Thread
 
 	public volatile Throwable lastException;
 
-	public static final boolean DELAY_LOOP_ENABLED = false;
-	public static final boolean PRINT_SPEED = true;
+	public static final boolean PRINT_SPEED = false;
 
 	public static enum Mode { SINGLE_STEP , CONTINOUS; }
 
@@ -188,6 +187,11 @@ public abstract class EmulatorDriver extends Thread
 		float dummy = 0; // used to prevent the compiler from optimizing away the delay loop
 		long startTime = System.currentTimeMillis();
 		long cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
+		
+		int delayIterationsCount=90;
+		
+		boolean adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
+		
 		while( true )
 		{
 			if ( isRunnable )
@@ -226,9 +230,9 @@ public abstract class EmulatorDriver extends Thread
 				
 				lastException = null;
 				cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
-				if ( PRINT_SPEED ) {
-					startTime = System.currentTimeMillis();
-				}
+				startTime = System.currentTimeMillis();
+				adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
+				
 				onStart();
 			}
 			
@@ -236,16 +240,17 @@ public abstract class EmulatorDriver extends Thread
 			{
 				try
 				{
-					if ( DELAY_LOOP_ENABLED ) 
+					// run at max. speed if floppy is transferring data
+					final SerialDevice floppy = emulator.getBus().getDevice(8);
+					final boolean doDelay = floppy == null || ! floppy.isDataTransferActive(); 
+					if ( doDelay )
 					{
-						// run at max. speed if floppy is transferring data
-						final SerialDevice floppy = emulator.getBus().getDevice(8);
-						if ( floppy == null || ! floppy.isDataTransferActive() )
-						{
-							for ( int i = 80 ; i > 0 ; i-- ) {
-								dummy += Math.sqrt( i );
-							}
+						for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
+							dummy += Math.sqrt( i );
 						}
+					} 
+					else {
+					    adjustDelayLoop = false;
 					}
 					
 					lastException = null;
@@ -282,15 +287,26 @@ public abstract class EmulatorDriver extends Thread
 			if ( cyclesUntilNextTick <= 0 )
 			{
 				tick();
+                final long now = System.currentTimeMillis();
+                final float cyclesPerSecond = CALLBACK_INVOKE_CYCLES / ( (now - startTime ) / 1000f );
+                final float khz = cyclesPerSecond / 1000f;				
 				if ( PRINT_SPEED )
 				{
-					long now = System.currentTimeMillis();
-					float cyclesPerSecond = CALLBACK_INVOKE_CYCLES / ( (now - startTime ) / 1000f );
-					float khz = cyclesPerSecond / 1000f;
-					System.out.println("CPU frequency: "+khz+" kHz "+dummy);
-					startTime = now;
+					System.out.println("CPU frequency: "+khz+" kHz (delay iterations: "+delayIterationsCount+") "+dummy);
 				}
+				if ( adjustDelayLoop ) 
+				{
+    				if ( khz >= 1000 ) {
+    				    delayIterationsCount++;
+    				} 
+    				else if ( khz < 950 ) 
+    				{
+    				    delayIterationsCount--;
+    				}
+				}
+				startTime = now;
 				cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
+				adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
 			}			
 		}
 	}

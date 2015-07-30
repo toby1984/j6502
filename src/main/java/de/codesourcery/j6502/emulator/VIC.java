@@ -117,6 +117,9 @@ public class VIC extends SlowMemory
      *  ( )                       Bit 0: 0 => Slow-Mode (1 MHz), 1 => Fast-Mode (2 MHz)
      */
 
+    public static final boolean DEBUG_RASTER_IRQ = true;
+    protected static final boolean DEBUG_MEMORY_LAYOUT = true;
+    protected static final boolean DEBUG_SET_GRAPHICS_MODE = true;
 
     public static final int TOTAL_RASTER_LINES = 403; // PAL-B
     public static final int VISIBLE_RASTER_LINES = 312; // PAL-B
@@ -203,6 +206,8 @@ public class VIC extends SlowMemory
     protected static final int DISPLAY_WIDTH= 504;
     protected static final int DISPLAY_HEIGHT = 312;
 
+    // color palette taken from http://www.pepto.de/projects/colorvic/
+    
     public static final Color Black     = color(  0,  0,  0);
     public static final Color White     = color(255,255,255);
     public static final Color Red       = color(104, 55, 43);
@@ -241,9 +246,6 @@ public class VIC extends SlowMemory
             RGB_COLORS[i] = AWT_COLORS[i].getRGB();
         }
     } 
-
-    protected static final boolean DEBUG_MEMORY_LAYOUT = true;
-    protected static final boolean DEBUG_SET_GRAPHICS_MODE = true;
 
     public static final int SPRITE_WIDTH = 24;
     public static final int SPRITE_HEIGHT = 21;
@@ -583,13 +585,19 @@ public class VIC extends SlowMemory
         // VIC renders 8 pixels per cycle => 4 pixels per clock phase
         for ( int i = 0 ; i < 4 ; i++ ) 
         {
-            if ( tmpBeamY < top || tmpBeamY >= bottom || tmpBeamX < left || tmpBeamX >= right ) 
+            final int color;
+            if ( DEBUG_RASTER_IRQ && rasterIRQEnabled && tmpBeamY == irqOnRaster ) 
             {
-                imagePixelData[ tmpBeamY * DISPLAY_WIDTH + tmpBeamX ] = borderColor;
+                color = Color.PINK.getRGB();
+            } 
+            else if ( tmpBeamY < top || tmpBeamY >= bottom || tmpBeamX < left || tmpBeamX >= right ) 
+            {
+                color = borderColor;
             } else {
-                imagePixelData[ tmpBeamY * DISPLAY_WIDTH + tmpBeamX ] = getPixelColor(tmpBeamX,tmpBeamY);
+                color = getPixelColor(tmpBeamX,tmpBeamY);
             }
-
+            imagePixelData[ tmpBeamY * DISPLAY_WIDTH + tmpBeamX ] = color;
+            
             tmpBeamX++;
             if ( tmpBeamX == DISPLAY_WIDTH ) 
             {
@@ -1160,8 +1168,7 @@ public class VIC extends SlowMemory
 
                 final int color =mainMemory.getColorRAMBank().readByte( 0x800 + byteOffset ) & 0b1111; // ignore upper 4 bits, color ram is actually a 4-bit static RAM    
 
-                /*
-                 * Farb-Bits  Entsprechende Farbe  Speicheradresse
+                /* Farb-Bits  Entsprechende Farbe  Speicheradresse
                  * 00          Bildschirmfarbe            53281   $D021
                  * 01          Multicolorfarbe 1            53282   $D022
                  * 10          Multicolorfarbe 2            53283   $D023
@@ -1172,8 +1179,15 @@ public class VIC extends SlowMemory
                  *    $D023  53283  35  Bildschirmhintergrundfarbe 2 bei Extended Color Mode (0..15)
                  *    $D024  53284  36  Bildschirmhintergrundfarbe 3 bei Extended Color Mode (0..15)                      
                  */
-                if ( color <= 7) { // special case, need to be displayed in monochrome
-                    out.foreground( RGB_COLORS[ color ] );
+                if ( color <= 7) { // display as regular glyph
+                    final int bitOffset = 7-(x%8);
+                    final int mask = 1 << bitOffset;
+                    if ( (word & mask) != 0 ) 
+                    {
+                        out.foreground( RGB_COLORS[ color ] );
+                    } else {   
+                        out.background( backgroundColor );
+                    }
                     return;
                 }
 
@@ -1194,10 +1208,10 @@ public class VIC extends SlowMemory
                  * foreground. It should be noted that this is also valid for the graphics
                  * generated in idle state.
                  */    
-                switch( (word & mask) >> 2*bitOffset ) 
+                switch( (word & mask) >>> 2*bitOffset ) 
                 {
                     case 0b00:
-                        out.background( RGB_COLORS[ readByte( VIC_BACKGROUND_COLOR ) & 0b1111 ] ); // In multicolor mode (MCM=1), the bit combinations "00" and "01" belong to the background and "10" and "11" to the foreground 
+                        out.background( backgroundColor ); // In multicolor mode (MCM=1), the bit combinations "00" and "01" belong to the background and "10" and "11" to the foreground 
                         break;
                     case 0b01:
                         out.background( RGB_COLORS[ readByte( VIC_BACKGROUND0_EXT_COLOR ) & 0b1111 ] ); // In multicolor mode (MCM=1), the bit combinations "00" and "01" belong to the background and "10" and "11" to the foreground 
@@ -1278,7 +1292,8 @@ public class VIC extends SlowMemory
                 // TODO: Implement me
             }
             default:
-                out.foreground( RGB_COLORS[ beamX%2 ] ); // display checkered pattern to indicate an unsupported graphics mode
+                out.foreground( RGB_COLORS[ beamX%2 ] ); // display checkered pattern to indicate an unsupported/invalid graphics mode
+                // TODO: VIC outputs black on invalid color modes
                 return;
         }
     }
