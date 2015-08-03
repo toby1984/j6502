@@ -41,16 +41,15 @@ public class Main
 	protected final StyledDocument document = editor.getStyledDocument();
 
 	protected volatile boolean documentListenerEnabled = true;
-	public static void main(String[] args) throws BadLocationException
-	{
-		new Main().run();
-	}
 
 	private final AtomicReference<Long> lastRefreshRequest = new AtomicReference<>(null);
 
 	private final Thread refreshThread;
+
+	public Main()
 	{
-		refreshThread = new Thread() {
+		refreshThread = new Thread()
+		{
 			@Override
 			public void run()
 			{
@@ -80,6 +79,20 @@ public class Main
 	private void queueRefresh()
 	{
 		lastRefreshRequest.set( System.currentTimeMillis() );
+	}
+
+	public static void main(String[] args)
+	{
+		SwingUtilities.invokeLater( () ->
+		{
+			try {
+				new Main().run();
+			}
+			catch (Exception e)
+			{
+				throw new RuntimeException(e);
+			}
+		});
 	}
 
 	private void renderDocument()

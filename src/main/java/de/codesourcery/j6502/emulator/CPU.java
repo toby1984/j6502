@@ -16,6 +16,7 @@ public class CPU
 	private final IMemoryRegion memory;
 
 	private boolean interruptQueued;
+
 	public long cycles = 0;
 	public short previousPC;
 	private int pc;
@@ -159,14 +160,15 @@ public class CPU
 		previousPC = (short) pc;
 		System.out.println("CPU.reset(): Settings PC to "+HexDump.toAdr( pc ) );
 		setAccumulator(0);
-		setX((byte) 0);
-		setY((byte) 0);
+		setX(0);
+		setY(0);
 		clearInterruptQueued();
 		sp = 0x1ff;
 		setFlagBits( CPU.Flag.IRQ_DISABLE.set( (byte) 0) );
 	}
 
-	public void queueInterrupt() {
+	public void queueInterrupt()
+	{
 		if ( ! isSet(CPU.Flag.IRQ_DISABLE ) ) {
 			this.interruptQueued = true;
 		}

@@ -25,8 +25,10 @@ import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -49,6 +51,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.border.TitledBorder;
 import javax.swing.table.AbstractTableModel;
 
@@ -76,9 +79,7 @@ import de.codesourcery.j6502.emulator.Floppy;
 import de.codesourcery.j6502.emulator.IECBus.StateSnapshot;
 import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
-import de.codesourcery.j6502.emulator.VIC.IScreenCallback;
 import de.codesourcery.j6502.ui.KeyboardInputListener.JoystickPort;
-import de.codesourcery.j6502.ui.SpriteViewer.SpriteView;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
 
@@ -105,14 +106,10 @@ public class Debugger
 		private long lastTick;
 
 		@Override
-		protected void onStopHook(Throwable t) {
-			SwingUtilities.invokeLater( () -> updateWindows(false) );
-		}
+		protected void onStopHook(Throwable t) { SwingUtilities.invokeLater( () -> updateWindows(false) ); }
 
 		@Override
-		protected void onStartHook() {
-			SwingUtilities.invokeLater( () -> updateWindows(false) );
-		}
+		protected void onStartHook() { SwingUtilities.invokeLater( () -> updateWindows(false) ); }
 
 		@Override
 		protected void tick()
@@ -122,10 +119,10 @@ public class Debugger
 			if ( age > UI_REFRESH_MILLIS ) // do not post more than 60 events / second to not overload the Swing Event handling queue
 			{
 				lastTick = now;
-				try 
+				try
 				{
 					SwingUtilities.invokeAndWait( () -> updateWindows(true) );
-				} 
+				}
 				catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -153,7 +150,7 @@ public class Debugger
 	private final AsmPanel asmPanel = new AsmPanel(desktop) {
 
 		@Override
-		protected void binaryUploadedToEmulator() 
+		protected void binaryUploadedToEmulator()
 		{
 			if ( SwingUtilities.isEventDispatchThread() ) {
 				updateWindows(false);
@@ -166,6 +163,8 @@ public class Debugger
 	private BusPanel busPanel;
 
 	private final List<IDebuggerView> panels = new ArrayList<>();
+
+	private IDebuggerView loc;
 
 	public static void main(String[] args)
 	{
@@ -199,17 +198,17 @@ public class Debugger
 		desktop.add( screenPanelFrame  );
 
 		final JInternalFrame calculatorPanelFrame = wrap( "Calculator" , calculatorPanel );
-		desktop.add( calculatorPanelFrame  );		
+		desktop.add( calculatorPanelFrame  );
 
 		final JInternalFrame bamPanelFrame = wrap( "BAM" , bamPanel );
-		desktop.add( bamPanelFrame  );			
-		
+		desktop.add( bamPanelFrame  );
+
 		final JInternalFrame spriteViewerFrame = wrap( "Sprite view" , spriteView );
-		desktop.add( spriteViewerFrame  );	
+		desktop.add( spriteViewerFrame  );
 
 		final JInternalFrame asmPanelFrame = wrap( AsmPanel.PANEL_TITLE , asmPanel );
 		asmPanel.setEmulator( emulator );
-		desktop.add( asmPanelFrame  );		
+		desktop.add( asmPanelFrame  );
 
 		busPanel = new BusPanel("IEC") {
 
@@ -228,9 +227,23 @@ public class Debugger
 
 		// register fake IDebuggerView to also track size and location
 		// of top-level frame
-		final IDebuggerView loc = new IDebuggerView() 
+		loc = new IDebuggerView()
 		{
 			private boolean isDisplayed;
+
+			private final Map<String,String> configProperties = new HashMap<>();
+
+			@Override
+			public Map<String, String> getConfigProperties()
+			{
+				return configProperties;
+			}
+
+			@Override
+			public void setConfigProperties(Map<String, String> properties)
+			{
+				this.configProperties.putAll(properties);
+			}
 
 			@Override
 			public void setLocationPeer(Component frame) {
@@ -265,7 +278,7 @@ public class Debugger
 		locationHelper.applyLocation( loc );
 
 		// add window listener that saves application state before shutting down
-		frame.addWindowListener( new WindowAdapter() 
+		frame.addWindowListener( new WindowAdapter()
 		{
 			@Override
 			public void windowClosing(WindowEvent e) {
@@ -314,17 +327,17 @@ public class Debugger
 		final JMenu views = new JMenu("Views");
 		menuBar.add( views );
 
-		panels.sort( (a,b) -> 
+		panels.sort( (a,b) ->
 		{
 			final String title1 = ((JInternalFrame) a.getLocationPeer()).getTitle();
 			final String title2 = ((JInternalFrame) b.getLocationPeer()).getTitle();
 			return title1.compareTo( title2 );
 		});
-		panels.forEach( loc -> 
+		panels.forEach( loc ->
 		{
 			final JInternalFrame peer = (JInternalFrame) loc.getLocationPeer();
 			final JCheckBoxMenuItem viewItem = new JCheckBoxMenuItem( peer.getTitle() , loc.isDisplayed() );
-			viewItem.addActionListener( ev -> 
+			viewItem.addActionListener( ev ->
 			{
 				loc.setDisplayed( viewItem.isSelected() );
 				peer.setVisible( viewItem.isSelected() );
@@ -332,28 +345,28 @@ public class Debugger
 			});
 			views.add(viewItem );
 		});
-		
+
 		// create I/O menu
 		final JMenu io = new JMenu("I/O");
 		menuBar.add( io );
 
 		final JCheckBoxMenuItem joyPort1 = new JCheckBoxMenuItem( "Joystick port #1" , keyboardListener.getJoystickPort() == JoystickPort.PORT_1);
 		final JCheckBoxMenuItem joyPort2 = new JCheckBoxMenuItem( "Joystick port #2" , keyboardListener.getJoystickPort() == JoystickPort.PORT_2);
-		
+
 		io.add( joyPort1 );
 		io.add( joyPort2 );
-		
-		joyPort1.addActionListener( ev -> 
+
+		joyPort1.addActionListener( ev ->
 		{
-			if ( joyPort1.isSelected() ) 
+			if ( joyPort1.isSelected() )
 			{
 				joyPort2.setSelected( false );
 				keyboardListener.setJoystickPort( KeyboardInputListener.JoystickPort.PORT_1 );
 			}
 		});
-		joyPort2.addActionListener( ev -> 
+		joyPort2.addActionListener( ev ->
 		{
-			if ( joyPort2.isSelected() ) 
+			if ( joyPort2.isSelected() )
 			{
 				joyPort1.setSelected( false );
 				keyboardListener.setJoystickPort( KeyboardInputListener.JoystickPort.PORT_2 );
@@ -362,9 +375,9 @@ public class Debugger
 		return menuBar;
 	}
 
-	private void ejectDisk() 
+	private void ejectDisk()
 	{
-		try 
+		try
 		{
 			doWithFloppy( floppy -> floppy.ejectDisk() );
 		} catch(Exception e) {
@@ -372,22 +385,22 @@ public class Debugger
 		}
 	}
 
-	private void doWithFloppy(Consumer<Floppy> consumer) 
+	private void doWithFloppy(Consumer<Floppy> consumer)
 	{
-		synchronized(emulator) 
+		synchronized(emulator)
 		{
 			emulator.getMemory().ioArea.iecBus.getDevices()
 			.stream().filter( dev -> dev instanceof Floppy).map( dev -> (Floppy) dev).findFirst().ifPresent( consumer );
 		}
 	}
 
-	private <T> Optional<T> doWithFloppyAndReturn(Function<Floppy,T> consumer) 
+	private <T> Optional<T> doWithFloppyAndReturn(Function<Floppy,T> consumer)
 	{
-		synchronized(emulator) 
+		synchronized(emulator)
 		{
 			Optional<Floppy> floppy = emulator.getMemory().ioArea.iecBus.getDevices()
 					.stream().filter( dev -> dev instanceof Floppy).map( dev -> (Floppy) dev).findFirst();
-			if ( floppy.isPresent() ) 
+			if ( floppy.isPresent() )
 			{
 				return Optional.ofNullable( consumer.apply( floppy.get() ) );
 			}
@@ -395,26 +408,26 @@ public class Debugger
 		}
 	}
 
-	private void insertDisk() 
+	private void insertDisk()
 	{
-		final Optional<D64File> current = doWithFloppyAndReturn( floppy -> floppy.getDisk() );
+		final String lastFile = loc.getConfigProperties().get("last_d64_file");
 		final JFileChooser chooser;
-		if ( current.isPresent() && current.get().getSource().startsWith("file:" ) ) 
+		if (StringUtils.isNotBlank( lastFile ))
 		{
-			chooser = new JFileChooser(new File( current.get().getSource().substring("file:".length()) ) );
+			chooser = new JFileChooser(new File( lastFile ) );
 		} else {
 			chooser = new JFileChooser( new File("/home/tobi/mars_workspace/j6502/src/main/resources/disks"));
 		}
-		int result = chooser.showOpenDialog( null );
-
-		if ( result != JFileChooser.APPROVE_OPTION ) 
+		if ( chooser.showOpenDialog( null ) != JFileChooser.APPROVE_OPTION )
 		{
 			return;
 		}
 		final File file = chooser.getSelectedFile();
-		try 
+		loc.getConfigProperties().put( "last_d64_file" , file.getAbsolutePath() );
+
+		try
 		{
-			doWithFloppy( floppy -> 
+			doWithFloppy( floppy ->
 			{
 				D64File d64File;
 				try {
@@ -432,7 +445,7 @@ public class Debugger
 		}
 	}
 
-	private void showError(String message,Throwable t) 
+	private void showError(String message,Throwable t)
 	{
 		final String[] msg = { message };
 		if ( t != null ) {
@@ -450,9 +463,9 @@ public class Debugger
 		invokeAndWait( () -> JOptionPane.showConfirmDialog(null, msg[0] , "Error" , JOptionPane.ERROR_MESSAGE ) );
 	}
 
-	private void invokeAndWait(Runnable r) 
+	private void invokeAndWait(Runnable r)
 	{
-		try 
+		try
 		{
 			if ( SwingUtilities.isEventDispatchThread() ) {
 				r.run();
@@ -467,7 +480,7 @@ public class Debugger
 	private void onApplicationShutdown()
 	{
 		try {
-			views.forEach( locationHelper::saveLocation);
+			views.forEach( locationHelper::updateConfiguration);
 			locationHelper.saveAll();
 		} catch (IOException e1) {
 			e1.printStackTrace();
@@ -482,17 +495,17 @@ public class Debugger
 
 		if ( panel instanceof IDebuggerView)
 		{
-			final IDebuggerView loc = (IDebuggerView) panel;
-			panels.add( loc );
-			loc.setLocationPeer( frame );
-			views.add( loc );
-			locationHelper.applyLocation( loc );
+			final IDebuggerView view = (IDebuggerView) panel;
+			panels.add( view );
+			view.setLocationPeer( frame );
+			views.add( view );
+			locationHelper.applyLocation( view );
 		}
 
 		frame.setResizable( true );
 		frame.getContentPane().add( panel );
 		frame.pack();
-		if ( panel instanceof IDebuggerView) 
+		if ( panel instanceof IDebuggerView)
 		{
 			frame.setVisible( ((IDebuggerView) panel).isDisplayed() );
 		} else {
@@ -537,7 +550,7 @@ public class Debugger
 
 		@Override
 		public void refresh(Emulator emulator) {
-			updateButtons();			
+			updateButtons();
 			repaint();
 		}
 
@@ -639,7 +652,7 @@ public class Debugger
 			stopButton.addActionListener( event -> driver.setMode(Mode.SINGLE_STEP) );
 
 			stepOverButton.addActionListener( ev -> driver.stepReturn() );
-			refreshUIButton.addActionListener( ev -> 
+			refreshUIButton.addActionListener( ev ->
 			{
 				updateWindows( false );
 			});
@@ -669,21 +682,21 @@ public class Debugger
 
 	protected void updateWindows(boolean isTick)
 	{
-		synchronized ( emulator ) 
+		synchronized ( emulator )
 		{
-			if ( isTick ) 
+			if ( isTick )
 			{
-				for ( int i = 0, len = views.size() ; i < len ; i++ ) 
+				for ( int i = 0, len = views.size() ; i < len ; i++ )
 				{
 					final IDebuggerView view = views.get(i);
 					if ( view.isDisplayed() && view.isRefreshAfterTick() ) {
 						view.refresh( emulator );
 					}
 				}
-			} 
-			else 
+			}
+			else
 			{
-				for ( int i = 0, len = views.size() ; i < len ; i++ ) 
+				for ( int i = 0, len = views.size() ; i < len ; i++ )
 				{
 					final IDebuggerView view = views.get(i);
 					if ( view.isDisplayed()  ) {
@@ -692,14 +705,14 @@ public class Debugger
 				}
 			}
 		}
-		if ( ! isTick ) 
+		if ( ! isTick )
 		{
-			SwingUtilities.invokeLater( () -> 
+			SwingUtilities.invokeLater( () ->
 			{
-				for ( int i = 0, len = views.size() ; i < len ; i++ ) 
+				for ( int i = 0, len = views.size() ; i < len ; i++ )
 				{
 					final IDebuggerView view = views.get(i);
-					if ( view.isDisplayed() && view instanceof Component) 
+					if ( view.isDisplayed() && view instanceof Component)
 					{
 						((Component) view).repaint();
 					}
@@ -718,15 +731,15 @@ public class Debugger
 		private JTextField decOutput = new JTextField();
 		private JTextField binOutput = new JTextField();
 
-		public CalculatorPanel() 
+		public CalculatorPanel()
 		{
 			setLayout( new FlowLayout() );
 
-			input.addActionListener( ev -> 
+			input.addActionListener( ev ->
 			{
 				String text = input.getText();
 				Integer inputValue = null;
-				if ( StringUtils.isNotBlank( text ) ) 
+				if ( StringUtils.isNotBlank( text ) )
 				{
 					text = text.trim();
 					try {
@@ -741,12 +754,12 @@ public class Debugger
 						} else {
 							inputValue = Integer.parseInt( text );
 						}
-					} 
-					catch(Exception e) 
+					}
+					catch(Exception e)
 					{
 					}
 				}
-				if ( inputValue != null ) 
+				if ( inputValue != null )
 				{
 					hexOutput.setText( Integer.toHexString( inputValue ) );
 					decOutput.setText( Integer.toString( inputValue ) );
@@ -788,7 +801,7 @@ public class Debugger
 			return false;
 		}
 
-		private void setup(JComponent c,String label) 
+		private void setup(JComponent c,String label)
 		{
 			TitledBorder border = BorderFactory.createTitledBorder( label );
 			border.setTitleColor( Color.WHITE );
@@ -815,10 +828,10 @@ public class Debugger
 		@Override
 		public boolean isDisplayed() {
 			return isDisplayed;
-		}		
+		}
 	}
 
-	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.IDebuggerView , IScreenCallback {
+	protected final class ScreenPanel extends JPanel implements WindowLocationHelper.IDebuggerView {
 
 		private Component frame;
 		private volatile boolean isDisplayed;
@@ -828,13 +841,16 @@ public class Debugger
 			setFocusable(true);
 			setRequestFocusEnabled(true);
 			keyboardListener.attach( this );
-			emulator.getVIC().setScreenCallback( this );
+
+			// 16 ms = 60hz screen refresh
+			final Timer timer = new Timer(16, ev -> repaint() );
+			timer.start();
 		}
 
 		@Override
 		public boolean isRefreshAfterTick() {
-			return false; // repainting is done @ 60hz by Swing Timer
-		}		
+			return false;
+		}
 
 		@Override
 		public void refresh(Emulator emulator) {
@@ -865,15 +881,9 @@ public class Debugger
 		protected void paintComponent(Graphics g)
 		{
 			// no need to synchronized here since all
-			// elements of the call-chain (emulator , result of emulator.getVic(), render() method) 
+			// elements of the call-chain (emulator , result of emulator.getVic(), render() method)
 			// either only access final variables OR come with their own synchronization (render() method)
 			emulator.getVIC().render( (Graphics2D) g , getWidth() , getHeight() );
-		}
-
-		@Override
-		public void renderMeNow()
-		{
-			repaint(1);
 		}
 	}
 
@@ -907,7 +917,7 @@ public class Debugger
 		@Override
 		public boolean isDisplayed() {
 			return isDisplayed;
-		}		
+		}
 
 		public CPUStatusPanel()
 		{
@@ -920,7 +930,7 @@ public class Debugger
 		}
 
 		@Override
-		public void refresh(Emulator emulator) 
+		public void refresh(Emulator emulator)
 		{
 			lines.clear();
 
@@ -934,7 +944,7 @@ public class Debugger
 			lines.add("SP: "+HexDump.toAdr( cpu.sp ) );
 
 			final Graphics2D g = getBackBufferGraphics();
-			try 
+			try
 			{
 				g.setColor( FG_COLOR );
 				int y = 15;
@@ -942,8 +952,8 @@ public class Debugger
 				{
 					g.drawString( line , 5 , y );
 					y += 15;
-				}			
-			} 
+				}
+			}
 			finally {
 				swapBuffers();
 			}
@@ -955,13 +965,13 @@ public class Debugger
 	public static void setup(JComponent c1,JComponent... other) {
 		setup(c1);
 
-		if ( other != null ) 
+		if ( other != null )
 		{
 			for ( JComponent c : other ) {
 				setup(c);
 			}
 		}
-	}	
+	}
 
 	public static void setup(JComponent c) {
 		setMonoSpacedFont( c );
@@ -973,7 +983,7 @@ public class Debugger
 	}
 
 	public static void setup(Graphics2D g) {
-		g.setFont( MONO_FONT ); 
+		g.setFont( MONO_FONT );
 		g.setColor( FG_COLOR );
 		g.setBackground( BG_COLOR );
 	}
@@ -1039,19 +1049,19 @@ public class Debugger
 		}
 
 		@Override
-		protected void initGraphics(Graphics2D g) { setup( g ); }		
+		protected void initGraphics(Graphics2D g) { setup( g ); }
 
 		@Override
 		public boolean isRefreshAfterTick() {
 			return true;
-		}		
+		}
 
 		@Override
-		public void refresh(Emulator emulator) 
+		public void refresh(Emulator emulator)
 		{
 			final Graphics2D g = getBackBufferGraphics();
 			try {
-				synchronized( emulator ) 
+				synchronized( emulator )
 				{
 					final String[] lines = hexdump.dump( startAddress , emulator.getMemory() , startAddress , bytesToDisplay).split("\n");
 
@@ -1061,9 +1071,9 @@ public class Debugger
 					for ( String line : lines ) {
 						g.drawString( line , 5 , y );
 						y += LINE_HEIGHT;
-					}				
+					}
 				}
-			} 
+			}
 			finally {
 				swapBuffers();
 			}
@@ -1104,7 +1114,7 @@ public class Debugger
 		@Override
 		public boolean isDisplayed() {
 			return isDisplayed;
-		}		
+		}
 	}
 
 	protected final class DisassemblyPanel extends BufferedView implements WindowLocationHelper.IDebuggerView , IBreakpointLister
@@ -1145,7 +1155,7 @@ public class Debugger
 		@Override
 		public boolean isDisplayed() {
 			return isDisplayed;
-		}		
+		}
 
 		@Override
 		public boolean isRefreshAfterTick() {
@@ -1153,19 +1163,19 @@ public class Debugger
 		}
 
 		@Override
-		public void refresh(Emulator emulator) 
+		public void refresh(Emulator emulator)
 		{
-			synchronized( emulator ) 
+			synchronized( emulator )
 			{
 				doRefresh( emulator );
 			}
 			repaint();
 		}
 
-		private void doRefresh(Emulator emulator) 
+		private void doRefresh(Emulator emulator)
 		{
 			final Graphics2D g = getBackBufferGraphics();
-			try 
+			try
 			{
 				final int pc = emulator.getCPU().pc();
 
@@ -1194,7 +1204,7 @@ public class Debugger
 					} else {
 						g.drawArc( circleX , circleY , lineHeight , lineHeight , 0 , 360 );
 					}
-				}	
+				}
 			} finally {
 				swapBuffers();
 			}
@@ -1278,18 +1288,18 @@ public class Debugger
 			refresh(emulator);
 		}
 
-		public void setAddress(short adr,Short addressToMark) 
+		public void setAddress(short adr,Short addressToMark)
 		{
 			internalSetAddress(adr, addressToMark);
 			refresh(emulator);
 		}
 
-		private void internalSetAddress(short adr,Short addressToMark) 
+		private void internalSetAddress(short adr,Short addressToMark)
 		{
 			this.addressToMark = addressToMark;
 			this.currentAddress = adr;
 			lines.clear();
-		}		
+		}
 
 		private void disassemble(Graphics g)
 		{
@@ -1466,7 +1476,7 @@ public class Debugger
 		@Override
 		public boolean isDisplayed() {
 			return isDisplayed;
-		}		
+		}
 	}
 
 	protected final class BreakpointModel extends AbstractTableModel implements IBreakpointLister

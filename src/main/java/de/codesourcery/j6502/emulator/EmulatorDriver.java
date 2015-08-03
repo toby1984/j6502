@@ -29,10 +29,10 @@ public abstract class EmulatorDriver extends Thread
 
 	// @GuardedBy( emulator )
 	private Breakpoint oneShotBreakpoint = null;
-	
+
 	// @GuardedBy( emulator )
 	private final Breakpoint[] breakpoints = new Breakpoint[65536];
-	
+
 	// @GuardedBy( emulator )
 	private int breakpointsCount=0;
 
@@ -40,7 +40,7 @@ public abstract class EmulatorDriver extends Thread
 	protected final ArrayBlockingQueue<Cmd> ackQueue = new ArrayBlockingQueue<>(10);
 
 	private final List<IBreakpointLister> breakpointListeners = new ArrayList<>();
-	
+
 	protected Cmd startCommand(boolean ackRequired) {
 		return new Cmd(CmdType.START,ackRequired);
 	}
@@ -50,14 +50,14 @@ public abstract class EmulatorDriver extends Thread
 	}
 
 	protected static enum CmdType { START , STOP }
-	
-	public interface IBreakpointLister 
+
+	public interface IBreakpointLister
 	{
 		public void breakpointAdded(Breakpoint bp);
 		public void breakpointRemoved(Breakpoint bp);
-		public void breakpointReplaced(Breakpoint old,Breakpoint newBp);		
+		public void breakpointReplaced(Breakpoint old,Breakpoint newBp);
 	}
-	
+
 	protected final class Cmd
 	{
 		public final long id = CMD_ID.incrementAndGet();
@@ -187,11 +187,11 @@ public abstract class EmulatorDriver extends Thread
 		float dummy = 0; // used to prevent the compiler from optimizing away the delay loop
 		long startTime = System.currentTimeMillis();
 		long cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
-		
+
 		int delayIterationsCount=90;
-		
+
 		boolean adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
-		
+
 		while( true )
 		{
 			if ( isRunnable )
@@ -214,7 +214,7 @@ public abstract class EmulatorDriver extends Thread
 				justStarted = false;
 				while ( ! isRunnable )
 				{
-					try 
+					try
 					{
 						final Cmd cmd = requestQueue.take();
 						cmd.ack();
@@ -227,39 +227,39 @@ public abstract class EmulatorDriver extends Thread
 						continue;
 					}
 				}
-				
+
 				lastException = null;
 				cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
 				startTime = System.currentTimeMillis();
 				adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
-				
+
 				onStart();
 			}
-			
+
 			synchronized( emulator )
 			{
 				try
 				{
 					// run at max. speed if floppy is transferring data
 					final SerialDevice floppy = emulator.getBus().getDevice(8);
-					final boolean doDelay = floppy == null || ! floppy.isDataTransferActive(); 
+					final boolean doDelay = floppy == null || ! floppy.isDataTransferActive();
 					if ( doDelay )
 					{
 						for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
 							dummy += Math.sqrt( i );
 						}
-					} 
+					}
 					else {
 					    adjustDelayLoop = false;
 					}
-					
+
 					lastException = null;
 
 					emulator.doOneCycle();
-					
+
 					cyclesUntilNextTick--;
 
-					if ( breakpointsCount > 0 ) 
+					if ( breakpointsCount > 0 )
 					{
 						Breakpoint bp = breakpoints[ cpu.pc() ];
 						if ( bp == null && ( oneShotBreakpoint != null && oneShotBreakpoint.address == cpu.pc() ) ) {
@@ -289,17 +289,17 @@ public abstract class EmulatorDriver extends Thread
 				tick();
                 final long now = System.currentTimeMillis();
                 final float cyclesPerSecond = CALLBACK_INVOKE_CYCLES / ( (now - startTime ) / 1000f );
-                final float khz = cyclesPerSecond / 1000f;				
+                final float khz = cyclesPerSecond / 1000f;
 				if ( PRINT_SPEED )
 				{
 					System.out.println("CPU frequency: "+khz+" kHz (delay iterations: "+delayIterationsCount+") "+dummy);
 				}
-				if ( adjustDelayLoop ) 
+				if ( adjustDelayLoop )
 				{
     				if ( khz >= 1000 ) {
     				    delayIterationsCount++;
-    				} 
-    				else if ( khz < 950 ) 
+    				}
+    				else if ( khz < 950 )
     				{
     				    delayIterationsCount--;
     				}
@@ -307,10 +307,10 @@ public abstract class EmulatorDriver extends Thread
 				startTime = now;
 				cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
 				adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
-			}			
+			}
 		}
 	}
-	
+
 	public void singleStep() throws RuntimeException
 	{
 		setMode(Mode.SINGLE_STEP);
@@ -327,7 +327,7 @@ public abstract class EmulatorDriver extends Thread
 	public Throwable getLastException() {
 		return lastException;
 	}
-	
+
 	public void stepReturn()
 	{
 		boolean breakpointAdded = false;
@@ -342,7 +342,7 @@ public abstract class EmulatorDriver extends Thread
 		if ( breakpointAdded ) {
 			setMode(Mode.CONTINOUS);
 		}
-	}	
+	}
 
 	public boolean canStepOver()
 	{
@@ -355,31 +355,31 @@ public abstract class EmulatorDriver extends Thread
 			}
 		}
 		return false;
-	}	
+	}
 
 	public void addBreakpoint(Breakpoint bp)
 	{
 		synchronized(emulator)
 		{
-			if (bp.isOneshot) 
+			if (bp.isOneshot)
 			{
 				if ( this.oneShotBreakpoint == null ) {
 					breakpointsCount++;
 				}
 				this.oneShotBreakpoint = bp;
-			} 
-			else 
+			}
+			else
 			{
 				Breakpoint old = this.breakpoints[ bp.address & 0xffff ];
 				this.breakpoints[ bp.address & 0xffff ] = bp;
-				if ( old == null ) 
+				if ( old == null )
 				{
 					breakpointsCount++;
 					breakpointListeners.forEach( l -> l.breakpointAdded( bp ) );
-				} 
-				else 
+				}
+				else
 				{
-					breakpointListeners.forEach( l -> l.breakpointReplaced( old , bp ) );					
+					breakpointListeners.forEach( l -> l.breakpointReplaced( old , bp ) );
 				}
 			}
 		}
@@ -410,17 +410,17 @@ public abstract class EmulatorDriver extends Thread
 	{
 		synchronized(emulator)
 		{
-			if ( breakpoint.isOneshot ) 
+			if ( breakpoint.isOneshot )
 			{
 				if ( oneShotBreakpoint != null && oneShotBreakpoint.address == breakpoint.address ) {
 					oneShotBreakpoint = null;
 					breakpointsCount--;
 				}
-			} 
-			else 
+			}
+			else
 			{
 				Breakpoint existing = this.breakpoints[ breakpoint.address & 0xffff ];
-				if ( existing != null ) 
+				if ( existing != null )
 				{
 					this.breakpoints[ breakpoint.address & 0xffff ] = null;
 					breakpointsCount--;
@@ -434,7 +434,7 @@ public abstract class EmulatorDriver extends Thread
 	{
 		synchronized(emulator)
 		{
-			for ( int i = 0 ; i < breakpoints.length ; i++ ) 
+			for ( int i = 0 ; i < breakpoints.length ; i++ )
 			{
 				Breakpoint bp = breakpoints[i];
 				if ( bp != null ) {
@@ -446,8 +446,8 @@ public abstract class EmulatorDriver extends Thread
 			breakpointsCount = 0;
 		}
 	}
-	
-	public void addBreakpointListener(IBreakpointLister l) 
+
+	public void addBreakpointListener(IBreakpointLister l)
 	{
 		if (l == null) {
 			throw new IllegalArgumentException("l must not be NULL");
@@ -456,8 +456,8 @@ public abstract class EmulatorDriver extends Thread
 			this.breakpointListeners.add(l);
 		}
 	}
-	
-	public void removeBreakpointListener(IBreakpointLister l) 
+
+	public void removeBreakpointListener(IBreakpointLister l)
 	{
 		if (l == null) {
 			throw new IllegalArgumentException("l must not be NULL");
@@ -465,5 +465,5 @@ public abstract class EmulatorDriver extends Thread
 		synchronized(emulator) {
 			this.breakpointListeners.remove(l);
 		}
-	}		
+	}
 }
