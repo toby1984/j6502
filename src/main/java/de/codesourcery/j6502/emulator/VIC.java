@@ -117,7 +117,7 @@ public class VIC extends SlowMemory
      *  ( )                       Bit 0: 0 => Slow-Mode (1 MHz), 1 => Fast-Mode (2 MHz)
      */
 
-    public static final boolean DEBUG_RASTER_IRQ = false;
+    public static final boolean DEBUG_RASTER_IRQ = true;
     protected static final boolean DEBUG_MEMORY_LAYOUT = false;
     protected static final boolean DEBUG_SET_GRAPHICS_MODE = true;
 
