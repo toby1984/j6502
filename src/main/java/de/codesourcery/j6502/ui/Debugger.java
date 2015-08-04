@@ -106,10 +106,21 @@ public class Debugger
 		private long lastTick;
 
 		@Override
-		protected void onStopHook(Throwable t) { SwingUtilities.invokeLater( () -> updateWindows(false) ); }
+		protected void onStopHook(Throwable t,boolean stoppedOnBreakpoint)
+		{
+			System.out.println("Emulation stopped (on breakpoint: "+stoppedOnBreakpoint+")");
+			if ( stoppedOnBreakpoint )
+			{
+				disassembly.setTrackPC(true);
+			}
+			SwingUtilities.invokeLater( () -> updateWindows(false) );
+		}
 
 		@Override
-		protected void onStartHook() { SwingUtilities.invokeLater( () -> updateWindows(false) ); }
+		protected void onStartHook()
+		{
+			SwingUtilities.invokeLater( () -> updateWindows(false) );
+		}
 
 		@Override
 		protected void tick()
@@ -1121,13 +1132,15 @@ public class Debugger
 	{
 		private final Disassembler dis = new Disassembler().setAnnotate(true);
 
+		protected final Short TRACK_CURRENT_PC = Short.valueOf( (short) 0xdead ); // dummy value, any will do since doRefresh() just checks for != NULL
+
 		protected static final int X_OFFSET = 30;
 		protected static final int Y_OFFSET = LINE_HEIGHT;
 
-
 		private final int bytesToDisassemble = 48;
+
 		private short currentAddress;
-		private Short addressToMark = null;
+		private Short addressToMark = TRACK_CURRENT_PC;
 
 		private final List<LineWithBounds> lines = new ArrayList<>();
 
@@ -1136,6 +1149,13 @@ public class Debugger
 
 		@Override
 		protected void initGraphics(Graphics2D g) { setup( g ); }
+
+		public void setTrackPC(boolean trackPC )
+		{
+			if ( trackPC ) {
+				addressToMark = TRACK_CURRENT_PC;
+			}
+		}
 
 		@Override
 		public void setLocationPeer(Component frame) {
@@ -1177,11 +1197,18 @@ public class Debugger
 			final Graphics2D g = getBackBufferGraphics();
 			try
 			{
-				final int pc = emulator.getCPU().pc();
+				final int pc;
+				Short adrToMark = addressToMark;
+				if ( adrToMark != null )
+				{
+					pc = emulator.getCPU().pc();
+					adrToMark = (short) pc;
+					internalSetAddress( (short) pc , TRACK_CURRENT_PC );
+				} else {
+					pc = currentAddress & 0xffff;
+				}
 
-				internalSetAddress( (short) pc , (short) pc );
-
-				maybeDisassemble( g );
+				maybeDisassemble( g , adrToMark );
 
 				for ( int i = 0, y = LINE_HEIGHT ; i < lines.size() ; i++ , y+= LINE_HEIGHT )
 				{
@@ -1189,7 +1216,7 @@ public class Debugger
 
 					g.setColor(FG_COLOR);
 					g.drawString( line.line.toString() , X_OFFSET , y );
-					if ( addressToMark != null && line.line.address == addressToMark )
+					if ( adrToMark != null && line.line.address == adrToMark.shortValue() )
 					{
 						g.setColor(Color.RED);
 						g.drawRect( line.bounds.x , line.bounds.y , line.bounds.width , line.bounds.height );
@@ -1236,6 +1263,8 @@ public class Debugger
 						if ( adr != null )
 						{
 							setAddress( adr , null );
+						} else {
+							setAddress( adr , TRACK_CURRENT_PC );
 						}
 					}
 				}
@@ -1256,6 +1285,7 @@ public class Debugger
 							} else {
 								driver.addBreakpoint( new Breakpoint( adr , false ) );
 							}
+							refresh( emulator );
 						}
 					}
 				}
@@ -1290,8 +1320,14 @@ public class Debugger
 
 		public void setAddress(short adr,Short addressToMark)
 		{
+			System.out.println("Disassembling starts @ "+HexDump.toAdr( adr ) );
 			internalSetAddress(adr, addressToMark);
-			refresh(emulator);
+
+			synchronized( emulator )
+			{
+				doRefresh( emulator );
+			}
+			repaint();
 		}
 
 		private void internalSetAddress(short adr,Short addressToMark)
@@ -1341,7 +1377,7 @@ public class Debugger
 			}
 		}
 
-		private void maybeDisassemble(Graphics g)
+		private void maybeDisassemble(Graphics g,Short addressToMark)
 		{
 			if ( lines.isEmpty() )
 			{

@@ -19,6 +19,7 @@ public class CPU
 
 	public long cycles = 0;
 	public short previousPC;
+
 	private int pc;
 	private int accumulator;
 	private int x;
@@ -42,6 +43,7 @@ public class CPU
 		public final char symbol;
 
 		private Flag(int value,String symbol) { this.value = value; this.symbol = symbol.charAt(0); }
+
 		public boolean isSet(byte flags) { return (flags&value) != 0; }
 		public boolean isNotSet(byte flags) { return (flags&value) == 0; }
 		public byte clear(byte flags) { return (byte) (flags&~value); }
@@ -147,6 +149,10 @@ public class CPU
 
 	public boolean isSet(Flag f) {
 		return f.isSet( this.flags );
+	}
+
+	public boolean isNotSet(Flag f) {
+		return f.isNotSet( this.flags );
 	}
 
 	public boolean isCleared(Flag f) {
@@ -288,5 +294,9 @@ public class CPU
 
 	public void setAccumulator(int accumulator) {
 		this.accumulator = accumulator & 0xff;
+	}
+
+	public int getSP() {
+		return this.sp & 0xffff;
 	}
 }

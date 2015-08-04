@@ -5,6 +5,7 @@ import de.codesourcery.j6502.assembler.parser.Identifier;
 import de.codesourcery.j6502.assembler.parser.Lexer;
 import de.codesourcery.j6502.assembler.parser.Parser;
 import de.codesourcery.j6502.assembler.parser.Scanner;
+import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.EmulatorTest;
 import de.codesourcery.j6502.utils.HexDump;
@@ -16,12 +17,31 @@ public class AssemblerTest extends TestCase {
 
 	private void assertCompilesTo(String asm, int expected1, int... expected2)
 	{
+		final byte[] actual = compile(asm);
+		assertArrayEquals( actual, expected1,expected2 );
+	}
+
+	private byte[] compile(String asm)
+	{
 		final String source = ! asm.contains("*=") ? SET_ORIGIN_CMD+asm : asm;
 		final Parser p = new Parser(new Lexer(new Scanner(source)));
+		AST ast;
+		try {
+			ast = p.parse();
+		}
+		catch(final RuntimeException e)
+		{
+			DisassemblerTest.maybePrintError( asm , e );
+			throw e;
+		}
 
 		final Assembler a = new Assembler();
-		final byte[] actual = a.assemble( p.parse() );
-		assertArrayEquals( actual, expected1,expected2 );
+		return a.assemble( ast );
+	}
+
+	private void assertCompiles(String asm)
+	{
+		compile(asm);
 	}
 
 	public static void assertArrayEquals(byte[] actual,int expected1,int... expected2)
@@ -50,7 +70,7 @@ public class AssemblerTest extends TestCase {
 		for ( int i =  0 ; i < min ; i++ ) {
 			final byte ex = (byte) (expected[i] & 0xff);
 			assertEquals( "Mismatch on byte @ "+HexDump.toAdr(offset+i)+" , got $"+
-			HexDump.byteToString( actual[i] )+" but expected $"+HexDump.byteToString( ex )+"\n\n"+HexDump.INSTANCE.dump((short) 0, actual, 0, actual.length), ex , actual[i] );
+					HexDump.byteToString( actual[i] )+" but expected $"+HexDump.byteToString( ex )+"\n\n"+HexDump.INSTANCE.dump((short) 0, actual, 0, actual.length), ex , actual[i] );
 		}
 		if ( actual.length != expected.length ) {
 			fail("Length mismatch: actual = "+actual.length+" , expected = "+expected.length+"\n\n"+HexDump.INSTANCE.dump((short) 0, actual, 0, actual.length) );
@@ -109,8 +129,8 @@ public class AssemblerTest extends TestCase {
 	public void testBackwardsReferenceToGlobalLabelInZeroPage()
 	{
 		final String s = SET_ORIGIN_CMD+"NOP\n"+
-				          "label:\n"+
-	                      "       JMP label";
+				"label:\n"+
+				"       JMP label";
 
 		final Parser p = new Parser(new Lexer(new Scanner(s)));
 
@@ -139,6 +159,30 @@ public class AssemblerTest extends TestCase {
 		assertCompilesTo(".byte $01,2,3,$4" , 1 , 2, 3, 4 );
 	}
 
+	public void testAssembleORA() {
+		/*
+		 * Executing $58 @ $0fff
+		 * Executing $a9 @ $1000 ; LDA #
+		 * Executing $85 @ $1002 ; STA ZP
+		 * Executing $a9 @ $1004 ; LDA #
+		 * Executing $85 @ $1006 ; STA ZP
+		 * Executing $a2 @ $1008 ; LDX #
+		 * Executing $a9 @ $100a ; LDA #
+		 * Executing $81 @ $100c ; STA (,X)
+		 */
+		String source = "LDA #<$1234\n STA $0a+5\n LDA #>$1234\n STA $0a+6\n LDX #$05\n LDA #$f0\n STA ($0a,X)\n LDA #$0f\n ORA ($0a,X)";
+		assertCompilesTo( source , 0xa9 , 0x34 , // LDA #$34
+				0x85,0x0f,  // STA $0a+5
+				0xa9, 0x12, // LDA #$12
+				0x85,0x10,  // STA $0a+6
+				0xa2,0x05,  // LDX #$05
+				0xa9,0xf0,  // LDA #$f0
+				0x81,0x0a,  // STA ($0a,X)
+				0xa9,0x0f,  // LDA #$0f
+				0x01,0x0a   // ORA ($0a,X)
+		);
+	}
+
 	public void testEQU1()
 	{
 		assertCompilesTo("reg: .equ $12\n.byte reg" , 0x12 );
@@ -156,7 +200,7 @@ public class AssemblerTest extends TestCase {
 	public void testSetOriginForwards()
 	{
 		final String s = "*= $0a\n"
-				           + " NOP";
+				+ " NOP";
 
 		final Parser p = new Parser(new Lexer(new Scanner(s)));
 
@@ -169,7 +213,7 @@ public class AssemblerTest extends TestCase {
 	public void testSetOriginBackwardsFails()
 	{
 		final String s = " NOP\n"+
-				          " *= $0";
+				" *= $0";
 
 		final Parser p = new Parser(new Lexer(new Scanner(s)));
 
@@ -186,8 +230,8 @@ public class AssemblerTest extends TestCase {
 	public void testForwardsReferenceToGlobalLabel()
 	{
 		final String s = SET_ORIGIN_CMD+"JMP label\n"+
-	                      "NOP\n"+
-				          "label:";
+				"NOP\n"+
+				"label:";
 
 		final Parser p = new Parser(new Lexer(new Scanner(s)));
 
@@ -223,10 +267,10 @@ public class AssemblerTest extends TestCase {
 	public void testForwardsReferenceToLocalLabel()
 	{
 		final String s = SET_ORIGIN_CMD+"global:"+
-	                     "NOP\n"+ // 1 byte
-				         "JMP local1\n"+ // 3 bytes
-	                     "NOP\n"+ // 1 byte
-				         ".local1";
+				"NOP\n"+ // 1 byte
+				"JMP local1\n"+ // 3 bytes
+				"NOP\n"+ // 1 byte
+				".local1";
 
 		final Parser p = new Parser(new Lexer(new Scanner(s)));
 
@@ -438,6 +482,12 @@ public class AssemblerTest extends TestCase {
 		assertCompilesTo( "EOR ($44),Y" , 0x51,0x44);
 	}
 
+
+	public void testAssembleMultipleInstructionsInOneLine()
+	{
+		assertCompiles( "LDY #$ff TXA" );
+	}
+
 	public void testADC()
 	{
 		// MODE           SYNTAX         HEX LEN TIM
@@ -471,6 +521,32 @@ public class AssemblerTest extends TestCase {
 		// MODE           SYNTAX         HEX LEN TIM
 		// Indirect,Y      ADC ($44),Y   $B1  2   5+
 		assertCompilesTo( "ADC ($44),Y" , 0x71,0x44);
+	}
+
+	public void testAXS() {
+		/*
+	 * AXS: Akku AND X-Register+Stored to memory (alternatives Mnemonic: SAX)
+     * AXS absolut ($8F, 3B, 4T, <keine>)
+     *
+     * AXS funktioniert so: Die Inhalte von Akku und X-Register werden UND-Verknüpft, aber OHNE eines der beiden Register zu ändern!
+     * Das Ergbnis wird dann an der angegebenen Adresse abgelegt. Die Flags im Statusregister (SR) bleiben ebenfalls unverändert!
+     *
+     * Wollte man das mit normalen Befehlen nachbilden, dann bräuchte man eine ganze Menge davon:
+     *
+	 * Adressierung | OpCode | Bytes | TZ
+     * absolut      |  $8F   |   3   |  4
+     * Zero-Page    |  $87   |   2   |  3
+     * Zero-Page,X  |  $97   |   2   |  4
+     * indirekt X   |  $83   |   2   |  6
+	 */
+		assertCompilesTo( "AXS $c000" , 0x8f,0x00,0xc0);
+		assertCompilesTo( "AXS $a0" , 0x87,0xa0);
+		assertCompilesTo( "AXS $a0,x" , 0x97,0xa0);
+		assertCompilesTo( "AXS ($a0,x)" , 0x83,0xa0);
+	}
+
+	public void testSKW() {
+		assertCompilesTo( "SKW" , 0x0c);
 	}
 
 	public void testCMP()
@@ -1135,8 +1211,8 @@ public class AssemblerTest extends TestCase {
 
 	public void testConditionalBranches()
 	{
-		 // BPL	BMI	BVC	BVS	BCC	BCS BNE	BEQ
-		 // 10	30	50	70	90	B0 	D0	F0
+		// BPL	BMI	BVC	BVS	BCC	BCS BNE	BEQ
+		// 10	30	50	70	90	B0 	D0	F0
 		final byte relOffset = 4;
 
 		// binary gets loaded at $0000

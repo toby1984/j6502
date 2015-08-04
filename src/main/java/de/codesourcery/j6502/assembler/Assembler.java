@@ -80,11 +80,11 @@ public class Assembler
 			} else {
 				try {
 					value = lit.getByteValue();
-				} 
+				}
 				catch(ParseException e) {
 					throw e;
-				}				
-				catch(Exception e) 
+				}
+				catch(Exception e)
 				{
 					throw new ParseException(e.getMessage(),lit.getTextRegion());
 				}
@@ -126,10 +126,10 @@ public class Assembler
 				catch(ParseException e) {
 					throw e;
 				}
-				catch(Exception e) 
+				catch(Exception e)
 				{
 					throw new ParseException(e.getMessage(),lit.getTextRegion());
-				}					
+				}
 			}
 			writeWord( value );
 		}
@@ -166,12 +166,12 @@ public class Assembler
 						if ( region != null )
 						{
 							TextLocation loc = sourceHelper.getLocation( region.getStartingOffset() );
-							if ( loc != null ) 
+							if ( loc != null )
 							{
 								try {
 									sourceMap.addAddressRange( start  , end-start , loc.lineNumber );
 								}
-								catch(IllegalArgumentException e) 
+								catch(IllegalArgumentException e)
 								{
 									throw new IllegalArgumentException("Error with location "+loc+" (offset: "+region.getStartingOffset()+")",e);
 								}
@@ -246,6 +246,10 @@ public class Assembler
 		context.onePass( ast );
 		context.onePass( ast );
 		return context.getBytes();
+	}
+
+	public ISymbolTable getSymbolTable() {
+		return context.symbolTable;
 	}
 
 	public SourceMap getSourceMap() {

@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.assembler;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -14,6 +15,22 @@ public class SymbolTable implements ISymbolTable {
 
 	private final Map<Identifier,ISymbol<?>> globalSymbols = new HashMap<>();
 	private final Map<Identifier,Map<Identifier,ISymbol<?>>> localSymbols = new HashMap<>();
+
+	@Override
+	public Iterable<ISymbol<?>> getGlobalSymbols()
+	{
+		return new ArrayList<>( globalSymbols.values() );
+	}
+
+	@Override
+	public Iterable<ISymbol<?>> getLocalSymbols(Identifier globalSybol)
+	{
+		final Map<Identifier, ISymbol<?>> map = localSymbols.get( globalSybol );
+		if ( map == null ) {
+			return new ArrayList<ISymbol<?>>();
+		}
+		return new ArrayList<>( map.values() );
+	}
 
 	@Override
 	public String toString() {

@@ -24,6 +24,12 @@ public class Emulator
 
 	private IMemoryProvider memoryProvider;
 
+	private final OtherCPU otherCPU;
+
+	public Emulator() {
+		otherCPU = new OtherCPU( cpu , memory );
+	}
+
 	public void setMemoryProvider(IMemoryProvider provider)
 	{
 		if (provider==null ) {
@@ -66,24 +72,24 @@ public class Emulator
 	public void doOneCycle()
 	{
 		/* First (low) half of clock cycle.
-		 * 
+		 *
 		 * One period of this signal corresponds to one clock cycle consisting
          * of two phases: ph2 is low in the first phase and high in the second
          * phase (hence the name 'ph2' for "phase 2"). The 6510 only accesses
          * the bus in the second (HIGH) clock phase, the VIC normally only in the
          * first (LOW) phase.
 		 */
-		
-		memory.tick( cpu , false ); // clock == LOW		
-		
+
+		memory.tick( cpu , false ); // clock == LOW
+
 		/*
 		 * Second (high) half of clock cycle.
 		 */
 		if ( cpu.cycles > 0 ) // wait until current command has 'finished' executing
 		{
 			cpu.cycles--;
-		} 
-		else 
+		}
+		else
 		{
 
 			if ( cpu.isInterruptQueued() && ! cpu.isSet(CPU.Flag.IRQ_DISABLE ) )
@@ -102,7 +108,8 @@ public class Emulator
 					private boolean linePrinted = false;
 
 					@Override
-					public void accept(Line line) {
+					public void accept(Line line)
+					{
 						if ( ! linePrinted ) {
 							System.out.println( line );
 							linePrinted = true;
@@ -110,17 +117,18 @@ public class Emulator
 					}
 				});
 			}
-			
+
 			final int oldPc = cpu.pc();
-			
-			doSingleStep();
-			
+
+			otherCPU.executeInstruction();
+			// doSingleStep();
+
 			if ( PRINT_DISASSEMBLY ) {
 				System.out.println( cpu );
 			}
-			cpu.previousPC = (short) oldPc;			
+			cpu.previousPC = (short) oldPc;
 		}
-		
+
 		memory.tick( cpu , true ); // clock == HIGH
 	}
 
@@ -141,6 +149,20 @@ public class Emulator
 				}
 				Opcode.BRK.execute(op,cpu ,memory,this);
 				return;
+			case 0x02: // "illegal opcode"
+			case 0x12: // "illegal opcode"
+			case 0x22: // "illegal opcode"
+			case 0x32: // "illegal opcode"
+			case 0x42: // "illegal opcode"
+			case 0x52: // "illegal opcode"
+			case 0x62: // "illegal opcode"
+			case 0x72: // "illegal opcode"
+			case 0x92: // "illegal opcode"
+			case 0xB2: // "illegal opcode"
+			case 0xD2: // "illegal opcode"
+			case 0xF2: // "illegal opcode"
+				Opcode.HLT.execute(op,cpu ,memory,this);
+				return;
             case 0x0C: // "illegal opcode"
             case 0x1C: // "illegal opcode"
             case 0x3C: // "illegal opcode"
@@ -148,7 +170,7 @@ public class Emulator
             case 0x7C: // "illegal opcode"
             case 0xDC: // "illegal opcode"
             case 0xFC: // "illegal opcode"
-                Opcode.SKW.execute(op,cpu ,memory,this); 
+                Opcode.SKW.execute(op,cpu ,memory,this);
                 return;
 			case 0x20: Opcode.JSR.execute(op,cpu ,memory,this); return;
 			case 0x40: Opcode.RTI.execute(op,cpu ,memory,this); return;
@@ -169,7 +191,7 @@ public class Emulator
 			case 0x87: // "illegal opcode"
 			case 0x97: // "illegal opcode"
 			case 0x83: // "illegal opcode"
-				Opcode.AXS.execute(op,cpu ,memory,this); 
+				Opcode.AXS.execute(op,cpu ,memory,this);
 				return;
 			case 0x98: Opcode.TYA.execute(op,cpu ,memory,this); return;
 			case 0xb8: Opcode.CLV.execute(op,cpu ,memory,this); return;
@@ -280,7 +302,7 @@ public class Emulator
 				unknownOpcode( op ); // never returns
 		}
 	}
-	
+
 	public KeyboardBuffer getKeyboardBuffer() {
 		return memory.ioArea.keyboardBuffer;
 	}

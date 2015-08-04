@@ -11,4 +11,8 @@ public interface ISymbolTable
 	public ISymbol<?> getSymbol(Identifier identifier,Identifier parentIdentifier);
 
 	public boolean isDefined(Identifier identifier,Identifier parentIdentifier);
+
+	public Iterable<ISymbol<?>> getGlobalSymbols();
+
+	public Iterable<ISymbol<?>> getLocalSymbols(Identifier globalSybol);
 }

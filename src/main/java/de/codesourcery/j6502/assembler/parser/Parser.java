@@ -109,12 +109,10 @@ public class Parser
 		if ( ! ( lexer.peek( TokenType.EOF ) || lexer.peek( TokenType.EOL ) ) )
 		{
 			final boolean gotLabel = parseLabel();
+			final boolean gotIns = parseInstructionOrMeta();
+			final boolean parseComment = parseComment();
 
-			final boolean gotInstruction = parseInstructionOrMeta();
-
-			final boolean gotComment = parseComment();
-
-			if ( ! gotLabel && ! gotInstruction && ! gotComment ) {
+			if ( ! gotLabel && ! gotIns && ! parseComment ) {
 				fail("Syntax error");
 			}
 			return true;
@@ -227,27 +225,27 @@ public class Parser
 			}
 			lexer.push( tok );
 		}
-		
+
 		if ( lexer.peek(TokenType.META_INCBIN ) ) // .incbin "file"
 		{
 			final Token startingQuotes = lexer.next();
-			if ( ! lexer.peek( TokenType.DOUBLE_QUOTE ) ) 
+			if ( ! lexer.peek( TokenType.DOUBLE_QUOTE ) )
 			{
 				fail(".incbin requires a file name in double quotes"); // always throws ParseException
 				return false; // make compiler happy
 			}
 
 			lexer.next( TokenType.DOUBLE_QUOTE );
-			
+
 			lexer.setSkipWhitespace( false );
-			try 
+			try
 			{
 				final StringBuilder buffer = new StringBuilder();
-				while ( ! lexer.eof() && ! lexer.peek( TokenType.DOUBLE_QUOTE ) && ! lexer.peek( TokenType.EOL) ) 
+				while ( ! lexer.eof() && ! lexer.peek( TokenType.DOUBLE_QUOTE ) && ! lexer.peek( TokenType.EOL) )
 				{
 					buffer.append( lexer.next().text );
 				}
-				if ( ! lexer.peek( TokenType.DOUBLE_QUOTE ) ) 
+				if ( ! lexer.peek( TokenType.DOUBLE_QUOTE ) )
 				{
 					fail("Unterminated string"); // always throws ParseException
 					return false; // make compiler happy
@@ -255,11 +253,11 @@ public class Parser
 				lexer.next( TokenType.DOUBLE_QUOTE );
 				currentNode.addChild( new IncludeBinaryNode( buffer.toString(), new TextRegion( startingQuotes.offset , buffer.length()+2 ) ) );
 				return true;
-			} 
+			}
 			finally {
 				lexer.setSkipWhitespace( true );
 			}
-		}		
+		}
 
 		if ( lexer.peek(TokenType.META_BYTE ) ) // .byte
 		{
@@ -391,7 +389,7 @@ public class Parser
 			final IASTNode expression = parseExpression();
 			result.addChild( expression );
 		}
-		else if ( lexer.peek(TokenType.CHARACTERS ) && Identifier.isValidIdentifier( lexer.peek().text ) ) // absolute addressing: reference to label
+		else if ( lexer.peek(TokenType.CHARACTERS ) && Identifier.isValidIdentifier( lexer.peek().text ) && ! Opcode.isValidOpcode( lexer.peek().text )) // absolute addressing: reference to label
 		{
 			final IASTNode tmp = parseExpression();
 			if ( tmp != null ) {
@@ -471,6 +469,9 @@ public class Parser
 
 	private IASTNode parseValue()
 	{
+		if ( lexer.peek(TokenType.CHARACTERS ) && Opcode.isValidOpcode( lexer.peek().text ) ) { // start of next instruction
+			return null;
+		}
 		final IASTNode result = parseNumber();
 		if ( result != null ) {
 			return result;
@@ -543,6 +544,7 @@ public class Parser
 		if ( value < Short.MIN_VALUE || value > 65535 ) {
 			fail("Number of or range: "+buffer+" ("+value+")" , startOffset );
 		}
+		System.out.println("Parsed number: "+value);
 		return new NumberLiteral( value, notation , new TextRegion( startOffset , lexer.currentOffset() - startOffset ) );
 	}
 }

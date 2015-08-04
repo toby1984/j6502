@@ -12,19 +12,20 @@ import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
+import de.codesourcery.j6502.emulator.exceptions.HLTException;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
 import de.codesourcery.j6502.utils.HexDump;
 
 public enum Opcode
 {
-	/* Immediate       LDA #$A5       $A9      2     2   
-     * Zero Page       LDA $A5        $A5      2     3   
-     * Zero Page,X     LDA $A5,X      $B5      2     4   
-     * Absolute        LDA $A5B6      $AD      3     4   
-     * Absolute,X      LDA $A5B6,X    $BD      3     4+  
-     * Absolute,Y      LDA $A5B6,Y    $B9      3     4+  
-     * (Indirect,X)    LDA ($A5,X)    $A1      2     6   
-     * (Indirect),Y    LDA ($A5),Y    $B1      2     5+   	 
+	/* Immediate       LDA #$A5       $A9      2     2
+     * Zero Page       LDA $A5        $A5      2     3
+     * Zero Page,X     LDA $A5,X      $B5      2     4
+     * Absolute        LDA $A5B6      $AD      3     4
+     * Absolute,X      LDA $A5B6,X    $BD      3     4+
+     * Absolute,Y      LDA $A5B6,Y    $B9      3     4+
+     * (Indirect,X)    LDA ($A5,X)    $A1      2     6
+     * (Indirect),Y    LDA ($A5),Y    $B1      2     5+
 	 */
 	LDA("LDA")
 	{
@@ -71,13 +72,13 @@ public enum Opcode
 			updateZeroSignedFromAccumulator(cpu);
 		}
 	},
-	/* Zero Page       STA $A5        $85      2     3   
-     * Zero Page,X     STA $A5,X      $95      2     4   
-     * Absolute        STA $A5B6      $8D      3     4   
-     * Absolute,X      STA $A5B6,X    $9D      3     5   
-     * Absolute,Y      STA $A5B6,Y    $99      3     5   
-     * (Indirect,X)    STA ($A5,X)    $81      2     6   
-     * (Indirect),Y    STA ($A5),Y    $91      2     6  	 
+	/* Zero Page       STA $A5        $85      2     3
+     * Zero Page,X     STA $A5,X      $95      2     4
+     * Absolute        STA $A5B6      $8D      3     4
+     * Absolute,X      STA $A5B6,X    $9D      3     5
+     * Absolute,Y      STA $A5B6,Y    $99      3     5
+     * (Indirect,X)    STA ($A5,X)    $81      2     6
+     * (Indirect),Y    STA ($A5),Y    $91      2     6
 	 */
 	STA("STA")
 	{
@@ -160,7 +161,7 @@ public enum Opcode
 				case 0x19: // Absolute,Y    ORA $4400,Y   $39  3   4+
 					value = readAbsoluteYValue( cpu , memory , 4 );
 					break;
-				case 0x01: // Indirect,X    ORA ($44,X)   $21  2   6
+				case 0x01: // Indirect,X    ORA ($44,X)   $01  2   6
 					value = readIndexedIndirectX(cpu,memory);
 					cpu.cycles += 6;
 					break;
@@ -235,14 +236,14 @@ public enum Opcode
  Affects Flags: S Z
 
 MODE           SYNTAX       HEX LEN TIM
-  Immediate       EOR #$A5       $49      2     2   
-  Zero Page       EOR $A5        $45      2     3   
-  Zero Page,X     EOR $A5,X      $55      2     4   
-  Absolute        EOR $A5B6      $4D      3     4   
-  Absolute,X      EOR $A5B6,X    $5D      3     4+  
-  Absolute,Y      EOR $A5B6,Y    $59      3     4+  
-  (Indirect,X)    EOR ($A5,X)    $41      2     6   
-  (Indirect),Y    EOR ($A5),Y    $51      2     5+  
+  Immediate       EOR #$A5       $49      2     2
+  Zero Page       EOR $A5        $45      2     3
+  Zero Page,X     EOR $A5,X      $55      2     4
+  Absolute        EOR $A5B6      $4D      3     4
+  Absolute,X      EOR $A5B6,X    $5D      3     4+
+  Absolute,Y      EOR $A5B6,Y    $59      3     4+
+  (Indirect,X)    EOR ($A5,X)    $41      2     6
+  (Indirect),Y    EOR ($A5),Y    $51      2     5+
 
 + add 1 cycle if page boundary crossed
 			 */
@@ -286,14 +287,14 @@ MODE           SYNTAX       HEX LEN TIM
 			updateZeroSigned( result , cpu );
 		}
 	},
-	/* Immediate       ADC #$A5       $69      2     2   
-     * Zero Page       ADC $A5        $65      2     3   
-     * Zero Page,X     ADC $A5,X      $75      2     4   
-     * Absolute        ADC $A5B6      $6D      3     4   
-     * Absolute,X      ADC $A5B6,X    $7D      3     4+  
-     * Absolute,Y      ADC $A5B6,Y    $79      3     4+  
-     * (Indirect,X)    ADC ($A5,X)    $61      2     6   
-     * (Indirect),Y    ADC ($A5),Y    $71      2     5+   
+	/* Immediate       ADC #$A5       $69      2     2
+     * Zero Page       ADC $A5        $65      2     3
+     * Zero Page,X     ADC $A5,X      $75      2     4
+     * Absolute        ADC $A5B6      $6D      3     4
+     * Absolute,X      ADC $A5B6,X    $7D      3     4+
+     * Absolute,Y      ADC $A5B6,Y    $79      3     4+
+     * (Indirect,X)    ADC ($A5,X)    $61      2     6
+     * (Indirect),Y    ADC ($A5),Y    $71      2     5+
 	 */
 	ADC("ADC")
 	{
@@ -339,7 +340,32 @@ MODE           SYNTAX       HEX LEN TIM
 			}
 
 			// FIXME: Handle BCD mode
-			if ( cpu.isSet( Flag.DECIMAL_MODE ) ) {
+			final int a = cpu.getAccumulator();
+			if ( cpu.isSet( Flag.DECIMAL_MODE ) )
+			{
+				final int c = cpu.isSet( Flag.CARRY ) ? 1 : 0;
+				int al = a + b + c; // Calculate the lower nibble.
+				int ah = ( a >> 4 )  + (b >> 4 ) + ( al >> 15);  // Calculate the upper nibble.
+
+				if ( al > 9 ) {
+					al += 6;
+				}
+
+				final boolean zero = ( (a + b + c) & 255 ) == 0;  // Zero flag is set just like in binary mode
+
+				final boolean negative = (ah & 8) != 0;
+				final boolean overflow = ( ((ah << 4) ^ a) & 128 ) != 0 && ( ((a ^ b) & 128) == 0 );
+
+				if ( ah > 9 ) { // BCD fixup for upper nibble.
+					ah += 6;
+				}
+				final boolean carry = (ah >> 15 ) != 0;
+				cpu.setAccumulator( ((ah) | (al & 15)) & 255);
+				cpu.setFlag( Flag.ZERO , zero );
+				cpu.setFlag( Flag.NEGATIVE, negative);
+				cpu.setFlag( Flag.OVERFLOW, overflow );
+				cpu.setFlag( Flag.CARRY , carry );
+
 				/*
 				 * taken from http://www.fceux.com/web/help/fceux.html?6502CPU.html
         unsigned
@@ -358,9 +384,7 @@ MODE           SYNTAX       HEX LEN TIM
 
        if (AL > 9) AL += 6;                  // BCD fixup for lower nibble.
 
-       Z = ((A + s + C) & 255 != 0);         // Zero flag is set just
-
-                                                like in Binary mode.
+       Z = ((A + s + C) & 255 != 0);         // Zero flag is set just like in Binary mode.
 
         // Negative and Overflow flags are set with the same logic than in
         // Binary mode, but after fixing the lower nibble.
@@ -377,9 +401,9 @@ MODE           SYNTAX       HEX LEN TIM
 
        A = ((AH << 4) | (AL & 15)) & 255;
 				 */
-				throw new RuntimeException("ADC with BCD currently not implemented");
+				return;
 			}
-			final int a = cpu.getAccumulator();
+
 			final int carry = cpu.isSet( CPU.Flag.CARRY) ? 1 : 0;
 			adc(cpu,a,b,carry);
 		}
@@ -461,15 +485,15 @@ lack thereof and the sign (i.e. A>=$80) of the accumulator.
 		{
 			/*
   MODE           SYNTAX       HEX LEN TIM
-  Immediate       SBC #$A5       $E9      2     2   
-  Zero Page       SBC $A5        $E5      2     3   
-  Zero Page,X     SBC $A5,X      $F5      2     4   
-  Absolute        SBC $A5B6      $ED      3     4   
-  Absolute,X      SBC $A5B6,X    $FD      3     4+  
-  Absolute,Y      SBC $A5B6,Y    $F9      3     4+  
-  (Indirect,X)    SBC ($A5,X)    $E1      2     6   
-  (Indirect),Y    SBC ($A5),Y    $F1      2     5+ 
-  
+  Immediate       SBC #$A5       $E9      2     2
+  Zero Page       SBC $A5        $E5      2     3
+  Zero Page,X     SBC $A5,X      $F5      2     4
+  Absolute        SBC $A5B6      $ED      3     4
+  Absolute,X      SBC $A5B6,X    $FD      3     4+
+  Absolute,Y      SBC $A5B6,Y    $F9      3     4+
+  (Indirect,X)    SBC ($A5,X)    $E1      2     6
+  (Indirect),Y    SBC ($A5),Y    $F1      2     5+
+
 SBC results are dependant on the setting of the decimal flag.
 In decimal mode, subtraction is carried out on the assumption that the values involved are packed BCD (Binary Coded Decimal).
 There is no way to subtract without the carry which works as an inverse borrow. i.e, to subtract you set the carry before the
@@ -584,11 +608,11 @@ M - N - B	SBC of M and N with borrow B
  Affects Flags: S Z C
 
   MODE           SYNTAX       HEX LEN TIM
-  Accumulator     ASL A          $0A      1     2   
-  Zero Page       ASL $A5        $06      2     5   
-  Zero Page,X     ASL $A5,X      $16      2     6   
-  Absolute        ASL $A5B6      $0E      3     6   
-  Absolute,X      ASL $A5B6,X    $1E      3     7   
+  Accumulator     ASL A          $0A      1     2
+  Zero Page       ASL $A5        $06      2     5
+  Zero Page,X     ASL $A5,X      $16      2     6
+  Absolute        ASL $A5B6      $0E      3     6
+  Absolute,X      ASL $A5B6,X    $1E      3     7
 
 ASL shifts all bits left one position. 0 is shifted into bit 0 and the original bit 7 is shifted into the Carry.
 			 */
@@ -642,11 +666,11 @@ ASL shifts all bits left one position. 0 is shifted into bit 0 and the original 
 		}
 	},
 	/*
-  Accumulator     ROL A          $2A      1    2   
-  Zero Page       ROL $A5        $26      2    5   
-  Zero Page,X     ROL $A5,X      $36      2    6   
-  Absolute        ROL $A5B6      $2E      3    6   
-  Absolute,X      ROL $A5B6,X    $3E      3    7    	 
+  Accumulator     ROL A          $2A      1    2
+  Zero Page       ROL $A5        $26      2    5
+  Zero Page,X     ROL $A5,X      $36      2    6
+  Absolute        ROL $A5B6      $2E      3    6
+  Absolute,X      ROL $A5B6,X    $3E      3    7
 	 */
 	ROL("ROL")
 	{
@@ -737,11 +761,11 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
 			Affects Flags: S Z C
 
 			MODE           SYNTAX       HEX LEN TIM
-            Accumulator     LSR A          $4A      1     2   
-            Zero Page       LSR $A5        $46      2     5   
-            Zero Page,X     LSR $A5,X      $56      2     6   
-            Absolute        LSR $A5B6      $4E      3     6   
-            Absolute,X      LSR $A5B6,X    $5E      3     7   
+            Accumulator     LSR A          $4A      1     2
+            Zero Page       LSR $A5        $46      2     5
+            Zero Page,X     LSR $A5,X      $56      2     6
+            Absolute        LSR $A5B6      $4E      3     6
+            Absolute,X      LSR $A5B6,X    $5E      3     7
 
 			LSR shifts all bits right one position. 0 is shifted into bit 7 and the original bit 0 is shifted into the Carry.
 			 */
@@ -820,11 +844,11 @@ ROL shifts all bits left one position. The Carry is shifted into bit 0 and the o
  Affects Flags: S Z C
 
   MODE           SYNTAX       HEX LEN TIM
-  Accumulator     ROR A          $6A      1     2   
-  Zero Page       ROR $A5        $66      2     5   
-  Zero Page,X     ROR $A5,X      $76      2     6   
-  Absolute        ROR $A5B6      $6E      3     6   
-  Absolute,X      ROR $A5B6,X    $7E      3     7    
+  Accumulator     ROR A          $6A      1     2
+  Zero Page       ROR $A5        $66      2     5
+  Zero Page,X     ROR $A5,X      $76      2     6
+  Absolute        ROR $A5B6      $6E      3     6
+  Absolute,X      ROR $A5B6,X    $7E      3     7
 
 ROR shifts all bits right one position. The Carry is shifted into bit 7 and the original bit 0 is shifted into the Carry.
 			 */
@@ -956,11 +980,11 @@ Absolute      STX $4400     $8E  3   4
 			/*
 MODE           SYNTAX       HEX LEN TIM
 
-  Immediate       LDX #$A5       $A2      2     2   
-  Zero Page       LDX $A5        $A6      2     3   
-  Zero Page,Y     LDX $A5,Y      $B6      2     4   
-  Absolute        LDX $A5B6      $AE      2     4   
-  Absolute,Y      LDX $A5B6,Y    $BE      2     4+  
+  Immediate       LDX #$A5       $A2      2     2
+  Zero Page       LDX $A5        $A6      2     3
+  Zero Page,Y     LDX $A5,Y      $B6      2     4
+  Absolute        LDX $A5B6      $AE      2     4
+  Absolute,Y      LDX $A5B6,Y    $BE      2     4+
 			 */
 
 			switch( opcode ) {
@@ -1204,11 +1228,11 @@ Absolute      STY $4400     $8C  3   4
  Affects Flags: S Z
 
   MODE           SYNTAX       HEX LEN TIM
-  Immediate       LDY #$A5       $A0      2     2   
-  Zero Page       LDY $A5        $A4      2     3   
-  Zero Page,X     LDY $A5,X      $B4      2     4   
-  Absolute        LDY $A5B6      $AC      2     4   
-  Absolute,X      LDY $A5B6,X    $BC      2     4+  
+  Immediate       LDY #$A5       $A0      2     2
+  Zero Page       LDY $A5        $A4      2     3
+  Zero Page,X     LDY $A5,X      $B4      2     4
+  Absolute        LDY $A5B6      $AC      2     4
+  Absolute,X      LDY $A5B6,X    $BC      2     4+
 
 + add 1 cycle if page boundary crossed
 
@@ -1476,7 +1500,7 @@ Subroutines are normally terminated by a RTS op code.
 			}
 			final int pc = cpu.pc();
 			final int jumpTarget = memory.readWord( pc+1 ); // read 2 byte word
-			int returnAdr = pc+2; // this would usually be +=2 but since JSR needs to push address-1 we'll just increment by 1 here
+			int returnAdr = pc+2; // this would usually be +=3 (JSR opcode + 2 bytes for address) but since JSR needs to push address-1 we'll just increment by 2 instead of 3
 //			System.out.println("JSR: PC = "+HexDump.toAdr( pc )+" , jumping to "+HexDump.toAdr( jumpTarget )+" , return address: "+HexDump.toAdr( returnAdr+1 ) );
 			cpu.pushWord( (short) returnAdr , memory );
 			cpu.pc( jumpTarget );
@@ -1607,27 +1631,34 @@ Subroutines are normally terminated by a RTS op code.
 	// ======================
 	// !!! ILLEGAL OPCODES !!!
 	// =======================
-	
-	SKW("SKW") // skip word 
+
+	SKW("SKW") // skip word
 	{
 	    /* see http://www.ffd2.com/fridge/docs/6502-NMOS.extra.opcodes
-	     * 
+	     *
          * SKW skips next word (two bytes).
          * Opcodes: 0C, 1C, 3C, 5C, 7C, DC, FC.
          * Takes 4 cycles to execute.
-         *  
-         * To be dizzyingly precise, SKW actually performs a read operation.  It's 
-         * just that the value read is not stored in any register.  Further, opcode 0C 
-         * uses the absolute addressing mode.  
-         * The two bytes which follow it form the 
-         * absolute address.  All the other SKW opcodes use the absolute indexed X 
-         * addressing mode.  If a page boundary is crossed, the execution time of one 
+         *
+         * To be dizzyingly precise, SKW actually performs a read operation.  It's
+         * just that the value read is not stored in any register.  Further, opcode 0C
+         * uses the absolute addressing mode.
+         * The two bytes which follow it form the
+         * absolute address.  All the other SKW opcodes use the absolute indexed X
+         * addressing mode.  If a page boundary is crossed, the execution time of one
          * of these SKW opcodes is upped to 5 clock cycles.
 	     */
+
+		@Override
+		public void assemble(InstructionNode ins, ICompilationContext writer)
+		{
+			writer.writeByte( (byte) 0x0c );
+		}
+
         @Override
-        public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) 
+        public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)
         {
-           switch( opcode ) 
+           switch( opcode )
            {
                case 0x0C:
                case 0x1C:
@@ -1644,63 +1675,59 @@ Subroutines are normally terminated by a RTS op code.
            cpu.cycles += 4;
         }
 	},
-	/* 
+	/*
 	 * See http://www.retro-programming.de/?page_id=2248
-	 * 
+	 *
 	 * AXS: Akku AND X-Register+Stored to memory (alternatives Mnemonic: SAX)
      * AXS absolut ($8F, 3B, 4T, <keine>)
-     * 
-     * AXS funktioniert so: Die Inhalte von Akku und X-Register werden UND-Verknüpft, aber OHNE eines der beiden Register zu ändern!  
+     *
+     * AXS funktioniert so: Die Inhalte von Akku und X-Register werden UND-Verknüpft, aber OHNE eines der beiden Register zu ändern!
      * Das Ergbnis wird dann an der angegebenen Adresse abgelegt. Die Flags im Statusregister (SR) bleiben ebenfalls unverändert!
-     * 
+     *
      * Wollte man das mit normalen Befehlen nachbilden, dann bräuchte man eine ganze Menge davon:
-     * 
+     *
 	 * Adressierung | OpCode | Bytes | TZ
      * absolut      |  $8F   |   3   |  4
      * Zero-Page    |  $87   |   2   |  3
-     * Zero-Page,X  |  $97   |   2   |  4
+     * Zero-Page,Y  |  $97   |   2   |  4
      * indirekt X   |  $83   |   2   |  6
 	 */
-	AXS("AXS") 
+	AXS("AXS")
 	{
 		// TODO: Maybe add assembler support ??
-		
+
 		@Override
-		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator) 
+		public void assemble(InstructionNode ins, ICompilationContext writer)
+		{
+			final IASTNode child0 = ins.child(0);
+			switch( ins.getAddressingMode() )
+			{
+				case ABSOLUTE: // 0x8f
+					writer.writeByte( (byte) 0x8f );
+					writer.writeWord( child0.child(0) );
+					break;
+				case INDEXED_INDIRECT_X: // $83
+					writer.writeByte( (byte) 0x83 );
+					writer.writeByte( child0.child(0) );
+					break;
+				case ZERO_PAGE: // $87
+					writer.writeByte( (byte) 0x87 );
+					writer.writeByte( child0.child(0) );
+					break;
+				case ZERO_PAGE_Y: // $97
+					writer.writeByte( (byte) 0x97 );
+					writer.writeByte( child0.child(0) );
+					break;
+				default:
+					throw new RuntimeException("AXS does not support addressing mode "+ins.getAddressingMode());
+			}
+		}
+
+		@Override
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory,Emulator emulator)
 		{
 			int value = cpu.getAccumulator() & cpu.getX();
-			
-			/*
-				case 0x85: // Zero Page     STA $44       $85  2   3
-					writeZeroPage( cpu.getAccumulator() , cpu , memory );
-					cpu.cycles += 3;
-					break;
-				case 0x95: // Zero Page,X   STA $44,X     $95  2   4
-					writeAbsoluteZeroPageXValue( cpu.getAccumulator() , cpu, memory );
-					cpu.cycles += 4;
-					break;
-				case 0x8D: // Absolute      STA $4400     $8D  3   4
-					writeAbsoluteValue( cpu.getAccumulator() , cpu , memory );
-					cpu.cycles += 4;
-					break;
-				case 0x9D: // Absolute,X    STA $4400,X   $9D  3   5
-					writeAbsoluteXValue( cpu.getAccumulator() , cpu , memory );
-					cpu.cycles += 5;
-					break;
-				case 0x99: // Absolute,Y    STA $4400,Y   $99  3   5
-					writeAbsoluteYValue( cpu.getAccumulator() , cpu , memory );
-					cpu.cycles += 5;
-					break;
-				case 0x81: // Indexed Indirect,X    STA ($44,X)   $81  2   6
-					writeIndexedIndirectX( cpu.getAccumulator() , cpu , memory );
-					cpu.cycles += 6;
-					break;
-				case 0x91: // Indirect,Y    STA ($44),Y   $91  2   6
-					writeIndirectIndexedY( cpu.getAccumulator() , cpu , memory );
-					cpu.cycles += 6;
-					break;
-			 */
-			switch( opcode ) 
+			switch( opcode )
 			{
 				case 0x8f:
 					writeAbsoluteValue( value , cpu , memory );
@@ -1711,7 +1738,7 @@ Subroutines are normally terminated by a RTS op code.
 					cpu.cycles += 3;
 					break;
 				case 0x97:
-					writeAbsoluteZeroPageXValue( value , cpu, memory );
+					writeAbsoluteZeroPageYValue( value , cpu, memory );
 					cpu.cycles += 4;
 					break;
 				case 0x83:
@@ -1722,8 +1749,49 @@ Subroutines are normally terminated by a RTS op code.
 					throw new RuntimeException("Unreachable code reached"); // caller screwed up
 			}
 		}
+	},
+	/*
+	 * Illegal opcode, see http://www.ffd2.com/fridge/docs/6502-NMOS.extra.opcodes
+	 *
+	 * HLT crashes the microprocessor.  When this opcode is executed, program
+	 * execution ceases.  No hardware interrupts will execute either.  The author
+	 * has characterized this instruction as a halt instruction since this is the
+	 * most straightforward explanation for this opcode's behaviour.  Only a reset
+	 * will restart execution.  This opcode leaves no trace of any operation
+	 * performed!  No registers affected.
+	 */
+	HLT("HLT",(byte) 0x02)
+	{
+		@Override
+		public void assemble(InstructionNode ins, ICompilationContext writer)
+		{
+			writer.writeByte( (byte) 0x02 );
+		}
+
+		@Override
+		public void execute(int opcode, CPU cpu, IMemoryRegion memory, Emulator emulator)
+		{
+			switch( opcode )
+			{
+				case 0x02:
+				case 0x12:
+				case 0x22:
+				case 0x32:
+				case 0x42:
+				case 0x52:
+				case 0x62:
+				case 0x72:
+				case 0x92:
+				case 0xB2:
+				case 0xD2:
+				case 0xF2:
+					throw new HLTException(opcode);
+				default:
+					throw new RuntimeException("Unreachable code reached"); // caller screwed up
+			}
+		}
 	};
-	
+
 
 	private final String mnemonic;
 	private final byte opcode;
@@ -1766,6 +1834,10 @@ Subroutines are normally terminated by a RTS op code.
 
 	public String getMnemonic() {
 		return mnemonic;
+	}
+
+	public static boolean isValidOpcode(String s) {
+		return s != null && getOpcode(s) != null;
 	}
 
 	public static Opcode getOpcode(String s)
@@ -2093,7 +2165,7 @@ Subroutines are normally terminated by a RTS op code.
 	// LDA ( $12 , X )
 	private static int readIndexedIndirectX(CPU cpu, IMemoryRegion memory) {
 		cpu.incPC();
-		final int adr111 = memory.readByte( cpu.pc() ); // zp offset
+		final int adr111 = memory.readByte( cpu.pc() ); // zp adr
 		cpu.incPC();
 		final int adr222 = adr111 + cpu.getX(); // zp + offset
 		final int adr333 = memory.readWord( adr222 );
@@ -2342,7 +2414,7 @@ TSX (Transfer Stack pointer to X) is one of the Register transfer operations in 
 			default:
 				throw new RuntimeException("Unreachable code reached");
 		}
-		
+
 		/*
 		 * - Add 1 (one) T-State if a the branch occurs and the destination address is on the same Page
          * - Add 2 (two) T-States if a the branch occurs and the destination address is on a different Page

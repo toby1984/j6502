@@ -45,8 +45,8 @@ public abstract class EmulatorDriver extends Thread
 		return new Cmd(CmdType.START,ackRequired);
 	}
 
-	protected Cmd stopCommand(boolean ackRequired) {
-		return new Cmd(CmdType.STOP,ackRequired);
+	protected Cmd stopCommand(boolean ackRequired,boolean stopOnBreakpoint) {
+		return new StopCmd(ackRequired,stopOnBreakpoint);
 	}
 
 	protected static enum CmdType { START , STOP }
@@ -58,7 +58,18 @@ public abstract class EmulatorDriver extends Thread
 		public void breakpointReplaced(Breakpoint old,Breakpoint newBp);
 	}
 
-	protected final class Cmd
+	protected final class StopCmd extends Cmd
+	{
+		public final boolean stoppedAtBreakpoint;
+
+		public StopCmd(boolean ackRequired,boolean stoppedAtBreakpoint)
+		{
+			super(CmdType.STOP,ackRequired);
+			this.stoppedAtBreakpoint = stoppedAtBreakpoint;
+		}
+	}
+
+	protected class Cmd
 	{
 		public final long id = CMD_ID.incrementAndGet();
 		private final CmdType type;
@@ -135,7 +146,7 @@ public abstract class EmulatorDriver extends Thread
 		{
 			cmd = startCommand(true);
 		} else {
-			cmd = stopCommand(true);
+			cmd = stopCommand(true,false);
 		}
 		sendCmd( cmd );
 	}
@@ -166,13 +177,13 @@ public abstract class EmulatorDriver extends Thread
 
 	protected abstract void onStartHook();
 
-	protected final void onStop(Throwable t)
+	protected final void onStop(Throwable t,boolean stoppedOnBreakpoint)
 	{
 		this.currentMode.set( Mode.SINGLE_STEP );
-		onStopHook( t );
+		onStopHook( t , stoppedOnBreakpoint );
 	}
 
-	protected abstract void onStopHook(Throwable t);
+	protected abstract void onStopHook(Throwable t,boolean stoppedOnBreakpoint);
 
 	protected abstract void tick();
 
@@ -192,15 +203,17 @@ public abstract class EmulatorDriver extends Thread
 
 		boolean adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
 
+		Cmd cmd = null;
 		while( true )
 		{
 			if ( isRunnable )
 			{
-				final Cmd cmd = requestQueue.poll();
+				cmd = requestQueue.poll();
 				if ( cmd != null )
 				{
 					cmd.ack();
-					if ( cmd.isStopCmd() ) {
+					if ( cmd.isStopCmd() )
+					{
 						isRunnable = false;
 						continue;
 					}
@@ -208,15 +221,16 @@ public abstract class EmulatorDriver extends Thread
 			}
 			else
 			{
-				if ( ! justStarted ) {
-					onStop( null );
+				if ( ! justStarted )
+				{
+					onStop( null , cmd instanceof StopCmd && ((StopCmd) cmd).stoppedAtBreakpoint );
 				}
 				justStarted = false;
 				while ( ! isRunnable )
 				{
 					try
 					{
-						final Cmd cmd = requestQueue.take();
+						cmd = requestQueue.take();
 						cmd.ack();
 
 						if ( cmd.isStartCmd() )
@@ -271,7 +285,8 @@ public abstract class EmulatorDriver extends Thread
 							if ( bp.isOneshot ) {
 								oneShotBreakpoint = null;
 							}
-							sendCmd( stopCommand( false ) );
+							cmd = stopCommand( false , true ); // assign to cmd so that next loop iteration will know why we stopped execution
+							sendCmd( cmd );
 						}
 					}
 				}
@@ -281,7 +296,7 @@ public abstract class EmulatorDriver extends Thread
 					isRunnable = false;
 					lastException = e;
 					cyclesUntilNextTick = 0;
-					sendCmd( stopCommand( false ) );
+					sendCmd( stopCommand( false , false ) );
 				}
 			}
 			if ( cyclesUntilNextTick <= 0 )

@@ -26,8 +26,8 @@ import sun.misc.IOUtils;
 @SuppressWarnings("restriction")
 public class DisassemblerTest extends TestCase {
 
-	public void testSTX1() {
-
+	public void testSTX1()
+	{
 		final byte[] data = new byte[] { (byte) 0x9e ,0x1c ,(byte) 0x91 , 0x12 };
 		final Disassembler dis = new Disassembler();
 		final StringBuilder buffer = new StringBuilder();
@@ -38,8 +38,8 @@ public class DisassemblerTest extends TestCase {
 		assertEquals( expected , buffer.toString());
 	}
 
-	public void testBranchForward() {
-
+	public void testBranchForward()
+	{
 		// BPL +10
 		final byte[] data = new byte[] { (byte) 0x10 , 10  };
 		final Disassembler dis = new Disassembler();
@@ -115,6 +115,43 @@ public class DisassemblerTest extends TestCase {
 		final StringBuilder buffer = new StringBuilder();
 		dis.disassemble( 0 , data , 0 , 3 ).forEach( line -> buffer.append( line.toString()+"\n" ) );
 		final String expected = "0000:  ORA   $5993\n";
+		assertEquals( expected , buffer.toString());
+	}
+
+	public void testAXS()
+	{
+		assertDisassemblesTo( new byte[] { (byte) 0x8f, (byte) 0x34, 0x12} , "0000:  AXS   $1234\n" );
+		assertDisassemblesTo( new byte[] { (byte) 0x87, 0x12} , "0000:  AXS   $12\n" );
+		assertDisassemblesTo( new byte[] { (byte) 0x97, 0x12} , "0000:  AXS   $12 , Y\n" );
+		assertDisassemblesTo( new byte[] { (byte) 0x83, 0x12} , "0000:  AXS   ($12 , X)\n" );
+	}
+
+	public void testHLT()
+	{
+		final byte[] opcodes = new byte[] { 0x02, 0x12, 0x22, 0x32, 0x42, 0x52, 0x62, 0x72, (byte) 0x92, (byte) 0xB2, (byte) 0xD2, (byte) 0xF2};
+
+		for ( byte opcode : opcodes )
+		{
+			assertDisassemblesTo( new byte[] { opcode } , "0000:  HLT\n" );
+		}
+	}
+
+	private void assertDisassemblesTo(byte[] data , String expected)
+	{
+		final Disassembler dis = new Disassembler();
+		final StringBuilder buffer = new StringBuilder();
+		dis.disassemble( 0 , data , 0 , data.length ).forEach( line -> buffer.append( line.toString()+"\n" ) );
+		assertEquals( expected , buffer.toString());
+	}
+
+	public void testSKW()
+	{
+		// 0C, 1C, 3C, 5C, 7C, DC, FC
+		final byte[] data = new byte[] { (byte) 0x0c };
+		final Disassembler dis = new Disassembler();
+		final StringBuilder buffer = new StringBuilder();
+		dis.disassemble( 0 , data , 0 , 1 ).forEach( line -> buffer.append( line.toString()+"\n" ) );
+		final String expected = "0000:  SKW\n";
 		assertEquals( expected , buffer.toString());
 	}
 

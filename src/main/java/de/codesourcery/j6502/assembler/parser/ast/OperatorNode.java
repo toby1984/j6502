@@ -55,7 +55,7 @@ public class OperatorNode extends ASTNode implements IValueNode
 
 	@Override
 	public short getWordValue() {
-		return (byte) evaluate();
+		return (short) evaluate();
 	}
 
 	@Override

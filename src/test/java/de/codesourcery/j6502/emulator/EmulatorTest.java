@@ -10,8 +10,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-
-import junit.framework.TestCase;
+import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.ArrayUtils;
@@ -24,21 +23,24 @@ import de.codesourcery.j6502.assembler.parser.Parser;
 import de.codesourcery.j6502.assembler.parser.Scanner;
 import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.disassembler.Disassembler;
+import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
+import de.codesourcery.j6502.emulator.exceptions.HLTException;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.SourceHelper;
+import junit.framework.TestCase;
 
 public class EmulatorTest  extends TestCase
 {
-	private static final String ILLEGAL_OPCODE = ".byte $64\n";
+	private static final String ILLEGAL_OPCODE = ".byte $02\n";
 
-	public static final int PRG_LOAD_ADDRESS = MemorySubsystem.Bank.BANK1.range.getStartAddress();
+	public static final int PRG_LOAD_ADDRESS = MemorySubsystem.Bank.BANK1.range.getStartAddress(); // = $1000
 
 	public static final boolean TEST_PERFORMANCE = false;
-	
+
 	public void testPerformance() {
 
 		if ( TEST_PERFORMANCE ) {
@@ -156,44 +158,61 @@ M7 	N7 	C6 	    C7 	S7 	V	Carry / Overflow	                    Hex	            U
 		execute("CLC\n LDA #208\n ADC #208\n").assertA( 416 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.NEGATIVE);
 	}
 
-	//	public void testADCDecimalMode() {
-	/* TAKEN FROM http://visual6502.org/wiki/index.php?title=6502DecimalMode
-    00 + 00 and C=0 gives 00 and N=0 V=0 Z=1 C=0 (simulate)
-    79 + 00 and C=1 gives 80 and N=1 V=1 Z=0 C=0 (simulate)
-    24 + 56 and C=0 gives 80 and N=1 V=1 Z=0 C=0 (simulate)
-    93 + 82 and C=0 gives 75 and N=0 V=1 Z=0 C=1 (simulate)
-    89 + 76 and C=0 gives 65 and N=0 V=0 Z=0 C=1 (simulate)
-    89 + 76 and C=1 gives 66 and N=0 V=0 Z=1 C=1 (simulate)
-    80 + f0 and C=0 gives d0 and N=0 V=1 Z=0 C=1 (simulate)
-    80 + fa and C=0 gives e0 and N=1 V=0 Z=0 C=1 (simulate)
-    2f + 4f and C=0 gives 74 and N=0 V=0 Z=0 C=0 (simulate)
+	public void testSKW() {
+		execute("SKW\n HLT\n HLT\n LDA #$0a\n").assertA( 10 ).assertFlags();
+	}
 
-    6f + 00 and C=1 gives 76 and N=0 V=0 Z=0 C=0 (simulate)
-	 */
-	//		execute("SED\n CLC\n LDA #$0\n ADC #0\n").assertA( 0 ).assertFlags(CPU.Flag.ZERO);
-	//		execute("SED\n SEC\n LDA #$79\n ADC #0\n").assertA( 0x80 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW);
-	//		execute("SED\n CLC\n LDA #$24\n ADC #$56\n").assertA( 0x80 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW);
-	//		execute("SED\n CLC\n LDA #$93\n ADC #$82\n").assertA( 0x75 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.CARRY);
-	//		execute("SED\n CLC\n LDA #$89\n ADC #$76\n").assertA( 0x65 ).assertFlags(CPU.Flag.CARRY);
-	//		execute("SED\n SEC\n LDA #$89\n ADC #$76\n").assertA( 0x66 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY);
-	//		execute("SED\n CLC\n LDA #$80\n ADC #$f0\n").assertA( 0xd0 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.CARRY);
-	//		execute("SED\n CLC\n LDA #$80\n ADC #$fa\n").assertA( 0xe0 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.CARRY);
-	//
-	//		execute("SED\n CLC\n LDA #$2f\n ADC #$4f\n").assertA( 0x74 ).assertFlags();
-	//		execute("SED\n SEC\n LDA #$6f\n ADC #$00\n").assertA( 0x76 ).assertFlags();
-	//	}
+	public void testHLT()
+	{
+		try {
+			execute("HLT\n").rethrowHltException(true).maybeExecute();
+			fail("Should've thrown exception");
+		} catch(HLTException e) {
+			// ok
+		}
+	}
+
+	public void testADCDecimalMode()
+	{
+		/* TAKEN FROM http://visual6502.org/wiki/index.php?title=6502DecimalMode
+		 *
+         * 00 + 00 and C=0 gives 00 and N=0 V=0 Z=1 C=0 (simulate)
+         * 79 + 00 and C=1 gives 80 and N=1 V=1 Z=0 C=0 (simulate)
+         * 24 + 56 and C=0 gives 80 and N=1 V=1 Z=0 C=0 (simulate)
+         * 93 + 82 and C=0 gives 75 and N=0 V=1 Z=0 C=1 (simulate)
+         * 89 + 76 and C=0 gives 65 and N=0 V=0 Z=0 C=1 (simulate)
+         * 89 + 76 and C=1 gives 66 and N=0 V=0 Z=1 C=1 (simulate)
+         * 80 + f0 and C=0 gives d0 and N=0 V=1 Z=0 C=1 (simulate)
+         * 80 + fa and C=0 gives e0 and N=1 V=0 Z=0 C=1 (simulate)
+         * 2f + 4f and C=0 gives 74 and N=0 V=0 Z=0 C=0 (simulate)
+         * 6f + 00 and C=1 gives 76 and N=0 V=0 Z=0 C=0 (simulate)
+		 */
+
+		// execute("SED\n CLC\n LDA #$0\n ADC #0\n").assertA( 0 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.DECIMAL_MODE);
+		execute("SED\n SEC\n LDA #$79\n ADC #0\n").assertA( 0x80 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW,CPU.Flag.DECIMAL_MODE);
+
+		execute("SED\n CLC\n LDA #$24\n ADC #$56\n").assertA( 0x80 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW,CPU.Flag.DECIMAL_MODE);
+		execute("SED\n CLC\n LDA #$93\n ADC #$82\n").assertA( 0x75 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
+		execute("SED\n CLC\n LDA #$89\n ADC #$76\n").assertA( 0x65 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
+		execute("SED\n SEC\n LDA #$89\n ADC #$76\n").assertA( 0x66 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
+		execute("SED\n CLC\n LDA #$80\n ADC #$f0\n").assertA( 0xd0 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
+		execute("SED\n CLC\n LDA #$80\n ADC #$fa\n").assertA( 0xe0 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
+
+		execute("SED\n CLC\n LDA #$2f\n ADC #$4f\n").assertA( 0x74 ).assertFlags();
+		execute("SED\n SEC\n LDA #$6f\n ADC #$00\n").assertA( 0x76 ).assertFlags();
+	}
 
 	public void testADC() {
 		// b4( %10110100 ) = 180
 		execute("SEC\n LDA #$03\n ADC #$03").assertA( 0x07 ).assertFlags();
 
-		execute("LDA #$01 CLC\n ADC #$01").assertA( 0x02 ).assertFlags();
-		execute("LDA #$ff CLC\n ADC #$01").assertA( 0x00 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY);
-		execute("LDA #$7f CLC\n ADC #$01").assertA( 0x80 ).assertFlags(CPU.Flag.OVERFLOW , CPU.Flag.NEGATIVE );
+		execute("LDA #$01\n CLC\n ADC #$01").assertA( 0x02 ).assertFlags();
+		execute("LDA #$ff\n CLC\n ADC #$01").assertA( 0x00 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY);
+		execute("LDA #$7f\n CLC\n ADC #$01").assertA( 0x80 ).assertFlags(CPU.Flag.OVERFLOW , CPU.Flag.NEGATIVE );
 
-		execute("LDA #$01 STA $44 CLC\n LDA #$01\n ADC $44").assertA( 0x02 ).assertFlags();
-		execute("LDX #$10\n LDA #$01 STA $44,X CLC\n LDA #$01\n ADC $44,X").assertA( 0x02 ).assertFlags();
-		execute("LDA #$01 STA $4000 CLC\n LDA #$01\n ADC $4000").assertA( 0x02 ).assertFlags();
+		execute("LDA #$01\n STA $44\n CLC\n LDA #$01\n ADC $44").assertA( 0x02 ).assertFlags();
+		execute("LDX #$10\n LDA #$01\n STA $44,X\n CLC\n LDA #$01\n ADC $44,X").assertA( 0x02 ).assertFlags();
+		execute("LDA #$01\n STA $4000\n CLC\n LDA #$01\n ADC $4000").assertA( 0x02 ).assertFlags();
 
 		execute("LDX #$10\n LDA #$01 STA $4000,X CLC\n LDA #$01\n ADC $4000,X").assertA( 0x02 ).assertFlags();
 		execute("LDY #$10\n LDA #$01 STA $4000,Y CLC\n LDA #$01\n ADC $4000,Y").assertA( 0x02 ).assertFlags();
@@ -256,7 +275,7 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
 		execute("LDA #$01\n AND #$01").assertA( 0x01 ).assertFlags();
 
 		// Zero Page,X   AND $44,X     $35  2   3
-		execute("LDX #$05\n LDA #$ff\n STA $44,X\n LDA #$ff AND $44,X").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
+		execute("LDX #$05\n LDA #$ff\n STA $44,X\n LDA #$ff\n AND $44,X").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
 
 		// Absolute      AND $4400     $2D  3   4
 		execute("LDA #$ff\n STA $1234\n LDA #$ff\n AND $1234").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
@@ -268,7 +287,7 @@ Indirect,Y    LDA ($44),Y   $B1  2   5+
 		execute("LDY #$05\n LDA #$ff\n STA $1234,Y\n LDA #$ff\n AND $1234,Y").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
 
 		// Indirect,X    AND ($44,X)   $21  2   6
-		execute("LDX #$05\n LDA #$ff\n STA ($1234,X)\n LDA #$ff\n AND ($1234,X)").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
+		execute("LDA #<$1234\n STA $0a+5\n LDA #>$1234\n STA $0a+6\n LDX #$05\n LDA #$0f\n STA ($0a,X)\n LDA #$ff\n AND ($0a,X)").assertA( 0x0f ).assertFlags();
 
 		// Indirect,Y    AND ($44),Y   $31  2   5+
 		execute("LDX #$05\n LDA #$ff\n STA ($44),Y\n LDA #$ff\n AND ($44),Y").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
@@ -440,7 +459,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		execute("LDA #$00\n EOR #$00").assertA( 0x00 ).assertFlags(CPU.Flag.ZERO);
 
 		// Zero Page,X   EOR $44,X     $35  2   3
-		execute("LDX #$05\n LDA #$ff\n STA $44,X\n LDA #$00 EOR $44,X").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
+		execute("LDX #$05\n LDA #$ff\n STA $44,X\n LDA #$00\n EOR $44,X").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
 
 		// Absolute      EOR $4400     $2D  3   4
 		execute("LDA #$ff\n STA $1234\n LDA #$00\n EOR $1234").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
@@ -452,13 +471,30 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		execute("LDY #$05\n LDA #$ff\n STA $1234,Y\n LDA #$00\n EOR $1234,Y").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
 
 		// Indirect,X    EOR ($44,X)   $21  2   6
-		execute("LDX #$05\n LDA #$ff\n STA ($1234,X)\n LDA #$00\n EOR ($1234,X)").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
+		execute("LDA #<$1234\n STA $0a+5\n LDA #>$1234\n STA $0a+6\n LDX #$05\n LDA #$ff\n STA ($0a,X)\n LDA #$00\n EOR ($0a,X)").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
 
 		// Indirect,Y    EOR ($44),Y   $31  2   5+
 		execute("LDX #$05\n LDA #$ff\n STA ($44),Y\n LDA #$00\n EOR ($44),Y").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
 	}
 
 	public void testORA() {
+
+		// Indirect,X    ORA ($44,X)   $21  2   6
+
+		/*
+		 * Executing $58 @ $0fff
+		 * Executing $a9 @ $1000 ; LDA #
+		 * Executing $85 @ $1002 ; STA ZP
+		 * Executing $a9 @ $1004 ; LDA #
+		 * Executing $85 @ $1006 ; STA ZP
+		 * Executing $a2 @ $1008 ; LDX #
+		 * Executing $a9 @ $100a ; LDA #
+		 * Executing $81 @ $100c ; STA (,X)
+		 */
+		// Absolute,X    ORA $4400,X   $3D  3   4+
+		execute("LDX #$05\n LDA #$ff\n STA $1234,X\n LDA #$00\n ORA $1234,X").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
+
+		execute("LDA #<$1234\n STA $0a+5\n LDA #>$1234\n STA $0a+6\n LDX #$05\n LDA #$f0\n STA ($0a,X)\n LDA #$0f\n ORA ($0a,X)").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
 
 		// Zero Page     ORA $44       $25  2   2
 		execute("LDA #$ff\n STA $44\n LDA #$00\n ORA $44").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
@@ -469,19 +505,13 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		execute("LDA #$00\n ORA #$01").assertA( 0x01 ).assertFlags();
 
 		// Zero Page,X   ORA $44,X     $35  2   3
-		execute("LDX #$05\n LDA #$00\n STA $44,X\n LDA #$ff ORA $44,X").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
+		execute("LDX #$05\n LDA #$00\n STA $44,X\n LDA #$ff\n ORA $44,X").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
 
 		// Absolute      ORA $4400     $2D  3   4
 		execute("LDA #$ff\n STA $1234\n LDA #$00\n ORA $1234").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
 
-		// Absolute,X    ORA $4400,X   $3D  3   4+
-		execute("LDX #$05\n LDA #$ff\n STA $1234,X\n LDA #$00\n ORA $1234,X").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
-
 		// Absolute,Y    ORA $4400,Y   $39  3   4+
 		execute("LDY #$05\n LDA #$ff\n STA $1234,Y\n LDA #$00\n ORA $1234,Y").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
-
-		// Indirect,X    ORA ($44,X)   $21  2   6
-		execute("LDX #$05\n LDA #$ff\n STA ($1234,X)\n LDA #$00\n ORA ($1234,X)").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
 
 		// Indirect,Y    ORA ($44),Y   $31  2   5+
 		execute("LDX #$05\n LDA #$ff\n STA ($44),Y\n LDA #$00\n ORA ($44),Y").assertA( 0xff ).assertFlags(CPU.Flag.NEGATIVE);
@@ -534,7 +564,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 			}
 
 			@Override
-			protected void onStopHook(Throwable t) {
+			protected void onStopHook(Throwable t,boolean stoppedAtBreakpoint) {
 				stopped.countDown();
 			}
 
@@ -602,7 +632,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 			}
 
 			@Override
-			protected void onStopHook(Throwable t) {
+			protected void onStopHook(Throwable t,boolean stoppedAtBreakpoint) {
 				stopped.countDown();
 			}
 
@@ -625,6 +655,27 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		}
 		byte outcome = (byte) e.getMemory().readByte( 0x210 ); // EXPECTED FINAL RESULTS: $0210 = FF
 		assertEquals( "Test failed , failed test no. "+(outcome & 0xff), (byte) 0xff , outcome );
+	}
+
+	public void testAXS()
+	{
+		/*
+		 * AXS: Akku AND X-Register+Stored to memory (alternatives Mnemonic: SAX)
+		 * AXS absolut ($8F, 3B, 4T, <keine>)
+		 *
+		 * AXS funktioniert so: Die Inhalte von Akku und X-Register werden UND-Verknüpft, aber OHNE eines der beiden Register zu ändern!
+		 * Das Ergbnis wird dann an der angegebenen Adresse abgelegt. Die Flags im Statusregister (SR) bleiben ebenfalls unverändert!
+		 *
+		 * Adressierung | OpCode | Bytes | TZ
+		 * absolut      |  $8F   |   3   |  4
+		 * Zero-Page    |  $87   |   2   |  3
+		 * Zero-Page,Y  |  $97   |   2   |  4
+		 * indirekt X   |  $83   |   2   |  6
+		 */
+		execute("LDA #<$c000 STA $2+$7e LDA #>$c000 STA $2+$7e+1 LDA #$ff LDX #$7e AXS ($2,x)").assertA(0xff).assertX(0x7e) .assertMemoryContains( 0x80 , 0x00,0xc0 ) .assertMemoryContains( 0xc000 , 0x7e );
+		execute("LDA #$ff\n LDX #$f0\n AXS $c000").assertA(0xff).assertX(0xf0).assertMemoryContains( 0xc000 , 0xf0 );
+		execute("LDA #$ff\n LDX #$f0\n AXS $a0").assertA(0xff).assertX(0xf0).assertMemoryContains( 0xa0 , 0xf0 );
+		execute("LDY #$7e LDA #$ff LDX #$7e AXS $2,Y").assertA(0xff).assertX(0x7e).assertMemoryContains( 0x80 , 0x7e );
 	}
 
 	public static String loadTestProgram(String classpath) throws IOException
@@ -659,7 +710,8 @@ Absolute      STX $4400     $8E  3   4
 		final int returnAdr = PRG_LOAD_ADDRESS+2; // JSR instruction has 3 bytes but return address stored on stack needs to be (returnAdr-1)
 		final byte lo = (byte) (returnAdr & 0xff);
 		final byte hi = (byte) ((returnAdr>>8) & 0xff);
-		execute("JSR $3000").assertPC(0x3000).assertOnStack( lo, hi);
+		System.out.println("expecting return address "+HexDump.toAdr( returnAdr ) );
+		execute("JSR label\n HLT\n label: \nHLT").assertPC(0x1005).assertOnStack( lo, hi);
 	}
 
 	public void testDec() {
@@ -946,12 +998,13 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 	}
 
 	public void testJMP() {
-		execute("JMP $2000").assertPC( 0x2000 );
-		execute("JMP ($2000)").writeWord(0x2000, 0x1234 ).assertPC( 0x1234 );
+		execute("JMP label\n HLT\n label: HLT\n").assertPC( PRG_LOAD_ADDRESS+4+1); // +1 because executed HLT instruction will increment the PC by one as well
+		// write $02 == HLT instruction to $1234 so the emulation terminates there
+		execute("LDA #$02\n STA $1234\n JMP ($2000)").writeWord(0x2000, 0x1234 ).assertPC( 0x1234+1 ); // +1 because executed HLT instruction will increment the PC by one as well
 	}
 
 	public void testNOP() {
-		execute("NOP").assertPC( PRG_LOAD_ADDRESS+1 );
+		execute("NOP").assertPC( PRG_LOAD_ADDRESS+1+1 ); // +1 because of HLT instruction appended after NOP
 	}
 
 	public void testBranchOnFlagSet() {
@@ -959,15 +1012,15 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 		final int dest = PRG_LOAD_ADDRESS+100;
 		final String destination = HexDump.toAdr( dest );
 
-		execute("BMI "+destination).setFlags(CPU.Flag.NEGATIVE).assertPC( dest );
-		execute("BVS "+destination).setFlags(CPU.Flag.OVERFLOW).assertPC( dest );
-		execute("BCS "+destination).setFlags(CPU.Flag.CARRY).assertPC( dest );
-		execute("BEQ "+destination).setFlags(CPU.Flag.ZERO).assertPC( dest );
+		execute("BMI "+destination).writeByte(dest, 0x02 ).setFlags(CPU.Flag.NEGATIVE).assertPC( dest+1 ); // +1 because of HLT ins appended to the src
+		execute("BVS "+destination).writeByte(dest, 0x02 ).setFlags(CPU.Flag.OVERFLOW).assertPC( dest+1 ); // +1 because of HLT ins appended to the src
+		execute("BCS "+destination).writeByte(dest, 0x02 ).setFlags(CPU.Flag.CARRY).assertPC( dest+1 ); // +1 because of HLT ins appended to the src
+		execute("BEQ "+destination).writeByte(dest, 0x02 ).setFlags(CPU.Flag.ZERO).assertPC( dest+1 ); // +1 because of HLT ins appended to the src
 
-		execute("BPL "+destination).clearFlags(CPU.Flag.NEGATIVE).assertPC( dest );
-		execute("BVC "+destination).clearFlags(CPU.Flag.OVERFLOW).assertPC( dest );
-		execute("BCC "+destination).clearFlags(CPU.Flag.CARRY).assertPC( dest );
-		execute("BNE "+destination).clearFlags(CPU.Flag.ZERO).assertPC( dest );
+		execute("BPL "+destination).writeByte(dest, 0x02 ).clearFlags(CPU.Flag.NEGATIVE).assertPC( dest+1 ); // +1 because of HLT ins appended to the src
+		execute("BVC "+destination).writeByte(dest, 0x02 ).clearFlags(CPU.Flag.OVERFLOW).assertPC( dest+1 ); // +1 because of HLT ins appended to the src
+		execute("BCC "+destination).writeByte(dest, 0x02 ).clearFlags(CPU.Flag.CARRY).assertPC( dest+1 ); // +1 because of HLT ins appended to the src
+		execute("BNE "+destination).writeByte(dest, 0x02 ).clearFlags(CPU.Flag.ZERO).assertPC( dest+1 ); // +1 because of HLT ins appended to the src
 	}
 
 	public void testLDAImmediateNonZero()
@@ -993,6 +1046,9 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 		public final String source;
 		private boolean executed = false;
 
+		private boolean addHltInstruction = true;
+		private boolean rethrowHltException = false;
+
 		private final List<Runnable> blocks = new ArrayList<>();
 		private final List<Consumer<Emulator>> afterEachStep = new ArrayList<>();
 		private final List<Consumer<Emulator>> beforeEachStep = new ArrayList<>();
@@ -1006,6 +1062,11 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 
 		public Helper afterEachStep(Consumer<Emulator> r) {
 			afterEachStep.add(r);
+			return this;
+		}
+
+		public Helper rethrowHltException(boolean yesNo) {
+			this.rethrowHltException = yesNo;
 			return this;
 		}
 
@@ -1167,7 +1228,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 
 			final int expected = value & 0xffff;
 			final int actual = emulator.getCPU().pc();
-			assertEquals( "Expected PC = "+hex(expected)+" but was "+hex(actual) , expected , actual );
+			assertEquals( "Expected PC = "+HexDump.toAdr(expected)+" but was "+HexDump.toAdr(actual) , expected , actual );
 			return this;
 		}
 
@@ -1184,7 +1245,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 				}
 			}
 
-			short adr = emulator.getCPU().sp;
+			short adr = (short) (emulator.getCPU().sp+1); // +1 because pop() operation FIRST increments SP and then reads from where the SP is pointing to
 			for ( int i = 0 ; i < expected.length ; i++ )
 			{
 				final byte actual = (byte) emulator.getMemory().readByte( adr );
@@ -1226,20 +1287,31 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 			return this;
 		}
 
-		private void maybeExecute()
+		public void maybeExecute()
 		{
 			if ( ! executed ) {
-				run(30 );
+				run();
 			}
 		}
 
-		public void run(int maxInstructions)
+		public void run()
+		{
+			run(10000);
+		}
+
+		public void run(long maxCycles)
 		{
 			try
 			{
-				final int ADDITIONAL_BYTES = 1; // number of bytes we insert before executing the test payload
+				final int ADDITIONAL_BYTES = 1; // number of bytes we insert before executing the test payload, currently 1 because of the CLI ins we prepend
 
-				final String asm = "*= "+HexDump.toAdr( PRG_LOAD_ADDRESS-ADDITIONAL_BYTES )+"\nCLI\n"+source;
+				final int realLoadAdr = PRG_LOAD_ADDRESS-ADDITIONAL_BYTES;
+				String asm = "*= "+HexDump.toAdr( realLoadAdr )+"\nCLI\n"+source;
+
+				if ( addHltInstruction ) {
+					asm += "\nHLT";
+				}
+
 				// assemble
 				final Parser p = new Parser(new Lexer(new Scanner( asm )));
 				final Assembler a = new Assembler();
@@ -1253,6 +1325,11 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 					throw e;
 				}
 
+				final Disassembler d = new Disassembler();
+				final int bytesToDisassemble = actual.length < 23 ? actual.length : 32;
+				final List<Line> lines = d.disassemble( realLoadAdr , actual , 0 , bytesToDisassemble);
+				System.out.println( lines.stream().map( l -> l.toString() ).collect( Collectors.joining("\n") ) );
+
 				final IMemoryProvider provider = new IMemoryProvider()
 				{
 					@Override
@@ -1261,7 +1338,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 						// switch to all-ram so overwritten RESET and BRK vectors
 						// actually take effect (otherwise the memory region would be mapped to kernel rom
 						// and thus reads would always return the ROM values)
-						((MemorySubsystem) emulator.getMemory()).setMemoryLayout( (byte) 0 );
+						emulator.getMemory().setMemoryLayout( (byte) 0 );
 
 						// fill memory with invalid instructions
 						// so the CPU stops when it runs off the compiled program
@@ -1285,20 +1362,37 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 
 				blocks.forEach( b -> b.run() );
 
-				int instructions = maxInstructions;
-				while ( instructions-- > 0 )
+				long cyclesExecuted = 0;
+				RuntimeException lastException = null;
+				while ( cyclesExecuted < maxCycles )
 				{
 					try
 					{
-						beforeEachStep.forEach( r -> r.accept( emulator ) );
+						final boolean previousInstructionFinished = emulator.getCPU().cycles == 0;
+						if ( previousInstructionFinished  ) {
+							beforeEachStep.forEach( r -> r.accept( emulator ) );
+						}
 						emulator.doOneCycle();
-						afterEachStep.forEach( r -> r.accept( emulator ) );
+						cyclesExecuted++;
+						if ( previousInstructionFinished ) {
+							afterEachStep.forEach( r -> r.accept( emulator ) );
+						}
+					} catch(HLTException e) {
+						lastException = e;
+						break;
 					} catch(final InvalidOpcodeException e) {
+						lastException = e;
 						break;
 					}
 				}
-				if ( instructions <= 0 ) {
-					System.err.println("WARNING -- stopped execution after 10 instructions");
+
+				if ( lastException instanceof HLTException && rethrowHltException )
+				{
+					throw lastException;
+				}
+
+				if ( cyclesExecuted >= maxCycles ) {
+					System.err.println("WARNING -- stopped execution after 10.000 cycles");
 				}
 
 				System.out.println("\n---------------------");
