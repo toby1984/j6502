@@ -600,8 +600,8 @@ public class Debugger
 				emulator.getCPU().pc( origin );
 			}
 			driver.removeAllBreakpoints();
-			driver.addBreakpoint( new Breakpoint( (short) 0x45bf , false ) );
-			driver.addBreakpoint( new Breakpoint( (short) 0x40cb , false ) );
+			driver.addBreakpoint( new Breakpoint( (short) 0x45bf , false , true ) );
+			driver.addBreakpoint( new Breakpoint( (short) 0x40cb , false , true ) );
 			hexPanel.setAddress( (short) 0x210 );
 			updateWindows(false);
 		}
@@ -1283,7 +1283,7 @@ public class Debugger
 							if ( breakpoint != null ) {
 								driver.removeBreakpoint( breakpoint );
 							} else {
-								driver.addBreakpoint( new Breakpoint( adr , false ) );
+								driver.addBreakpoint( new Breakpoint( adr , false , true ) );
 							}
 							refresh( emulator );
 						}
@@ -1541,7 +1541,8 @@ public class Debugger
 		public String getColumnName(int column) {
 			switch(column) {
 				case 0: return "Address";
-				case 1: return "Required CPU flags";
+				case 1: return "Enabled";
+				case 2: return "Required CPU flags";
 				default:
 					return "unknown";
 			}
@@ -1554,33 +1555,55 @@ public class Debugger
 
 		@Override
 		public int getColumnCount() {
-			return 2;
+			return 3;
+		}
+		
+		@Override
+		public Class<?> getColumnClass(int columnIndex) 
+		{
+		    switch(columnIndex) {
+		        case 1:
+		            return Boolean.class;
+		        case 0:
+		        case 2:
+		            return String.class;
+		        default:
+		            throw new RuntimeException("Unhandled index "+columnIndex);
+		    }
 		}
 
 		@Override
 		public boolean isCellEditable(int rowIndex, int columnIndex)
 		{
-			return columnIndex == 1;
+			return columnIndex == 1 || columnIndex == 2;
 		}
 
 		@Override
 		public void setValueAt(Object aValue, int rowIndex, int columnIndex)
 		{
-			if ( !(aValue instanceof String) ) {
-				throw new IllegalArgumentException("No valid processor flags: "+aValue);
-			}
-			final String flagString = ((String) aValue).trim();
-			final Set<CPU.Flag> flags = new HashSet<>();
-			for ( char c : flagString.toCharArray() )
-			{
-				Optional<Flag> flagToSet = Arrays.stream( CPU.Flag.values() ).filter( flag -> flag.symbol == c ).findFirst();
-				if ( ! flagToSet.isPresent() ) {
-					throw new IllegalArgumentException("No valid processor flags: '"+c+"'");
-				}
-				flags.add( flagToSet.get() );
-			}
-			final Breakpoint currentBP = getBreakpoints().get(rowIndex);
-			final Breakpoint newBP = new Breakpoint( currentBP.address , false , CPU.Flag.toBitMask( flags ) );
+	        final Breakpoint currentBP = getBreakpoints().get(rowIndex);
+	        final Breakpoint newBP;
+	        if ( columnIndex == 1 ) 
+	        {
+	            newBP = currentBP.withEnabled( (Boolean) aValue );
+	        } 
+	        else 
+	        {
+	            if ( !(aValue instanceof String) ) {
+	                throw new IllegalArgumentException("No valid processor flags: "+aValue);
+	            }
+	            final String flagString = ((String) aValue).trim();
+	            final Set<CPU.Flag> flags = new HashSet<>();
+	            for ( char c : flagString.toCharArray() )
+	            {
+	                Optional<Flag> flagToSet = Arrays.stream( CPU.Flag.values() ).filter( flag -> flag.symbol == c ).findFirst();
+	                if ( ! flagToSet.isPresent() ) {
+	                    throw new IllegalArgumentException("No valid processor flags: '"+c+"'");
+	                }
+	                flags.add( flagToSet.get() );
+	            }
+	            newBP = new Breakpoint( currentBP.address , false , CPU.Flag.toBitMask( flags ) , true );
+		    }
 			driver.addBreakpoint( newBP );
 		}
 
@@ -1592,6 +1615,8 @@ public class Debugger
 				case 0:
 					return HexDump.toAdr( bp.address );
 				case 1:
+				    return bp.isEnabled;
+				case 2:
 					if ( bp.checkCPUFlags ) {
 						return CPU.Flag.toFlagString( bp.cpuFlagsMask );
 					}

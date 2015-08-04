@@ -350,7 +350,7 @@ public abstract class EmulatorDriver extends Thread
 		{
 			if ( canStepOver() ) // check whether PC is at a JSR $xxxx instruction
 			{
-				addBreakpoint( new Breakpoint( emulator.getCPU().pc()+3 , true  ) ); // JSR $xxxx occupies 3 bytes
+				addBreakpoint( new Breakpoint( emulator.getCPU().pc()+3 , true , true ) ); // JSR $xxxx occupies 3 bytes
 				breakpointAdded = true;
 			}
 		}

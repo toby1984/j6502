@@ -35,11 +35,11 @@ import junit.framework.TestCase;
 
 public class EmulatorTest  extends TestCase
 {
-	private static final String ILLEGAL_OPCODE = ".byte $02\n";
+	private static final String ILLEGAL_OPCODE = ".byte $02\n"; // HLT
 
 	public static final int PRG_LOAD_ADDRESS = MemorySubsystem.Bank.BANK1.range.getStartAddress(); // = $1000
 
-	public static final boolean TEST_PERFORMANCE = false;
+	public static final boolean TEST_PERFORMANCE = true;
 
 	public void testPerformance() {
 
@@ -56,10 +56,10 @@ public class EmulatorTest  extends TestCase
 			helper.run(20000000);
 			time += System.currentTimeMillis();
 
-			final double msTimePerCycle = time/ (double) helper.emulator.getCPU().cycles;
+			final double msTimePerCycle = time/ (double) helper.cyclesExecuted;
 			final double cyclesPerSecond = 1000.0d / msTimePerCycle;
 			final double mhz = cyclesPerSecond / 1000000;
-			System.out.println( "Executed "+helper.emulator.getCPU().cycles+" CPU cycles in "+time+" ms ( = "+mhz+" Mhz )");
+			System.out.println( "Executed "+helper.cyclesExecuted+" CPU cycles in "+time+" ms ( = "+mhz+" Mhz )");
 		}
 	}
 
@@ -519,7 +519,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 
 	public void testBRK() {
 
-		execute("LDX #$00\n BRK\n .byte $64\n LDX #$12",false)
+		execute("LDX #$00\n BRK\n HLT\n LDX #$12",false)
 		.writeWord( CPU.BRK_VECTOR_LOCATION , PRG_LOAD_ADDRESS+4 )
 		.assertFlagsNotSet(CPU.Flag.BREAK)
 		.assertX( 0x12 );
@@ -577,7 +577,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		e.getCPU().pc( origin );
 
 		driver.start();
-		driver.addBreakpoint( new Breakpoint( (short) 0x103e , false ) );
+		driver.addBreakpoint( new Breakpoint( (short) 0x103e , false , true ) );
 		driver.setMode( Mode.CONTINOUS );
 
 		if ( ! stopped.await( 5 , TimeUnit.SECONDS ) )
@@ -645,7 +645,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 		e.getCPU().pc( origin );
 
 		driver.start();
-		driver.addBreakpoint( new Breakpoint( (short) 0x45c0 , false ) );
+		driver.addBreakpoint( new Breakpoint( (short) 0x45c0 , false , true ) );
 		driver.setMode( Mode.CONTINOUS );
 
 		if ( ! stopped.await( 5 , TimeUnit.SECONDS ) )
@@ -1052,6 +1052,8 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 		private final List<Runnable> blocks = new ArrayList<>();
 		private final List<Consumer<Emulator>> afterEachStep = new ArrayList<>();
 		private final List<Consumer<Emulator>> beforeEachStep = new ArrayList<>();
+		
+		private long cyclesExecuted;
 
 		private final boolean failOnBreak;
 
@@ -1394,6 +1396,8 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 				if ( cyclesExecuted >= maxCycles ) {
 					System.err.println("WARNING -- stopped execution after 10.000 cycles");
 				}
+				
+				this.cyclesExecuted = cyclesExecuted;
 
 				System.out.println("\n---------------------");
 				System.out.println("Compiled: "+asm+"\n");

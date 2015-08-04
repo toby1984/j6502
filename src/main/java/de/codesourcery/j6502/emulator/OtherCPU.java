@@ -8,7 +8,7 @@ import de.codesourcery.j6502.emulator.exceptions.HLTException;
  *
  * @author tobias.gierke@voipfuture.com
  */
-public class OtherCPU
+public final class OtherCPU
 {
 	protected static final int FLAG_CARRY     = 0x01;
 	protected static final int FLAG_ZERO      = 0x02;
@@ -138,7 +138,7 @@ public class OtherCPU
 
 	protected int pull16()
 	{
-		return read6502( cpu.pop( memory ) | cpu.pop( memory ) << 8);
+		return cpu.pop( memory ) | ( cpu.pop( memory ) << 8 );
 	}
 
 	protected int pull8() {
@@ -255,33 +255,75 @@ public class OtherCPU
 	//instruction handler functions
 	protected final Runnable adc = () ->
 	{
+	    /*
+    carrycalc(result);
+    zerocalc(result);
+    overflowcalc(result, a, value);
+    signcalc(result);
+
+    #ifndef NES_CPU
+    if (status & FLAG_DECIMAL) {
+        clearcarry();
+
+        if ((a & 0x0F) > 0x09) {
+            a += 0x06;
+        }
+        if ((a & 0xF0) > 0x90) {
+            a += 0x60;
+            setcarry();
+        }
+
+        clockticks6502++;
+    }
+    #endif
+
+    saveaccum(result);	     
+	     */
 		penaltyop = true;
 		value = getvalue();
+		
 		int a = cpu.getAccumulator();
-		result = a + value + ( cpu.isSet(Flag.CARRY) ? 1 : 0 ); // (uint16_t)(status & FLAG_CARRY);
-
-		carrycalc(result);
-		zerocalc(result);
-		overflowcalc(result, a , value);
-		signcalc(result);
+//		result = a + value + ( cpu.isSet(Flag.CARRY) ? 1 : 0 ); // (uint16_t)(status & FLAG_CARRY);
+//
+//		carrycalc(result);
+//		zerocalc(result);
+//		overflowcalc(result, a , value);
+//		signcalc(result);
 
 		if ( cpu.isSet( Flag.DECIMAL_MODE) )
 		{
-			clearcarry();
-
-			if ( (a & 0x0F) > 0x09)
-			{
-				a += 0x06;
-			}
-			if ((a & 0xF0) > 0x90) {
-				a += 0x60;
-				setcarry();
-			}
-			cpu.cycles++;
+		    throw new RuntimeException("ADC in BCD mode not implemented yet :(");
+//			clearcarry();
+//
+//			if ( (a & 0x0F) > 0x09)
+//			{
+//				a += 0x06;
+//			}
+//			if ((a & 0xF0) > 0x90) {
+//				a += 0x60;
+//				setcarry();
+//			}
+//			cpu.cycles++;
 		}
-
-		saveaccum(result);
+//		saveaccum(result);
+		
+		adc( cpu.getAccumulator() , value , cpu.isSet(Flag.CARRY) ? 1 : 0 );
 	};
+	
+   protected void adc(int a,int b,int carry)
+    {
+        int result = (a & 0xff) + (b & 0xff) + carry;
+        boolean c6 = ( ( (a & 0b0111_1111) + (b & 0b0111_1111) + carry) & 0x80 ) != 0;
+
+        boolean m7 = (a & 0b1000_0000) != 0;
+        boolean n7 = (b & 0b1000_0000) != 0;
+
+        cpu.setFlag( Flag.CARRY , ((result & 0x100) != 0) );
+        cpu.setFlag( Flag.OVERFLOW, (!m7&!n7&c6) | (m7&n7&!c6));
+        cpu.setFlag( Flag.NEGATIVE , ( result & 0b1000_0000) != 0 );
+        cpu.setFlag( Flag.ZERO , ( result & 0xff) == 0 );
+        cpu.setAccumulator(result);
+    }
 
 	protected final Runnable and = () ->
 	{
@@ -381,7 +423,8 @@ public class OtherCPU
 
 	protected final Runnable bne = () ->
 	{
-		if ( cpu.isNotSet(Flag.ZERO) ) {
+		if ( cpu.isNotSet(Flag.ZERO) ) 
+		{
 			final int oldpc = cpu.pc();
 			cpu.incPC( reladdr );
 			if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00)) {
@@ -412,7 +455,6 @@ public class OtherCPU
 	{
 		cpu.incPC();
 		cpu.pushWord( (short) cpu.pc() , memory ); //push next instruction address onto stack
-		cpu.setFlag( Flag.BREAK );
 		final byte flags = CPU.Flag.BREAK.set( cpu.getFlagBits() );
 		cpu.pushByte( flags , memory );
 		setinterrupt(); //set interrupt flag
@@ -593,7 +635,8 @@ public class OtherCPU
 
 	protected final Runnable jsr = ()->
 	{
-		cpu.pushWord( (short) (cpu.pc()-1) , memory );
+		final int retAdr = cpu.pc()-1;
+        cpu.pushWord( (short) retAdr , memory );
 		cpu.pc( ea );
 	};
 
@@ -753,33 +796,40 @@ public class OtherCPU
 	protected final Runnable sbc = () ->
 	{
 		penaltyop = true;
-		value = getvalue() ^ 0x00FF;
+		value = getvalue();
 
 		int a = cpu.getAccumulator();
 
-		result = a + value + ( cpu.isSet(Flag.CARRY) ? 1 : 0 );
-
-		carrycalc(result);
-		zerocalc(result);
-		overflowcalc(result, a, value);
-		signcalc(result);
-
-		if ( cpu.isSet(Flag.DECIMAL_MODE) ) {
-			clearcarry();
-
-			a -= 0x66;
-			if ((a & 0x0F) > 0x09) {
-				a += 0x06;
-			}
-			if ((a & 0xF0) > 0x90) {
-				a += 0x60;
-				setcarry();
-			}
-
-			cpu.cycles++;
-		}
-		cpu.setAccumulator( a );
-		saveaccum(result);
+//		result = a + value + ( cpu.isSet(Flag.CARRY) ? 1 : 0 );
+//
+//		carrycalc(result);
+//		zerocalc(result);
+//		overflowcalc(result, a, value);
+//		signcalc(result);
+//
+//		if ( cpu.isSet(Flag.DECIMAL_MODE) ) {
+//			clearcarry();
+//
+//			a -= 0x66;
+//			if ((a & 0x0F) > 0x09) {
+//				a += 0x06;
+//			}
+//			if ((a & 0xF0) > 0x90) {
+//				a += 0x60;
+//				setcarry();
+//			}
+//
+//			cpu.cycles++;
+//		}
+//		cpu.setAccumulator( a );
+//		saveaccum(result);
+		
+        /*
+         * ADC: Carry set   = +1 ,
+         * SBC: Carry clear = -1
+         */
+        final int carry = cpu.isSet( CPU.Flag.CARRY) ? 1: 0;
+        adc( a , ( ~value & 0xff ) , carry );
 	};
 
 	protected final Runnable sec = () -> {

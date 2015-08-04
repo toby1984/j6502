@@ -120,8 +120,8 @@ public class Emulator
 
 			final int oldPc = cpu.pc();
 
-			otherCPU.executeInstruction();
-			// doSingleStep();
+//			otherCPU.executeInstruction();
+			 doSingleStep();
 
 			if ( PRINT_DISASSEMBLY ) {
 				System.out.println( cpu );
