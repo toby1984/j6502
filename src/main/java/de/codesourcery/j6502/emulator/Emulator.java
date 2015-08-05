@@ -5,7 +5,6 @@ import java.util.function.Consumer;
 import de.codesourcery.j6502.assembler.parser.Opcode;
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.Disassembler.Line;
-import de.codesourcery.j6502.emulator.OtherCPU.MemoryWrite;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
 import de.codesourcery.j6502.utils.HexDump;
 
@@ -25,12 +24,10 @@ public class Emulator
 
 	private IMemoryProvider memoryProvider;
 
-	private final CPU clonedCPU = new CPU(this.memory); // TODO: Remove debug code
-	
 	private final OtherCPU otherCPU;
 
 	public Emulator() {
-		otherCPU = new OtherCPU( clonedCPU , memory );
+		otherCPU = new OtherCPU( cpu , memory );
 	}
 
 	public void setMemoryProvider(IMemoryProvider provider)
@@ -123,47 +120,9 @@ public class Emulator
 
 			final int oldPc = cpu.pc();
 
-			final int opcode = memory.readByte( cpu.pc() );
-			clonedCPU.populateFrom( cpu ); // TODO: Remove debug code
-
-			boolean threwException=false;
-			try {
-			    otherCPU.executeInstruction();
-			} catch(Exception e) {
-			    System.err.println("otherCPU threw exception: "+e.getMessage()+","+e.getClass().getSimpleName());
-			}
+		    otherCPU.executeInstruction();
 			
-			doSingleStep();
-			
-			// TODO: Remove debug code
-			
-			if ( ! threwException ) 
-			{
-			    // compare CPU outputs
-			    final boolean performCheck = ! ( opcode == 0xad && otherCPU.ea == 0xdc0d );
-			    if ( performCheck ) 
-			    {
-			        if ( ! clonedCPU.matches( cpu ) ) 
-			        { // TODO: Remove debug code
-			            System.err.println("EXPECTED: ");
-			            System.err.println( cpu.toString() );
-			            System.err.println("GOT: ");
-			            System.err.println( clonedCPU.toString() );
-			            //    			    throw new RuntimeException("CPU states don't match, opcode: $"+Integer.toHexString(opcode));
-			            System.err.println("CPU states don't match, opcode: $"+Integer.toHexString(opcode));
-			        }
-
-			        for ( int i = 0 , len = otherCPU.writes.size() ; i < len ; i++ ) // TODO: Remove debug code 
-			        {
-			            final MemoryWrite write = otherCPU.writes.get(i);
-			            if ( ! write.assertMatches( memory ) ) 
-			            {
-			                //    			        throw new RuntimeException("Memory location "+HexDump.toAdr( write.address)+" differs! expected: "+write.value+", got "+memory.readByte( write.address )+" , opcode: "+opcode );
-			                System.err.println("Memory location "+HexDump.toAdr( write.address)+" differs! expected: "+write.value+", got "+memory.readByte( write.address )+" , opcode: "+opcode );
-			            }
-			        }
-    			}
-			}
+//			doSingleStep();
 
 			if ( PRINT_DISASSEMBLY ) {
 				System.out.println( cpu );

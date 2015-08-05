@@ -14,8 +14,6 @@ import de.codesourcery.j6502.utils.HexDump;
  */
 public final class OtherCPU
 {
-    public static final boolean DISABLE_MEMORY_WRITES = true; // TODO: Remove debug code
-    
 	protected static final int FLAG_CARRY     = 0x01;
 	protected static final int FLAG_ZERO      = 0x02;
 	protected static final int FLAG_INTERRUPT = 0x04;
@@ -36,40 +34,6 @@ public final class OtherCPU
 	protected int opcode;
 	protected byte oldstatus;
 	
-	public final List<MemoryWrite> writes = new ArrayList<>();
-	
-    public static final class MemoryWrite 
-    {
-        public final int address;
-        public final int value;
-        
-        public MemoryWrite(int address, int value) {
-            this.address = address & 0xffff;
-            this.value = value & 0xff;
-        }
-        
-        public boolean equals(Object other) {
-            return other instanceof MemoryWrite && ((MemoryWrite) other).address == this.address;
-        }
-        
-        @Override
-        public int hashCode() {
-            return this.address;
-        }
-        
-        public boolean assertMatches(IMemoryRegion region) 
-        {
-            if ( region.isReadsReturnWrites( address ) ) // excluded to avoid false errors for memory regions like RAM under ROM etc. where reads return ROM contents but writes go to RAM 
-            {
-                final int actual = region.readByte( address );
-                if ( actual != value ) {
-                    return false;
-                }
-            }
-            return true;
-        }
-    }
-
 	public OtherCPU(CPU cpu,IMemoryRegion region) {
 		this.cpu = cpu;
 		this.memory = region;
@@ -123,28 +87,9 @@ public final class OtherCPU
 	
 	protected void write6502(int address,int value)
 	{
-	    if ( DISABLE_MEMORY_WRITES ) // TODO: Remove debug code
-	    {
-	        fakeWrite(address,value);
-	    } else {
-	        memory.writeByte( address , (byte) value );
-	    } 
+        memory.writeByte( address , (byte) value );
 	}
 	 
-	protected void fakeWrite(int address,int value) { // TODO: Remove debug code
-
-        final MemoryWrite newWrite = new MemoryWrite(address,value);
-        for ( int i = 0, len = writes.size(); i < len ; i++ ) 
-        {
-            if ( writes.get(i).equals( newWrite ) ) 
-            {
-                writes.set(i,newWrite);
-                return;
-            }
-        }
-        writes.add( newWrite );
-	}
-
 	//flag calculation macros
 	protected void zerocalc(int n)
 	{
@@ -188,26 +133,12 @@ public final class OtherCPU
 	//a few general functions used by various other functions
 	protected void push16(int pushval)
 	{
-	    if ( DISABLE_MEMORY_WRITES ) 
-	    {
-	        int hi = (pushval >> 8 ) & 0xff;
-	        int lo = pushval & 0xff ;
-            push8( hi ); // hi
-	        push8( lo); // lo
-	    } else {
-	        cpu.pushWord( (short) pushval , memory );
-	    }
+        cpu.pushWord( (short) pushval , memory );
 	}
 
 	protected void push8(int pushval) 
 	{
-	    if ( DISABLE_MEMORY_WRITES ) 
-	    {
-	        fakeWrite( cpu.sp & 0xffff , pushval );
-	        cpu.decSP();
-	    } else {
-	        cpu.pushByte( (byte) pushval , memory );
-	    }
+        cpu.pushByte( (byte) pushval , memory );
 	}
 
 	protected int pull16()
@@ -366,6 +297,7 @@ public final class OtherCPU
 
 		if ( cpu.isSet( Flag.DECIMAL_MODE) )
 		{
+		    // TODO: Implement BCD mode according to http://www.6502.org/tutorials/decimal_mode.html
 		    throw new RuntimeException("ADC in BCD mode not implemented yet :(");
 //			clearcarry();
 //
@@ -526,15 +458,7 @@ public final class OtherCPU
 
 	protected final Runnable brk = () ->
 	{
-		cpu.incPC();
-		if ( DISABLE_MEMORY_WRITES ) { // TODO: Remove debug code
-		    push16( cpu.pc() );
-		    push8( CPU.Flag.BREAK.set( cpu.getFlagBits() ) );
-		    cpu.setFlag( CPU.Flag.IRQ_DISABLE );
-		    cpu.pc( memory.readWord( CPU.BRK_VECTOR_LOCATION ) );
-		} else {
-		    cpu.queueInterrupt( CPU.IRQType.BRK );
-		}
+	    cpu.queueInterrupt( CPU.IRQType.BRK );
 	};
 
 	protected final Runnable bvc = () -> {
@@ -882,30 +806,12 @@ public final class OtherCPU
 
 		int a = cpu.getAccumulator();
 
-//		result = a + value + ( cpu.isSet(Flag.CARRY) ? 1 : 0 );
-//
-//		carrycalc(result);
-//		zerocalc(result);
-//		overflowcalc(result, a, value);
-//		signcalc(result);
-//
-//		if ( cpu.isSet(Flag.DECIMAL_MODE) ) {
-//			clearcarry();
-//
-//			a -= 0x66;
-//			if ((a & 0x0F) > 0x09) {
-//				a += 0x06;
-//			}
-//			if ((a & 0xF0) > 0x90) {
-//				a += 0x60;
-//				setcarry();
-//			}
-//
-//			cpu.cycles++;
-//		}
-//		cpu.setAccumulator( a );
-//		saveaccum(result);
-		
+	      if ( cpu.isSet( Flag.DECIMAL_MODE) )
+	      {
+	          // TODO: Implement BCD according to http://www.6502.org/tutorials/decimal_mode.html
+	          throw new RuntimeException("SBC in BCD mode not implemented yet :(");
+	      }
+
         /*
          * ADC: Carry set   = +1 ,
          * SBC: Carry clear = -1
@@ -1055,14 +961,6 @@ public final class OtherCPU
 
 	public void executeInstruction()
 	{
-	    if ( DISABLE_MEMORY_WRITES ) { // TODO: Remove debug code
-	        writes.clear();
-	    }
-	    
-	    if ( cpu.pc() == 0xa408 ) {
-	        System.out.println("Initial state: "+cpu);
-	    }
-	    
 		opcode = read6502( cpu.pc() );
 		cpu.incPC();
 
