@@ -18,6 +18,11 @@ public final class WriteOnceMemory extends Memory {
 	}
 
 	@Override
+	public boolean isReadsReturnWrites(int offset) {
+	    return false;
+	}
+	
+	@Override
 	public void reset()
 	{
 		if ( ! writeProtected ) {

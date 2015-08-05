@@ -39,7 +39,7 @@ public class EmulatorTest  extends TestCase
 
 	public static final int PRG_LOAD_ADDRESS = MemorySubsystem.Bank.BANK1.range.getStartAddress(); // = $1000
 
-	public static final boolean TEST_PERFORMANCE = true;
+	public static final boolean TEST_PERFORMANCE = false;
 
 	public void testPerformance() {
 
@@ -1379,10 +1379,15 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 						if ( previousInstructionFinished ) {
 							afterEachStep.forEach( r -> r.accept( emulator ) );
 						}
-					} catch(HLTException e) {
+					} 
+					catch(HLTException e) 
+					{
+					    System.err.println("*** Stopped because of HLT , PC = "+HexDump.toAdr( emulator.getCPU().pc() ));
+					    
 						lastException = e;
 						break;
 					} catch(final InvalidOpcodeException e) {
+					    System.err.println("*** Stopped because of illegal opcode, PC = "+HexDump.toAdr( emulator.getCPU().pc() ));
 						lastException = e;
 						break;
 					}

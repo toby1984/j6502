@@ -485,6 +485,25 @@ public final class MemorySubsystem extends IMemoryRegion
 	}
 
 	@Override
+	public boolean isReadsReturnWrites(int offset) 
+	{
+        final int wrappedOffset = offset & 0xffff;
+        switch(wrappedOffset)
+        {
+            case 0:
+            case 1:
+                return true;
+            default:
+                final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
+                if ( region instanceof WriteOnceMemory ) {
+                    return false;
+                }
+                final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+                return region.isReadsReturnWrites( translatedOffset );
+        }
+	}
+
+	@Override
 	public void writeWord(int offset,short value)
 	{
 		final byte low = (byte) value;

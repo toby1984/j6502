@@ -441,4 +441,9 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		final String result = "%"+StringUtils.repeat("0" , 8-string.length())+string;
 		return result.substring(0,5)+"_"+result.substring(5);
 	}
+	
+	@Override
+	public boolean isReadsReturnWrites(int offset) {
+	    return false;
+	}
 }

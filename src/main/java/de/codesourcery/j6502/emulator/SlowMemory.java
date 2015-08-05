@@ -32,6 +32,10 @@ public class SlowMemory extends IMemoryRegion
 		}
 	}
 	
+    public boolean isReadsReturnWrites(int offset) {
+        return true;
+    }   
+	
 	@Override
 	public int readByte(int offset) {
 		return data[offset & 0xffff] & 0xff;

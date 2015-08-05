@@ -438,11 +438,11 @@ lack thereof and the sign (i.e. A>=$80) of the accumulator.
 			{
 				case 0xC9: // Immediate     CMP #$44      $C9  2   2
 					b = readImmediateValue( cpu , memory );
-					cpu.cycles += 4;
+					cpu.cycles += 2;
 					break;
 				case 0xC5: // Zero Page     CMP $44       $C5  2   3
 					b = readZeroPageValue(cpu , memory );
-					cpu.cycles += 4;
+					cpu.cycles += 3;
 					break;
 				case 0xD5: // Zero Page,X   CMP $44,X     $D5  2   4
 					b = readAbsoluteZeroPageXValue(cpu, memory );
@@ -473,7 +473,7 @@ lack thereof and the sign (i.e. A>=$80) of the accumulator.
 
 			cpu.setFlag( Flag.CARRY , a >= b );
 			cpu.setFlag( Flag.ZERO , a == b );
-			cpu.setFlag( Flag.NEGATIVE , ( (a-b) & 0xffffff00 ) != 0 );
+			cpu.setFlag( Flag.NEGATIVE , ( (a-b) & 0x80 ) != 0 );
 		}
 	},
 	SBC("SBC")
@@ -1078,7 +1078,7 @@ MODE           SYNTAX       HEX LEN TIM
   P.N = t.7
   P.V = t.6
   P.Z = (t==0) ? 1:0
-
+  
 BIT sets the Z flag as though the value in the address tested were ANDed with the accumulator. The S and V flags are set to match bits 7 and 6 respectively in the value stored at the tested address.
 			 */
 			int address;
@@ -1314,7 +1314,7 @@ Absolute      CPY $4400     $CC  3   4
 
 			cpu.setFlag( Flag.CARRY , a >= b );
 			cpu.setFlag( Flag.ZERO , a == b );
-			cpu.setFlag( Flag.NEGATIVE , ( (a-b) & 0xffffff00 ) != 0 );
+			cpu.setFlag( Flag.NEGATIVE , ( (a-b) & 0x80 ) != 0 );
 		}
 	},
 	CPX("CPX")
@@ -1369,7 +1369,7 @@ Absolute      CPY $4400     $CC  3   4
 
 			cpu.setFlag( Flag.CARRY , a >= b );
 			cpu.setFlag( Flag.ZERO , a == b );
-			cpu.setFlag( Flag.NEGATIVE , ( (a-b) & 0xffffff00 ) != 0 );
+			cpu.setFlag( Flag.NEGATIVE , ( (a-b) & 0x80 ) != 0 );
 		}
 	},
 	/* Conditional branches.
@@ -1785,6 +1785,7 @@ Subroutines are normally terminated by a RTS op code.
 				case 0xB2:
 				case 0xD2:
 				case 0xF2:
+				    cpu.incPC();
 					throw new HLTException(opcode);
 				default:
 					throw new RuntimeException("Unreachable code reached"); // caller screwed up

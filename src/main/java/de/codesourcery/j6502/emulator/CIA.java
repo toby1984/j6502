@@ -3,6 +3,7 @@ package de.codesourcery.j6502.emulator;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoField;
 
+import de.codesourcery.j6502.emulator.CPU.IRQType;
 import de.codesourcery.j6502.utils.Misc;
 
 /**
@@ -333,6 +334,11 @@ CRB 	Control Timer B 	see CIA 1
 	{
 		super(identifier, range);
 	}
+	
+	@Override
+	public boolean isReadsReturnWrites(int offset) {
+        return false; // not for all registers
+    }	
 
 	private void initTOD() {
 
@@ -630,7 +636,7 @@ ende     rts             ; back to BASIC
 				this.timeOfDay == this.todAlarmTimeOfDay )
 		{
 			icr_read |= 2; // tod == tod alarm time
-			cpu.queueInterrupt();
+			cpu.queueInterrupt( IRQType.REGULAR );
 		}
 	}
 
@@ -710,7 +716,7 @@ ende     rts             ; back to BASIC
 //		System.out.println("CIA #1 timer B underflow");
 		icr_read |= 2; // timerB triggered underflow
 		if ( (irqMask & 2 ) != 0 ) { // trigger interrupt on timer B underflow ?
-			cpu.queueInterrupt();
+			cpu.queueInterrupt( IRQType.REGULAR  );
 		}
 		if ( (crb & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
 			timerBRunning = false;
@@ -731,7 +737,7 @@ ende     rts             ; back to BASIC
 		 */
 		icr_read |= 1; // timerA underflow triggered IRQ
 		if ( (irqMask & 1) != 0 ) { // trigger interrupt on timer A underflow ?
-			cpu.queueInterrupt();
+			cpu.queueInterrupt( IRQType.REGULAR  );
 		}
 		if ( (cra & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
 			timerARunning = false;

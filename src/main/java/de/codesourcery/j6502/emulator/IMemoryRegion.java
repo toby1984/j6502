@@ -32,6 +32,8 @@ public abstract class IMemoryRegion
 	public abstract void writeByte(int offset,byte value);
 
 	public abstract String dump(int offset, int len);
+	
+	public abstract boolean isReadsReturnWrites(int offset);
 
 	@Override
 	public String toString() {

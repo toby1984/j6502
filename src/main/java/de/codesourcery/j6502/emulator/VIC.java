@@ -5,6 +5,7 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 
+import de.codesourcery.j6502.emulator.CPU.IRQType;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class VIC extends SlowMemory
@@ -630,7 +631,7 @@ public class VIC extends SlowMemory
         if ( (value & 1<<0) == 0 ) // only trigger interrupt if raster IRQ is not already active
         {
             super.writeByte( VIC_IRQ_ACTIVE_BITS , (byte) (value|1<<0|1<<7) );
-            cpu.queueInterrupt();
+            cpu.queueInterrupt( IRQType.REGULAR  );
         }
     }
 
@@ -1481,5 +1482,9 @@ The flip flops are switched according to the following rules:
         final int dataPtrLocation = videoRAMAdr+1016+sprite.spriteNo;
         return bankAdr + 64 * mainMemory.readByte( dataPtrLocation );
     }
-
+    
+    @Override
+    public boolean isReadsReturnWrites(int offset) {
+        return false; // not for all registers
+    }   
 }

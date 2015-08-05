@@ -12,10 +12,13 @@ public class CPU
 	public static final int RESET_VECTOR_LOCATION = 0xfffc;
 	public static final int BRK_VECTOR_LOCATION = 0xfffe; // same as IRQ_VECTOR_LOCATION
 	public static final int IRQ_VECTOR_LOCATION = 0xfffe; // same as BRK_VECTOR_LOCATION
-
+	public static final int NMI_VECTOR_LOCATION = 0xfffa;
+	
 	private final IMemoryRegion memory;
 
-	private boolean interruptQueued;
+	public static enum IRQType { REGULAR , NMI , BRK , NONE };
+	
+	private IRQType interruptQueued = IRQType.NONE;
 
 	public long cycles = 0;
 	public short previousPC;
@@ -68,6 +71,35 @@ public class CPU
 		}
 	}
 
+	public void populateFrom(CPU other) {
+	    this.interruptQueued = other.interruptQueued;
+	    this.cycles = other.cycles;
+	    this.previousPC = other.previousPC;
+	    this.pc = other.pc;
+	    this.accumulator = other.accumulator;
+	    this.x = other.x;
+	    this.y = other.y;
+	    this.sp = other.sp;
+	    this.flags = other.flags;
+	}
+	
+	public boolean matches(CPU other) 
+	{
+	    boolean result= this.interruptQueued == other.interruptQueued
+        && this.previousPC == other.previousPC
+        && this.pc == other.pc
+        && this.accumulator == other.accumulator
+        && this.x == other.x
+        && this.y == other.y
+        && this.sp == other.sp
+        && this.flags == other.flags;
+	    
+	    if ( result && this.cycles != other.cycles ) {
+	        System.err.println("WARNING: Cycle count mismatch , this: "+this.cycles+" <-> other: "+other.cycles);
+	    }
+	    return result;
+	}
+	
 	public byte getFlagBits() {
 		return flags;
 	}
@@ -104,13 +136,29 @@ public class CPU
   disables interrupts and loads the vector from $FFFA/$FFFB into the program counter and continues fetching instructions from there.
 - On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFFE/$FFFF.
 		 */
-		if ( ! isSet(Flag.IRQ_DISABLE ) )
+		if ( ! isSet(Flag.IRQ_DISABLE ) || interruptQueued == IRQType.NMI )
 		{
-			pushByte( (byte) ( ( pc & 0xff00) >>8 ) ,  memory ); // push pc hi
-			pushByte( (byte) ( pc & 0xff ) , memory ); // push pc lo
-			pushByte( flags , memory ); // push processor flags
+	        pushByte( (byte) ( ( pc & 0xff00) >>8 ) ,  memory ); // push pc hi
+	        pushByte( (byte) ( pc & 0xff ) , memory ); // push pc lo
+	        
+		    switch( interruptQueued ) 
+		    {
+                case BRK:
+                    pushByte( CPU.Flag.BREAK.set( flags ) , memory ); // push processor flags
+                    pc = (short) memory.readWord( (short) CPU.BRK_VECTOR_LOCATION );
+                    break;
+                case NMI:
+                    pushByte( flags , memory ); // push processor flags
+                    pc = (short) memory.readWord( (short) CPU.NMI_VECTOR_LOCATION );
+                    break;
+                case REGULAR:
+                    pushByte( flags , memory ); // push processor flags
+                    pc = (short) memory.readWord( (short) CPU.IRQ_VECTOR_LOCATION );
+                    break;
+                default:
+                    throw new RuntimeException("Unhandled IRQ type: "+interruptQueued);
+		    }
 			flags = CPU.Flag.IRQ_DISABLE.set( this.flags );
-			pc = (short) memory.readWord( (short) CPU.IRQ_VECTOR_LOCATION );
 			clearInterruptQueued();
 		}
 	}
@@ -173,10 +221,14 @@ public class CPU
 		setFlagBits( CPU.Flag.IRQ_DISABLE.set( (byte) 0) );
 	}
 
-	public void queueInterrupt()
+	public void queueInterrupt(IRQType type)
 	{
-		if ( ! isSet(CPU.Flag.IRQ_DISABLE ) ) {
-			this.interruptQueued = true;
+		if ( ! isSet(CPU.Flag.IRQ_DISABLE ) ) 
+		{
+		    if ( type == IRQType.NONE ) {
+		        throw new IllegalArgumentException("Cannot queue IRQType.NONE");
+		    }
+			this.interruptQueued = type;
 		}
 	}
 
@@ -198,6 +250,8 @@ public class CPU
 
 		final String accuBinary = HexDump.toBinaryString( (byte) accumulator );
 		buffer
+        .append( "Cyles: ").append( cycles )
+        .append("    ")		
 		.append( "PC: ").append( HexDump.toHexBigEndian( pc ) )
 		.append("    ")
 		.append( flagBuffer )
@@ -245,11 +299,11 @@ public class CPU
 	}
 
 	public boolean isInterruptQueued() {
-		return interruptQueued;
+		return interruptQueued != IRQType.NONE;
 	}
 
 	public void clearInterruptQueued() {
-		this.interruptQueued = false;
+		this.interruptQueued = IRQType.NONE;
 	}
 
 	public void setSP(int value)

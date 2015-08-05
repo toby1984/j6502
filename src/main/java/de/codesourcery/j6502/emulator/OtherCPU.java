@@ -1,7 +1,11 @@
 package de.codesourcery.j6502.emulator;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.exceptions.HLTException;
+import de.codesourcery.j6502.utils.HexDump;
 
 /**
  * Ported from C code in http://codegolf.stackexchange.com/questions/12844/emulate-a-mos-6502-cpu
@@ -10,6 +14,8 @@ import de.codesourcery.j6502.emulator.exceptions.HLTException;
  */
 public final class OtherCPU
 {
+    public static final boolean DISABLE_MEMORY_WRITES = true; // TODO: Remove debug code
+    
 	protected static final int FLAG_CARRY     = 0x01;
 	protected static final int FLAG_ZERO      = 0x02;
 	protected static final int FLAG_INTERRUPT = 0x04;
@@ -29,6 +35,40 @@ public final class OtherCPU
 	protected int ea, reladdr, value, result;
 	protected int opcode;
 	protected byte oldstatus;
+	
+	public final List<MemoryWrite> writes = new ArrayList<>();
+	
+    public static final class MemoryWrite 
+    {
+        public final int address;
+        public final int value;
+        
+        public MemoryWrite(int address, int value) {
+            this.address = address & 0xffff;
+            this.value = value & 0xff;
+        }
+        
+        public boolean equals(Object other) {
+            return other instanceof MemoryWrite && ((MemoryWrite) other).address == this.address;
+        }
+        
+        @Override
+        public int hashCode() {
+            return this.address;
+        }
+        
+        public boolean assertMatches(IMemoryRegion region) 
+        {
+            if ( region.isReadsReturnWrites( address ) ) // excluded to avoid false errors for memory regions like RAM under ROM etc. where reads return ROM contents but writes go to RAM 
+            {
+                final int actual = region.readByte( address );
+                if ( actual != value ) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
 
 	public OtherCPU(CPU cpu,IMemoryRegion region) {
 		this.cpu = cpu;
@@ -80,16 +120,35 @@ public final class OtherCPU
 	protected int read6502(int address) {
 		return memory.readByte( address );
 	}
-
+	
 	protected void write6502(int address,int value)
 	{
-		memory.writeByte( address , (byte) value );
+	    if ( DISABLE_MEMORY_WRITES ) // TODO: Remove debug code
+	    {
+	        fakeWrite(address,value);
+	    } else {
+	        memory.writeByte( address , (byte) value );
+	    } 
+	}
+	 
+	protected void fakeWrite(int address,int value) { // TODO: Remove debug code
+
+        final MemoryWrite newWrite = new MemoryWrite(address,value);
+        for ( int i = 0, len = writes.size(); i < len ; i++ ) 
+        {
+            if ( writes.get(i).equals( newWrite ) ) 
+            {
+                writes.set(i,newWrite);
+                return;
+            }
+        }
+        writes.add( newWrite );
 	}
 
 	//flag calculation macros
 	protected void zerocalc(int n)
 	{
-		if ( (n & 0x00FF) != 0 ) {
+		if ( (n & 0xff) != 0 ) {
 			clearzero();
 		} else {
 			setzero();
@@ -98,7 +157,7 @@ public final class OtherCPU
 
 	protected void signcalc(int n)
 	{
-		if ( (n & 0x0080) != 0 )
+		if ( (n & 0x80 ) != 0 )
 		{
 			setsign();
 		} else {
@@ -129,11 +188,26 @@ public final class OtherCPU
 	//a few general functions used by various other functions
 	protected void push16(int pushval)
 	{
-		cpu.pushWord( (short) pushval , memory );
+	    if ( DISABLE_MEMORY_WRITES ) 
+	    {
+	        int hi = (pushval >> 8 ) & 0xff;
+	        int lo = pushval & 0xff ;
+            push8( hi ); // hi
+	        push8( lo); // lo
+	    } else {
+	        cpu.pushWord( (short) pushval , memory );
+	    }
 	}
 
-	protected void push8(int pushval) {
-		cpu.pushByte( (byte) pushval , memory );
+	protected void push8(int pushval) 
+	{
+	    if ( DISABLE_MEMORY_WRITES ) 
+	    {
+	        fakeWrite( cpu.sp & 0xffff , pushval );
+	        cpu.decSP();
+	    } else {
+	        cpu.pushByte( (byte) pushval , memory );
+	    }
 	}
 
 	protected int pull16()
@@ -365,11 +439,12 @@ public final class OtherCPU
 		}
 	};
 
-	protected final Runnable bcs = () -> {
-		if (cpu.isSet( CPU.Flag.CARRY))
+	protected final Runnable bcs = () -> 
+	{
+		if (cpu.isSet( CPU.Flag.CARRY ) )
 		{
 			final int oldpc = cpu.pc();
-			cpu.incPC( reladdr);
+			cpu.incPC( reladdr );
 			if ((oldpc & 0xFF00) != ( cpu.pc() & 0xFF00)) {
 				cpu.cycles += 2; //check if jump crossed a page boundary
 			}
@@ -397,11 +472,9 @@ public final class OtherCPU
 		value = getvalue();
 		result = cpu.getAccumulator() & value;
 
-		zerocalc(result);
-
-		cpu.setFlag( Flag.NEGATIVE , (result & (1<<7)) != 0 );
-		cpu.setFlag( Flag.OVERFLOW , (result & (1<<6)) != 0 );
-		// status = (status & 0x3F) | (uint8_t)(value & 0xC0);
+        cpu.setFlag( CPU.Flag.ZERO , (result & 0xff) == 0);
+		cpu.setFlag( Flag.NEGATIVE , (value & (1<<7)) != 0 );
+		cpu.setFlag( Flag.OVERFLOW , (value & (1<<6)) != 0 );
 	};
 
 	protected final Runnable bmi = () ->
@@ -454,11 +527,14 @@ public final class OtherCPU
 	protected final Runnable brk = () ->
 	{
 		cpu.incPC();
-		cpu.pushWord( (short) cpu.pc() , memory ); //push next instruction address onto stack
-		final byte flags = CPU.Flag.BREAK.set( cpu.getFlagBits() );
-		cpu.pushByte( flags , memory );
-		setinterrupt(); //set interrupt flag
-		cpu.pc( read6502(0xFFFE) | read6502(0xFFFF) << 8 );
+		if ( DISABLE_MEMORY_WRITES ) { // TODO: Remove debug code
+		    push16( cpu.pc() );
+		    push8( CPU.Flag.BREAK.set( cpu.getFlagBits() ) );
+		    cpu.setFlag( CPU.Flag.IRQ_DISABLE );
+		    cpu.pc( memory.readWord( CPU.BRK_VECTOR_LOCATION ) );
+		} else {
+		    cpu.queueInterrupt( CPU.IRQType.BRK );
+		}
 	};
 
 	protected final Runnable bvc = () -> {
@@ -544,6 +620,12 @@ public final class OtherCPU
 
 	protected final Runnable cpy = () ->
 	{
+	    /*
+ t = Y - M
+  P.N = t.7
+  P.C = (A>=M) ? 1:0
+  P.Z = (t==0) ? 1:0 	     
+	     */
 		value = getvalue();
 		result = cpu.getY() - value;
 
@@ -554,7 +636,7 @@ public final class OtherCPU
 			clearcarry();
 		}
 
-		if ( cpu.getY() == (value & 0x00FF)) {
+		if ( result == 0 ) {
 			setzero();
 		}
 		else {
@@ -636,7 +718,7 @@ public final class OtherCPU
 	protected final Runnable jsr = ()->
 	{
 		final int retAdr = cpu.pc()-1;
-        cpu.pushWord( (short) retAdr , memory );
+		push16( retAdr );
 		cpu.pc( ea );
 	};
 
@@ -721,13 +803,13 @@ public final class OtherCPU
 
 	protected final Runnable pha = () ->
 	{
-		cpu.pushByte( (byte) cpu.getAccumulator() , memory );
+		push8( cpu.getAccumulator() );
 	};
 
 	protected final Runnable php = () ->
 	{
-		final byte flags = CPU.Flag.BREAK.set( cpu.getFlagBits() );
-		cpu.pushByte( flags  , memory );
+		final byte flags = cpu.getFlagBits();
+		push8( flags  & 0xff );
 	};
 
 	protected final Runnable pla = () ->
@@ -973,6 +1055,14 @@ public final class OtherCPU
 
 	public void executeInstruction()
 	{
+	    if ( DISABLE_MEMORY_WRITES ) { // TODO: Remove debug code
+	        writes.clear();
+	    }
+	    
+	    if ( cpu.pc() == 0xa408 ) {
+	        System.out.println("Initial state: "+cpu);
+	    }
+	    
 		opcode = read6502( cpu.pc() );
 		cpu.incPC();
 
@@ -986,21 +1076,6 @@ public final class OtherCPU
 			cpu.cycles++;
 		}
 	}
-
-	/*
-		case 0x02:
-		case 0x12:
-		case 0x22:
-		case 0x32:
-		case 0x42:
-		case 0x52:
-		case 0x62:
-		case 0x72:
-		case 0x92:
-		case 0xB2:
-		case 0xD2:
-		case 0xF2:
-	 */
 
 	protected final Runnable[] addrtable = new Runnable[]
 			{
@@ -1047,10 +1122,10 @@ public final class OtherCPU
 	protected static final int[] ticktable= new int[]
 			{
 					/*        |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */
-					/* 0 */      7,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    4,    4,    6,    6,  /* 0 */
-					/* 1 */      2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 1 */
-					/* 2 */      6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    4,    4,    6,    6,  /* 2 */
-					/* 3 */      2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 3 */
+					/* 0 */      7,    6,    2,    8,    3,    2,    5,    5,    3,    2,    2,    2,    4,    4,    6,    6,  /* 0 */
+					/* 1 */      2,    5,    2,    8,    4,    3,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 1 */
+					/* 2 */      6,    6,    2,    8,    3,    2,    5,    5,    4,    2,    2,    2,    4,    4,    6,    6,  /* 2 */
+					/* 3 */      2,    5,    2,    8,    4,    3,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 3 */
 					/* 4 */      6,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    3,    4,    6,    6,  /* 4 */
 					/* 5 */      2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 5 */
 					/* 6 */      6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    5,    4,    6,    6,  /* 6 */
