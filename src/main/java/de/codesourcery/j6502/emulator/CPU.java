@@ -212,7 +212,6 @@ public class CPU
 		cycles = 0;
 		pc = (short) memory.readWord( (short) RESET_VECTOR_LOCATION );
 		previousPC = (short) pc;
-		System.out.println("CPU.reset(): Settings PC to "+HexDump.toAdr( pc ) );
 		setAccumulator(0);
 		setX(0);
 		setY(0);

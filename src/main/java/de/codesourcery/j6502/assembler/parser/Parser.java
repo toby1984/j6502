@@ -544,7 +544,6 @@ public class Parser
 		if ( value < Short.MIN_VALUE || value > 65535 ) {
 			fail("Number of or range: "+buffer+" ("+value+")" , startOffset );
 		}
-		System.out.println("Parsed number: "+value);
 		return new NumberLiteral( value, notation , new TextRegion( startOffset , lexer.currentOffset() - startOffset ) );
 	}
 }

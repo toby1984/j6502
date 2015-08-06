@@ -1,11 +1,7 @@
 package de.codesourcery.j6502.emulator;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.exceptions.HLTException;
-import de.codesourcery.j6502.utils.HexDump;
 
 /**
  * Ported from C code in http://codegolf.stackexchange.com/questions/12844/emulate-a-mos-6502-cpu
