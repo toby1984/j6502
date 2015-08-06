@@ -2,7 +2,6 @@ package de.codesourcery.j6502.emulator;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import org.apache.commons.lang.StringUtils;
 

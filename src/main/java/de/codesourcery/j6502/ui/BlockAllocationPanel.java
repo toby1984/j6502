@@ -17,7 +17,6 @@ import de.codesourcery.j6502.emulator.D64File;
 import de.codesourcery.j6502.emulator.D64File.BAMEntry;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
-import de.codesourcery.j6502.utils.CharsetConverter;
 
 public class BlockAllocationPanel extends JPanel implements IDebuggerView {
 

@@ -8,7 +8,6 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class C64
 {
-
 	public static void main(String[] args) {
 
 		final Emulator emulator = new Emulator();

@@ -11,8 +11,6 @@ public class Emulator
 
 	protected static final boolean PRINT_DISASSEMBLY = false;
 
-	protected boolean failOnBRK = true;
-
 	protected static final String EMPTY_STRING = "";
 
 	private final MemorySubsystem memory = new MemorySubsystem();
@@ -21,10 +19,10 @@ public class Emulator
 
 	private IMemoryProvider memoryProvider;
 
-	private final OtherCPU otherCPU;
+	private final CPUImpl cpuImpl;
 
 	public Emulator() {
-		otherCPU = new OtherCPU( cpu , memory );
+		cpuImpl = new CPUImpl( cpu , memory );
 	}
 
 	public void setMemoryProvider(IMemoryProvider provider)
@@ -89,10 +87,7 @@ public class Emulator
 		else
 		{
 
-			if ( cpu.isInterruptQueued() && ! cpu.isSet(CPU.Flag.IRQ_DISABLE ) )
-			{
-				cpu.performInterrupt(memory);
-			}
+			cpu.handleInterrupt();
 
 			if ( PRINT_DISASSEMBLY )
 			{
@@ -115,14 +110,11 @@ public class Emulator
 				});
 			}
 
-			final int oldPc = cpu.pc();
-
-		    otherCPU.executeInstruction();
+		    cpuImpl.executeInstruction();
 			
 			if ( PRINT_DISASSEMBLY ) {
 				System.out.println( cpu );
 			}
-			cpu.previousPC = (short) oldPc;
 		}
 
 		memory.tick( cpu , true ); // clock == HIGH

@@ -8,7 +8,7 @@ import de.codesourcery.j6502.emulator.exceptions.HLTException;
  *
  * @author tobias.gierke@voipfuture.com
  */
-public final class OtherCPU
+public final class CPUImpl
 {
 	protected static final int FLAG_CARRY     = 0x01;
 	protected static final int FLAG_ZERO      = 0x02;
@@ -30,7 +30,8 @@ public final class OtherCPU
 	protected int opcode;
 	protected byte oldstatus;
 	
-	public OtherCPU(CPU cpu,IMemoryRegion region) {
+	public CPUImpl(CPU cpu,IMemoryRegion region) 
+	{
 		this.cpu = cpu;
 		this.memory = region;
 	}
@@ -957,7 +958,10 @@ public final class OtherCPU
 
 	public void executeInstruction()
 	{
-		opcode = read6502( cpu.pc() );
+	    final int initialPC = cpu.pc();
+	    
+		opcode = read6502( initialPC );
+		
 		cpu.incPC();
 
 		penaltyop = false;
@@ -965,10 +969,15 @@ public final class OtherCPU
 
 		addrtable[opcode].run();
 		optable[opcode].run();
+		
 		cpu.cycles += ticktable[opcode];
-		if (penaltyop && penaltyaddr) {
+		
+		if (penaltyop && penaltyaddr) 
+		{
 			cpu.cycles++;
 		}
+		
+	    cpu.previousPC = (short) initialPC;
 	}
 
 	protected final Runnable[] addrtable = new Runnable[]

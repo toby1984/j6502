@@ -129,38 +129,30 @@ public class CPU
 		this.memory = memory;
 	}
 
-	public void performInterrupt(IMemoryRegion mainMemory)
+	private void performInterrupt()
 	{
-		/*
-- On an NMI, the CPU pushes the low byte and the high byte of the program counter as well as the processor status onto the stack,
-  disables interrupts and loads the vector from $FFFA/$FFFB into the program counter and continues fetching instructions from there.
-- On an IRQ, the CPU does the same as in the NMI case, but uses the vector at $FFFE/$FFFF.
-		 */
-		if ( ! isSet(Flag.IRQ_DISABLE ) || interruptQueued == IRQType.NMI )
-		{
-	        pushByte( (byte) ( ( pc & 0xff00) >>8 ) ,  memory ); // push pc hi
-	        pushByte( (byte) ( pc & 0xff ) , memory ); // push pc lo
-	        
-		    switch( interruptQueued ) 
-		    {
-                case BRK:
-                    pushByte( CPU.Flag.BREAK.set( flags ) , memory ); // push processor flags
-                    pc = (short) memory.readWord( (short) CPU.BRK_VECTOR_LOCATION );
-                    break;
-                case NMI:
-                    pushByte( flags , memory ); // push processor flags
-                    pc = (short) memory.readWord( (short) CPU.NMI_VECTOR_LOCATION );
-                    break;
-                case REGULAR:
-                    pushByte( flags , memory ); // push processor flags
-                    pc = (short) memory.readWord( (short) CPU.IRQ_VECTOR_LOCATION );
-                    break;
-                default:
-                    throw new RuntimeException("Unhandled IRQ type: "+interruptQueued);
-		    }
-			flags = CPU.Flag.IRQ_DISABLE.set( this.flags );
-			clearInterruptQueued();
-		}
+        pushByte( (byte) ( ( pc & 0xff00) >>8 ) ,  memory ); // push pc hi
+        pushByte( (byte) ( pc & 0xff ) , memory ); // push pc lo
+        
+	    switch( interruptQueued ) 
+	    {
+            case BRK:
+                pushByte( CPU.Flag.BREAK.set( flags ) , memory ); // push processor flags
+                pc = (short) memory.readWord( (short) CPU.BRK_VECTOR_LOCATION );
+                break;
+            case NMI:
+                pushByte( flags , memory ); // push processor flags
+                pc = (short) memory.readWord( (short) CPU.NMI_VECTOR_LOCATION );
+                break;
+            case REGULAR:
+                pushByte( flags , memory ); // push processor flags
+                pc = (short) memory.readWord( (short) CPU.IRQ_VECTOR_LOCATION );
+                break;
+            default:
+                throw new RuntimeException("Unhandled IRQ type: "+interruptQueued);
+	    }
+		flags = CPU.Flag.IRQ_DISABLE.set( this.flags );
+		clearInterruptQueued();
 	}
 
 	public void pushWord(short value,IMemoryRegion region)
@@ -296,12 +288,32 @@ public class CPU
 	public Set<Flag> getFlags() {
 		return Arrays.stream( Flag.values() ).filter( f -> f.isSet( this.flags ) ).collect(Collectors.toSet());
 	}
+	
+    public void handleInterrupt() 
+	{
+	    switch( interruptQueued ) 
+	    {
+	        case NMI:
+	            performInterrupt();
+	            break;
+	        case NONE:
+	            break;
+	        case REGULAR:
+            case BRK:
+                if ( isCleared( Flag.IRQ_DISABLE ) ) {
+                    performInterrupt();
+                }
+                break;
+            default:
+                throw new RuntimeException("Unreachable code reached");
+	    }
+	}
 
 	public boolean isInterruptQueued() {
 		return interruptQueued != IRQType.NONE;
 	}
 
-	public void clearInterruptQueued() {
+	private void clearInterruptQueued() {
 		this.interruptQueued = IRQType.NONE;
 	}
 

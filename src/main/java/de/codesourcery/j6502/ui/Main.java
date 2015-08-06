@@ -20,9 +20,9 @@ import de.codesourcery.j6502.assembler.parser.Lexer;
 import de.codesourcery.j6502.assembler.parser.Parser;
 import de.codesourcery.j6502.assembler.parser.Scanner;
 import de.codesourcery.j6502.assembler.parser.ast.AST;
+import de.codesourcery.j6502.assembler.parser.ast.IValueNode;
 import de.codesourcery.j6502.assembler.parser.ast.InstructionNode;
 import de.codesourcery.j6502.assembler.parser.ast.LabelNode;
-import de.codesourcery.j6502.assembler.parser.ast.IValueNode;
 import de.codesourcery.j6502.utils.ITextRegion;
 
 public class Main

@@ -2,7 +2,6 @@ package de.codesourcery.j6502.emulator;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -11,6 +10,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
@@ -44,29 +44,7 @@ public class EmulatorTest  extends TestCase
     
     public static final boolean TEST_PERFORMANCE = false;
 
-    public void testPerformanceOneCPU() throws IOException 
-    {
-        System.out.println("Performance 'One CPU'");
-        
-        final Memory memory = new Memory("test" , new AddressRange(0,65536));
-
-        final Assembler asm = new Assembler();
-        final CPU actualCPU = prepareTest( asm , memory );
-        final OneCPU cpu = new OneCPU( actualCPU , memory );
-
-        final Runnable toTest = () -> 
-        {
-            actualCPU.reset();
-            actualCPU.pc( asm.getOrigin() );
-            for ( int i = PERFORMANCE_INSTRUCTIONS ; i > 0 ; i-- ) {
-                cpu.executeInstruction();
-            }
-        };        
-
-        benchmark( toTest , 200 , 100 );
-    }
-    
-    public void testPerformanceOtherCPU() throws IOException 
+    public void testCPUPerformance() throws IOException 
     {
         System.out.println("Performance 'Other CPU'");
         
@@ -74,15 +52,16 @@ public class EmulatorTest  extends TestCase
 
         final Assembler asm = new Assembler();
         final CPU actualCPU = prepareTest( asm , memory );
-        final OtherCPU cpu = new OtherCPU( actualCPU , memory );
+        final CPUImpl cpu = new CPUImpl( actualCPU , memory );
 
-        final Runnable toTest = () -> 
+        final Supplier<Long> toTest = () -> 
         {
             actualCPU.reset();
-            actualCPU.pc( asm.getOrigin() );            
+            actualCPU.pc( asm.getOrigin() );
             for ( int i = PERFORMANCE_INSTRUCTIONS ; i > 0 ; i-- ) {
                 cpu.executeInstruction();
             }
+            return actualCPU.cycles;
         };        
 
         benchmark( toTest , 200 , 100 );
@@ -105,11 +84,11 @@ public class EmulatorTest  extends TestCase
         return cpu;
     }
 
-    private void benchmark(Runnable r,int warmup,int iterations) {
+    private void benchmark(Supplier<Long> r,int warmup,int iterations) {
 
         System.out.println("\n#\n# Warmup...\n#");
         for ( int i = 0 ; i < warmup ; i++ ) {
-            r.run();
+            r.get();
         }
 
         System.out.println("\n#\n# Actual tests...\n#");
@@ -120,8 +99,11 @@ public class EmulatorTest  extends TestCase
         for ( int i = 0 ; i < iterations ; i++ ) {
 
             long time = -System.currentTimeMillis();
-            r.run();
+            final long cycles = r.get();
             time += System.currentTimeMillis();
+            float cyclesPerSecond = cycles / (time/1000f);
+            float khz = cyclesPerSecond/1000000f;
+            System.out.println( "Emulated CPU ran at "+khz+"Mhz");
             sum += time;
             if ( time < min ) {
                 min = time;
@@ -131,7 +113,7 @@ public class EmulatorTest  extends TestCase
             }
         }
         float avg = sum/(float) iterations;
-        System.out.println("min/avg/max: "+min+"/"+avg+"/"+max);
+        System.out.println("execution time (min/avg/max) in millseconds: "+min+"/"+avg+"/"+max);
     }
 
     public void testCMP() {
@@ -1417,7 +1399,6 @@ Absolute,X    LDY $4400,X   $BC  3   4+
                 };
 
                 emulator.reset();
-                emulator.failOnBRK = failOnBreak;
 
                 emulator.setMemoryProvider( provider );
                 emulator.getCPU().pc( PRG_LOAD_ADDRESS-ADDITIONAL_BYTES );
