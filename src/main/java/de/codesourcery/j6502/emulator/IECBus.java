@@ -156,11 +156,11 @@ public class IECBus
 		return "[BUS: "+identifier+"] ATN: "+getATN()+" | CLK: "+clkSum+" | DATA: "+dataSum;
 	}
 
-	public void tick(boolean clockHigh)
+	public void tick()
 	{
-		if ( ! clockHigh ) {
-			return;
-		}
+        /*
+         * Method must ONLY be called when ph2 == HIGH
+         */
 		
 		/*
 		 * High = Logical false

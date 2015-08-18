@@ -640,12 +640,11 @@ ende     rts             ; back to BASIC
 		}
 	}
 
-	public void tick(CPU cpu,boolean clockHigh)
+	public void tick(CPU cpu)
 	{
-		if ( ! clockHigh ) {
-			return;
-		}
-		
+	    /*
+	     * Method must ONLY be called when ph2 == HIGH
+	     */
 		tickCounter++;
 		if ( todRunning & ( tickCounter % 100_000) == 0 ) // RTC increases in 1/10 of a second intervals = every 100 milliseconds = every 100.000 microseconds
 		{

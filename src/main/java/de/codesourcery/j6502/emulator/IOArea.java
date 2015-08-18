@@ -428,11 +428,13 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 	{
 		if ( clockHigh ) {
 			keyboardBuffer.tick( this );
+	        cia1.tick( cpu );
+	        cia2.tick(cpu );			
+	        iecBus.tick(); 
 		}
-		cia1.tick( cpu , clockHigh );
-		cia2.tick(cpu , clockHigh );
+		
 		vic.tick( cpu , clockHigh );
-		iecBus.tick(clockHigh);
+		
 	}
 
 	protected static String toBinaryString(int value)
