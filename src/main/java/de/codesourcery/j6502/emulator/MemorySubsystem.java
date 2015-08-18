@@ -9,7 +9,6 @@ import de.codesourcery.j6502.utils.HexDump;
 public final class MemorySubsystem extends IMemoryRegion
 {
 	private static final boolean DEBUG_READS = false;
-	private static final boolean DEBUG_WRITES = false;
 	private static final boolean DEBUG_ROM_IMAGES = false;
 
 	public static enum Bank
@@ -88,7 +87,52 @@ public final class MemorySubsystem extends IMemoryRegion
 	 */
 	private byte plaLatchBits = 0; // address $01
 	
-	private final IMemoryRegion ram0= new Memory("RAM #0",Bank.BANK0.range);
+	private final IMemoryRegion ram0= new SlowMemory("RAM #0",Bank.BANK0.range) {
+	    
+	    @Override
+	    public void reset()
+	    {
+	        for ( int i = 2 , len = getAddressRange().getSizeInBytes() ; i < len ; i++ ) 
+	        {
+	            writeByte(i,(byte) 0);
+	        }
+	    }
+	    
+	    public int readByte(int offset) 
+	    {
+	        final int wrappedOffset = offset & 0xffff;
+	        switch(wrappedOffset)
+	        {
+	            case 0:
+	                return plaDataDirection & 0xff;
+	            case 1:
+	                return plaLatchBits & 0xff;
+	            default:
+	                return super.readByte( wrappedOffset );
+	        }
+	    }
+	    
+	    public void writeByte(int offset, byte value) 
+	    {
+	        final int wrappedOffset = offset & 0xffff;
+	        switch(wrappedOffset)
+	        {
+	            case 0:
+	                plaDataDirection = value;
+	                break;
+	            case 1:
+	                int oldValue = plaLatchBits & 0xff;
+	                plaLatchBits = value;
+	                if ( oldValue != (plaLatchBits & 0xff) ) {
+	                    setupMemoryLayout();
+	                }
+	                break;
+	            default:
+	                super.writeByte( wrappedOffset , value );
+	        }
+	    }
+	};
+	
 	private final IMemoryRegion ram1= new Memory("RAM #1",Bank.BANK1.range);
 	private final IMemoryRegion ram2= new Memory("RAM #2",Bank.BANK2.range);
 	private final IMemoryRegion ram3= new Memory("RAM #3",Bank.BANK3.range);
@@ -465,42 +509,31 @@ public final class MemorySubsystem extends IMemoryRegion
 	@Override
 	public int readByte(int offset)
 	{
-		// FIXME: Maybe always use ( offset & 0xffff ) here ???
 		final int wrappedOffset = offset & 0xffff;
-		switch(wrappedOffset)
-		{
-			case 0:
-				return plaDataDirection & 0xff;
-			case 1:
-				return plaLatchBits & 0xff;
-			default:
-				final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
-				final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
-				final int result = region.readByte( translatedOffset );
-				if ( DEBUG_READS ) {
-					System.out.println("readByte(): Got byte $"+HexDump.byteToString((byte) result)+" from "+HexDump.toAdr(offset )+" [translated: "+HexDump.toAdr(translatedOffset)+"] from "+region );
-				}
-				return result;
-		}
+		final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
+		final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+		return region.readByte( translatedOffset );
 	}
+	
+    @Override
+    public void writeByte(int offset, byte value)
+    {
+        final int wrappedOffset = offset & 0xffff;
+        final IMemoryRegion region = writeRegions[ writeMap[ wrappedOffset ] ];
+        final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+        region.writeByte( realOffset , value );
+    }	
 
 	@Override
 	public boolean isReadsReturnWrites(int offset) 
 	{
         final int wrappedOffset = offset & 0xffff;
-        switch(wrappedOffset)
-        {
-            case 0:
-            case 1:
-                return true;
-            default:
-                final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
-                if ( region instanceof WriteOnceMemory ) {
-                    return false;
-                }
-                final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
-                return region.isReadsReturnWrites( translatedOffset );
+        final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
+        if ( region instanceof WriteOnceMemory ) { // ROM mapped to this location
+            return false;
         }
+        final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+        return region.isReadsReturnWrites( translatedOffset );
 	}
 
 	@Override
@@ -511,32 +544,6 @@ public final class MemorySubsystem extends IMemoryRegion
 
 		writeByte( offset , low );
 		writeByte( offset+1 , hi );
-	}
-
-	@Override
-	public void writeByte(int offset, byte value)
-	{
-		final int wrappedOffset = offset & 0xffff;
-		switch(wrappedOffset)
-		{
-			case 0:
-				plaDataDirection = value;
-				break;
-			case 1:
-				int oldValue = plaLatchBits & 0xff;
-				plaLatchBits = value;
-				if ( oldValue != (plaLatchBits & 0xff) ) {
-					setupMemoryLayout();
-				}
-				break;
-			default:
-				final IMemoryRegion region = writeRegions[ writeMap[ wrappedOffset ] ];
-				final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
-				if ( DEBUG_WRITES) {
-					System.out.println("writeByte(): Writing byte $"+HexDump.byteToString(value)+" to "+HexDump.toAdr( offset )+" [translated: "+HexDump.toAdr(realOffset)+"] from "+region );
-				}
-				region.writeByte( realOffset , value );
-		}
 	}
 
 	@Override
