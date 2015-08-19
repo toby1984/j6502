@@ -21,6 +21,14 @@ public abstract class IMemoryRegion
 		return addressRange;
 	}
 
+	public void bulkRead(int startingAddress,final byte[] inputBuffer, final int len)
+	{
+		for ( int i = 0 ; i < len ; i++ , startingAddress++ )
+		{
+			inputBuffer[i] = (byte) readByte( startingAddress & 0xffff );
+		}
+	}
+
 	public abstract void bulkWrite(int startingAddress,byte[] data, int datapos, int len);
 
 	public abstract int readByte(int offset);
@@ -32,8 +40,21 @@ public abstract class IMemoryRegion
 	public abstract void writeByte(int offset,byte value);
 
 	public abstract String dump(int offset, int len);
-	
+
 	public abstract boolean isReadsReturnWrites(int offset);
+
+	/**
+	 * Special method that first performs a read of the given location
+	 * and then immediately writes back the value it just read.
+	 *
+	 * <p>This method is used to fake a peculiar behavior of the 6510 CPU where
+	 * read-modify-write operations like DEC,INC,ASL etc. actually write-back the value
+	 * they just read. This in turn gets abused a lot to reset latch registers like $D019 (VIC irq bits).</p>
+	 *
+	 * @param offset
+	 * @return
+	 */
+	public abstract int readAndWriteByte(int offset);
 
 	@Override
 	public String toString() {

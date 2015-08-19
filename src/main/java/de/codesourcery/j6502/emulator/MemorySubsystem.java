@@ -86,19 +86,20 @@ public final class MemorySubsystem extends IMemoryRegion
      * Bits 6-7: Not connected--no function presently defined.
 	 */
 	private byte plaLatchBits = 0; // address $01
-	
+
 	private final IMemoryRegion ram0= new SlowMemory("RAM #0",Bank.BANK0.range) {
-	    
+
 	    @Override
 	    public void reset()
 	    {
-	        for ( int i = 2 , len = getAddressRange().getSizeInBytes() ; i < len ; i++ ) 
+	        for ( int i = 2 , len = getAddressRange().getSizeInBytes() ; i < len ; i++ )
 	        {
 	            writeByte(i,(byte) 0);
 	        }
 	    }
-	    
-	    public int readByte(int offset) 
+
+	    @Override
+		public int readByte(int offset)
 	    {
 	        final int wrappedOffset = offset & 0xffff;
 	        switch(wrappedOffset)
@@ -111,8 +112,9 @@ public final class MemorySubsystem extends IMemoryRegion
 	                return super.readByte( wrappedOffset );
 	        }
 	    }
-	    
-	    public void writeByte(int offset, byte value) 
+
+	    @Override
+		public void writeByte(int offset, byte value)
 	    {
 	        final int wrappedOffset = offset & 0xffff;
 	        switch(wrappedOffset)
@@ -132,15 +134,16 @@ public final class MemorySubsystem extends IMemoryRegion
 	        }
 	    }
 	};
-	
+
 	private final IMemoryRegion ram1= new Memory("RAM #1",Bank.BANK1.range);
 	private final IMemoryRegion ram2= new Memory("RAM #2",Bank.BANK2.range);
 	private final IMemoryRegion ram3= new Memory("RAM #3",Bank.BANK3.range);
 	private final IMemoryRegion ram4= new Memory("RAM #4",Bank.BANK4.range);
-	
-	private final IMemoryRegion ram5= new SlowMemory("RAM #5",Bank.BANK5.range) 
-	{ 
-		public int readByte(int offset) 
+
+	private final IMemoryRegion ram5= new SlowMemory("RAM #5",Bank.BANK5.range)
+	{
+		@Override
+		public int readByte(int offset)
 		{
 			final int set = offset & 0xffff;
 			if ( set >= 0x800 && set < 0x800+1024) { // color RAM
@@ -149,9 +152,9 @@ public final class MemorySubsystem extends IMemoryRegion
 			return super.readByte(offset);
 		}
 	};
-	
+
 	private final IMemoryRegion ram6= new Memory("RAM #6",Bank.BANK6.range);
-	
+
 	private WriteOnceMemory kernelROM;
 	private WriteOnceMemory charROM;
 	private WriteOnceMemory basicROM;
@@ -186,7 +189,7 @@ public final class MemorySubsystem extends IMemoryRegion
 		}
 		reset();
 	}
-	
+
 	/**
 	 * Returns RAM starting at $d000
 	 * @return
@@ -445,7 +448,7 @@ public final class MemorySubsystem extends IMemoryRegion
 		loadROM("character.rom", rom );
 		return rom;
 	}
-	
+
 	public WriteOnceMemory getCharacterROM() {
 		return charROM;
 	}
@@ -514,7 +517,16 @@ public final class MemorySubsystem extends IMemoryRegion
 		final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
 		return region.readByte( translatedOffset );
 	}
-	
+
+	@Override
+	public int readAndWriteByte(int offset)
+	{
+		final int wrappedOffset = offset & 0xffff;
+		final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
+		final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+		return region.readAndWriteByte( translatedOffset );
+	}
+
     @Override
     public void writeByte(int offset, byte value)
     {
@@ -522,10 +534,10 @@ public final class MemorySubsystem extends IMemoryRegion
         final IMemoryRegion region = writeRegions[ writeMap[ wrappedOffset ] ];
         final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
         region.writeByte( realOffset , value );
-    }	
+    }
 
 	@Override
-	public boolean isReadsReturnWrites(int offset) 
+	public boolean isReadsReturnWrites(int offset)
 	{
         final int wrappedOffset = offset & 0xffff;
         final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];

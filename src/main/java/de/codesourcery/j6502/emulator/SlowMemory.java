@@ -26,25 +26,31 @@ public class SlowMemory extends IMemoryRegion
 	@Override
 	public void reset()
 	{
-		for ( int i = 0 , len = data.length ; i < len ; i++ ) 
+		for ( int i = 0 , len = data.length ; i < len ; i++ )
 		{
 			writeByte(i,(byte) 0);
 		}
 	}
-	
-    public boolean isReadsReturnWrites(int offset) {
+
+    @Override
+	public boolean isReadsReturnWrites(int offset) {
         return true;
-    }   
-	
+    }
+
 	@Override
 	public int readByte(int offset) {
 		return data[offset & 0xffff] & 0xff;
 	}
 
 	@Override
+	public int readAndWriteByte(int offset) {
+		return data[offset & 0xffff] & 0xff;
+	}
+
+	@Override
 	public void writeByte(int offset, byte value) {
 		data[offset & 0xffff]=value;
-	}	
+	}
 
 	@Override
 	public final void writeWord(int offset, short value) {

@@ -20,16 +20,22 @@ public class Memory extends IMemoryRegion
 	@Override
 	public void reset()
 	{
-		for ( int i = 0 , len = data.length ; i < len ; i++ ) 
+		for ( int i = 0 , len = data.length ; i < len ; i++ )
 		{
 			data[i] = 0;
 		}
 	}
-	
+
+	@Override
 	public boolean isReadsReturnWrites(int offset) {
 	    return true;
 	}
-	
+
+	@Override
+	public int readAndWriteByte(int offset) {
+		return data[offset & 0xffff] & 0xff;
+	}
+
 	@Override
 	public int readByte(int offset) {
 		return data[offset & 0xffff] & 0xff;
@@ -38,10 +44,10 @@ public class Memory extends IMemoryRegion
 	@Override
 	public void writeByte(int offset, byte value) {
 		data[offset & 0xffff]=value;
-	}	
+	}
 
 	@Override
-	public void writeWord(int offset, short value) 
+	public void writeWord(int offset, short value)
 	{
 		final byte low = (byte) value;
 		final byte hi = (byte) (value>>8);

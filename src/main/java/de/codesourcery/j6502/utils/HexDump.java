@@ -104,7 +104,8 @@ public class HexDump {
 			public void reset() {
 				throw new UnsupportedOperationException();
 			}
-			
+
+			@Override
 			public boolean isReadsReturnWrites(int offset) {
 	             throw new UnsupportedOperationException();
 			}
@@ -118,6 +119,11 @@ public class HexDump {
 			public int readByte(int offset) {
 				return data[offset & 0xffff] & 0xff;
 			}
+
+			@Override
+			public int readAndWriteByte(int offset) {
+				return data[offset & 0xffff] & 0xff;
+			};
 
 			@Override
 			public int readWord(int offset) {
@@ -172,13 +178,13 @@ public class HexDump {
 		final String loNibble = StringUtils.leftPad( Integer.toString( low , 16) , 2 , '0' );
 		return loNibble+hiNibble;
 	}
-	
+
 	public static String toHex(byte value)
 	{
 		final int low = value & 0xff;
 		final String loNibble = StringUtils.leftPad( Integer.toString( low , 16) , 2 , '0' );
 		return loNibble;
-	}	
+	}
 
 	public void setBytesPerLine(int i) {
 		this.bytesPerLine = i;

@@ -10,17 +10,6 @@ import de.codesourcery.j6502.emulator.exceptions.HLTException;
  */
 public final class CPUImpl
 {
-	protected static final int FLAG_CARRY     = 0x01;
-	protected static final int FLAG_ZERO      = 0x02;
-	protected static final int FLAG_INTERRUPT = 0x04;
-	protected static final int FLAG_DECIMAL   = 0x08;
-	protected static final int FLAG_BREAK     = 0x10;
-	protected static final int FLAG_CONSTANT  = 0x20;
-	protected static final int FLAG_OVERFLOW  = 0x40;
-	protected static final int FLAG_SIGN      = 0x80;
-
-	protected static final int BASE_STACK     = 0x100;
-
 	protected IMemoryRegion memory;
 	protected CPU cpu;
 
@@ -29,8 +18,8 @@ public final class CPUImpl
 	protected int ea, reladdr, value, result;
 	protected int opcode;
 	protected byte oldstatus;
-	
-	public CPUImpl(CPU cpu,IMemoryRegion region) 
+
+	public CPUImpl(CPU cpu,IMemoryRegion region)
 	{
 		this.cpu = cpu;
 		this.memory = region;
@@ -81,12 +70,16 @@ public final class CPUImpl
 	protected int read6502(int address) {
 		return memory.readByte( address );
 	}
-	
+
+	protected int readAndWrite6502(int address) {
+		return memory.readAndWriteByte( address );
+	}
+
 	protected void write6502(int address,int value)
 	{
         memory.writeByte( address , (byte) value );
 	}
-	 
+
 	//flag calculation macros
 	protected void zerocalc(int n)
 	{
@@ -133,7 +126,7 @@ public final class CPUImpl
         cpu.pushWord( (short) pushval , memory );
 	}
 
-	protected void push8(int pushval) 
+	protected void push8(int pushval)
 	{
         cpu.pushByte( (byte) pushval , memory );
 	}
@@ -245,6 +238,14 @@ public final class CPUImpl
 		return read6502(ea);
 	}
 
+	protected int getvaluereadwrite()
+	{
+		if (addrtable[opcode] == acc) {
+			return cpu.getAccumulator();
+		}
+		return readAndWrite6502(ea);
+	}
+
 	protected void putvalue(int saveval) {
 		if (addrtable[opcode & 0xff] == acc)
 		{
@@ -257,62 +258,17 @@ public final class CPUImpl
 	//instruction handler functions
 	protected final Runnable adc = () ->
 	{
-	    /*
-    carrycalc(result);
-    zerocalc(result);
-    overflowcalc(result, a, value);
-    signcalc(result);
-
-    #ifndef NES_CPU
-    if (status & FLAG_DECIMAL) {
-        clearcarry();
-
-        if ((a & 0x0F) > 0x09) {
-            a += 0x06;
-        }
-        if ((a & 0xF0) > 0x90) {
-            a += 0x60;
-            setcarry();
-        }
-
-        clockticks6502++;
-    }
-    #endif
-
-    saveaccum(result);	     
-	     */
 		penaltyop = true;
-		value = getvalue();
-		
-		int a = cpu.getAccumulator();
-//		result = a + value + ( cpu.isSet(Flag.CARRY) ? 1 : 0 ); // (uint16_t)(status & FLAG_CARRY);
-//
-//		carrycalc(result);
-//		zerocalc(result);
-//		overflowcalc(result, a , value);
-//		signcalc(result);
+		value = getvaluereadwrite();
 
 		if ( cpu.isSet( Flag.DECIMAL_MODE) )
 		{
 		    // TODO: Implement BCD mode according to http://www.6502.org/tutorials/decimal_mode.html
 		    throw new RuntimeException("ADC in BCD mode not implemented yet :(");
-//			clearcarry();
-//
-//			if ( (a & 0x0F) > 0x09)
-//			{
-//				a += 0x06;
-//			}
-//			if ((a & 0xF0) > 0x90) {
-//				a += 0x60;
-//				setcarry();
-//			}
-//			cpu.cycles++;
 		}
-//		saveaccum(result);
-		
 		adc( cpu.getAccumulator() , value , cpu.isSet(Flag.CARRY) ? 1 : 0 );
 	};
-	
+
    protected void adc(int a,int b,int carry)
     {
         int result = (a & 0xff) + (b & 0xff) + carry;
@@ -331,7 +287,7 @@ public final class CPUImpl
 	protected final Runnable and = () ->
 	{
 		penaltyop = true;
-		value = getvalue();
+		value = getvaluereadwrite();
 		result = cpu.getAccumulator() & value;
 
 		zerocalc(result);
@@ -342,7 +298,7 @@ public final class CPUImpl
 
 	protected final Runnable asl = () ->
 	{
-		value = getvalue();
+		value = getvaluereadwrite();
 		result = value << 1;
 
 		carrycalc(result);
@@ -368,7 +324,7 @@ public final class CPUImpl
 		}
 	};
 
-	protected final Runnable bcs = () -> 
+	protected final Runnable bcs = () ->
 	{
 		if (cpu.isSet( CPU.Flag.CARRY ) )
 		{
@@ -425,7 +381,7 @@ public final class CPUImpl
 
 	protected final Runnable bne = () ->
 	{
-		if ( cpu.isNotSet(Flag.ZERO) ) 
+		if ( cpu.isNotSet(Flag.ZERO) )
 		{
 			final int oldpc = cpu.pc();
 			cpu.incPC( reladdr );
@@ -545,7 +501,7 @@ public final class CPUImpl
  t = Y - M
   P.N = t.7
   P.C = (A>=M) ? 1:0
-  P.Z = (t==0) ? 1:0 	     
+  P.Z = (t==0) ? 1:0
 	     */
 		value = getvalue();
 		result = cpu.getY() - value;
@@ -567,7 +523,7 @@ public final class CPUImpl
 	};
 
 	protected final Runnable dec = () -> {
-		value = getvalue();
+		value = getvaluereadwrite();
 		result = value - 1;
 
 		zerocalc(result);
@@ -606,7 +562,7 @@ public final class CPUImpl
 
 	protected final Runnable inc = () ->
 	{
-		value = getvalue();
+		value = getvaluereadwrite();
 		result = value + 1;
 
 		zerocalc(result);
@@ -681,7 +637,7 @@ public final class CPUImpl
 
 	protected final Runnable lsr = () ->
 	{
-		value = getvalue();
+		value = getvaluereadwrite();
 		result = value >> 1;
 
 		if ( (value & 1) != 0 ) {
@@ -751,7 +707,7 @@ public final class CPUImpl
 
 	protected final Runnable rol = () ->
 	{
-		value = getvalue();
+		value = getvaluereadwrite();
 		result = (value << 1) | ( cpu.isSet( Flag.CARRY) ? 1 : 0 );
 
 		carrycalc(result);
@@ -763,7 +719,7 @@ public final class CPUImpl
 
 	protected final Runnable ror = () ->
 	{
-		value = getvalue();
+		value = getvaluereadwrite();
 		if (  cpu.isSet(Flag.CARRY ) ) {
 			result = (value >> 1) | 1 << 7;
 		} else {
@@ -799,7 +755,7 @@ public final class CPUImpl
 	protected final Runnable sbc = () ->
 	{
 		penaltyop = true;
-		value = getvalue();
+		value = getvaluereadwrite();
 
 		int a = cpu.getAccumulator();
 
@@ -959,9 +915,9 @@ public final class CPUImpl
 	public void executeInstruction()
 	{
 	    final int initialPC = cpu.pc();
-	    
+
 		opcode = read6502( initialPC );
-		
+
 		cpu.incPC();
 
 		penaltyop = false;
@@ -969,14 +925,14 @@ public final class CPUImpl
 
 		addrtable[opcode].run();
 		optable[opcode].run();
-		
+
 		cpu.cycles += ticktable[opcode];
-		
-		if (penaltyop && penaltyaddr) 
+
+		if (penaltyop && penaltyaddr)
 		{
 			cpu.cycles++;
 		}
-		
+
 	    cpu.previousPC = (short) initialPC;
 	}
 

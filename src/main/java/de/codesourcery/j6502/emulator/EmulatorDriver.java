@@ -259,9 +259,9 @@ public abstract class EmulatorDriver extends Thread
 					final boolean doDelay = floppy == null || ! floppy.isDataTransferActive();
 					if ( doDelay )
 					{
-//						for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
-//							dummy += Math.sqrt( i );
-//						}
+						for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
+							dummy += Math.sqrt( i );
+						}
 					}
 					else {
 					    adjustDelayLoop = false;

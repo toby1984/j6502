@@ -511,7 +511,6 @@ public class VIC extends SlowMemory
     private int beamY;
 
     private boolean displayEnabled; // aka 'DEN'
-    private boolean badLinePossible;
 
     private int xScroll;
     private int yScroll;
@@ -633,6 +632,16 @@ public class VIC extends SlowMemory
             super.writeByte( VIC_IRQ_ACTIVE_BITS , (byte) (value|1<<0|1<<7) );
             cpu.queueInterrupt( IRQType.REGULAR  );
         }
+    }
+
+    @Override
+    public int readAndWriteByte(int offset)
+    {
+    	final int result = readByte(offset);
+    	if ( (offset & 0xffff) == VIC_IRQ_ACTIVE_BITS ) {
+    		writeByte( offset , (byte) result );
+    	}
+    	return result;
     }
 
     @Override
@@ -1417,7 +1426,6 @@ The flip flops are switched according to the following rules:
 
         beamX = 0;
         beamY = 0;
-        badLinePossible = true;
 
         for ( Sprite s : sprites ) {
             s.reset();
@@ -1482,9 +1490,9 @@ The flip flops are switched according to the following rules:
         final int dataPtrLocation = videoRAMAdr+1016+sprite.spriteNo;
         return bankAdr + 64 * mainMemory.readByte( dataPtrLocation );
     }
-    
+
     @Override
     public boolean isReadsReturnWrites(int offset) {
         return false; // not for all registers
-    }   
+    }
 }
