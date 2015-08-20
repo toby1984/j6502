@@ -119,7 +119,7 @@ public class VIC extends SlowMemory
      */
 
     public static final boolean DEBUG_RASTER_IRQ = true;
-    protected static final boolean DEBUG_MEMORY_LAYOUT = false;
+    protected static final boolean DEBUG_MEMORY_LAYOUT = true;
     protected static final boolean DEBUG_SET_GRAPHICS_MODE = true;
 
     public static final int TOTAL_RASTER_LINES = 403; // PAL-B
@@ -589,11 +589,11 @@ public class VIC extends SlowMemory
             imagePixelData[ tmpBeamY * DISPLAY_WIDTH + tmpBeamX ] = color;
 
             tmpBeamX++;
-            if ( tmpBeamX == DISPLAY_WIDTH )
+            if ( tmpBeamX >= DISPLAY_WIDTH )
             {
                 tmpBeamX = 0;
                 tmpBeamY++;
-                if ( tmpBeamY == DISPLAY_HEIGHT )
+                if ( tmpBeamY >= DISPLAY_HEIGHT )
                 {
                     tmpBeamY = 0;
                     if ( clockHigh )
@@ -626,10 +626,10 @@ public class VIC extends SlowMemory
          *                          Schreiben:
          *                          1 in jeweiliges Bit schreiben = zugehöriges Interrupt-Flag löschen
          */
-        final int value = super.readByte( VIC_IRQ_ACTIVE_BITS );
-        if ( (value & 1<<0) == 0 ) // only trigger interrupt if raster IRQ is not already active
-        {
-            super.writeByte( VIC_IRQ_ACTIVE_BITS , (byte) (value|1<<0|1<<7) );
+        final int oldValue = super.readByte( VIC_IRQ_ACTIVE_BITS );
+        super.writeByte( VIC_IRQ_ACTIVE_BITS , (byte) (oldValue|1<<0|1<<7) );
+        if ( (oldValue & 1<<0) == 0 ) // only trigger interrupt if IRQ is not already active
+        {            
             cpu.queueInterrupt( IRQType.REGULAR  );
         }
     }
@@ -658,7 +658,7 @@ public class VIC extends SlowMemory
                 }
                 return value & 0b0111_1111;
             case VIC_SCANLINE:
-                return (byte) beamY;
+                return (beamY & 0xff);
 
             case VIC_SPRITE0_X_COORD: return (byte) sprites[0].x;
             case VIC_SPRITE0_Y_COORD: return (byte) sprites[0].y;
@@ -875,6 +875,7 @@ public class VIC extends SlowMemory
                 final int mask = ~value;
                 final int oldValue = super.readByte( VIC_IRQ_ACTIVE_BITS );
                 final int newValue = oldValue & mask;
+                System.out.println("VIC_IRQ_ACTIVE: "+HexDump.toBinaryString( (byte) oldValue )+" => "+HexDump.toBinaryString( (byte) newValue )+" (written: "+HexDump.toBinaryString( (byte) value));
                 super.writeByte( VIC_IRQ_ACTIVE_BITS , (byte) newValue );
                 break;
             case VIC_IRQ_ENABLE_BITS:
@@ -1322,23 +1323,23 @@ public class VIC extends SlowMemory
                 else
                 {
                     final int backgroundColor = (character & 0b11000000) >> 6;
-                    switch ( backgroundColor )
-                    {
-                        case 0b00:
-                            out.background( backgroundColor );
-                            break;
-                        case 0b01:
-                            out.background( RGB_COLORS[ readByte( VIC_BACKGROUND0_EXT_COLOR ) & 0b1111 ]  );
-                            break;
-                        case 0b10:
-                            out.background( RGB_COLORS[ readByte( VIC_BACKGROUND1_EXT_COLOR ) & 0b1111 ] );
-                            break;
-                        case 0b11:
-                            out.background( RGB_COLORS[ readByte( VIC_BACKGROUND2_EXT_COLOR ) & 0b1111 ] );
-                            break;
-                        default:
-                            throw new RuntimeException("Unreachable code reached");
-                    }
+                switch ( backgroundColor )
+                {
+                    case 0b00:
+                        out.background( backgroundColor );
+                        break;
+                    case 0b01:
+                        out.background( RGB_COLORS[ readByte( VIC_BACKGROUND0_EXT_COLOR ) & 0b1111 ]  );
+                        break;
+                    case 0b10:
+                        out.background( RGB_COLORS[ readByte( VIC_BACKGROUND1_EXT_COLOR ) & 0b1111 ] );
+                        break;
+                    case 0b11:
+                        out.background( RGB_COLORS[ readByte( VIC_BACKGROUND2_EXT_COLOR ) & 0b1111 ] );
+                        break;
+                    default:
+                        throw new RuntimeException("Unreachable code reached");
+                }
                 }
                 return;
             }

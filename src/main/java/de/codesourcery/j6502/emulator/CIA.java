@@ -525,10 +525,10 @@ ende     rts             ; back to BASIC
 		                           If all bits 0..4 are cleared, there will be no change to the mask.
 				 */
 				this.rtcAlarmIRQEnabled = (value & 1<<2 ) != 0;
-				if ( (value & 1<<7) == 0 ) { // clear corresponding bits 0-4 in IRQ mask
+				if ( (value & 1<<7) == 0 ) { // source bit = 0 => set bits 0...4 are clearing the bits in IRQ mask
 					int mask = ~(value & 0b11111);
 					irqMask &= mask;
-				} else { // set corresponding bits 0-4 in IRQ mask
+				} else { // source bit = 1 => 1 = set bits 0..4 are setting the according mask bit. If all bits 0..4 are cleared, there will be no change to the mask.
 					int mask = (value & 0b11111);
 					irqMask |= mask;
 				}
@@ -635,7 +635,7 @@ ende     rts             ; back to BASIC
 				this.todHours == this.todAlarmHours &&
 				this.timeOfDay == this.todAlarmTimeOfDay )
 		{
-			icr_read |= 2; // tod == tod alarm time
+			icr_read |= ( (1<<7)|(1<<2) ); // tod == tod alarm time
 			cpu.queueInterrupt( IRQType.REGULAR );
 		}
 	}
@@ -713,7 +713,7 @@ ende     rts             ; back to BASIC
 	private void handleTimerBUnderflow(int crb,CPU cpu)
 	{
 //		System.out.println("CIA #1 timer B underflow");
-		icr_read |= 2; // timerB triggered underflow
+		icr_read |= ( (1<<7) | (1<<1) ); // timerB triggered underflow
 		if ( (irqMask & 2 ) != 0 ) { // trigger interrupt on timer B underflow ?
 			cpu.queueInterrupt( IRQType.REGULAR  );
 		}
@@ -734,7 +734,7 @@ ende     rts             ; back to BASIC
         Bit 0: 1 = Interrupt release through timer A underflow
         Bit 1: 1 = Interrupt release through timer B underflow
 		 */
-		icr_read |= 1; // timerA underflow triggered IRQ
+	    icr_read |= ( (1<<7) | (1<<0) ); // timerA underflow triggered IRQ
 		if ( (irqMask & 1) != 0 ) { // trigger interrupt on timer A underflow ?
 			cpu.queueInterrupt( IRQType.REGULAR  );
 		}

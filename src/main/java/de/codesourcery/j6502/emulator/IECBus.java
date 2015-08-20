@@ -7,13 +7,13 @@ import org.apache.commons.lang.StringUtils;
 
 public class IECBus
 {
-	public static final boolean CAPTURE_BUS_SNAPSHOTS = false;
+	public static final boolean CAPTURE_BUS_SNAPSHOTS = true;
 
 	private final int MAX_CYCLES_TO_KEEP = 200;
 
 	public static final boolean DEBUG_WIRE_LEVEL = false;
 	public static final boolean DEBUG_DEVICE_LEVEL_VERBOSE = false;
-	public static final boolean DEBUG_DEVICE_LEVEL = false;
+	public static final boolean DEBUG_DEVICE_LEVEL = true;
 
 	// current cycle count
 	protected long cycle;

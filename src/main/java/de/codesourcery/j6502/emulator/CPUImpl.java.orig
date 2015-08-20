@@ -303,7 +303,10 @@ public final class CPUImpl
 
 	protected final Runnable asl = () ->
 	{
+<<<<<<< Updated upstream
 		value = getvaluereadwrite();
+=======
+		value = getvalue();
 		
         /* http://dustlayer.com/c64-coding-tutorials/2013/4/8/episode-2-3-did-i-interrupt-you
          * Now as coders are looking for optimization all the time somebody found out that the decrement command dec 
@@ -312,6 +315,7 @@ public final class CPUImpl
          */
         putvalue(value);
         
+>>>>>>> Stashed changes
 		result = value << 1;
 
 		carrycalc(result);
@@ -477,7 +481,7 @@ public final class CPUImpl
 		else {
 			clearcarry();
 		}
-		if ( result == 0) {
+		if ( cpu.getAccumulator() == (value & 0x00FF)) {
 			setzero();
 		}
 		else {
@@ -485,27 +489,6 @@ public final class CPUImpl
 		}
 		signcalc(result);
 	};
-	
-    protected final Runnable cpy = () ->
-    {
-        value = getvalue();
-        result = cpu.getY() - value;
-
-        if ( cpu.getY() >= (value & 0x00FF)) {
-            setcarry();
-        }
-        else {
-            clearcarry();
-        }
-
-        if ( result == 0 ) {
-            setzero();
-        }
-        else {
-            clearzero();
-        }
-        signcalc(result);
-    };	
 
 	protected final Runnable cpx= () ->
 	{
@@ -520,7 +503,7 @@ public final class CPUImpl
 		else {
 			clearcarry();
 		}
-		if ( result == 0) {
+		if ( cpu.getX() == (value & 0x00FF)) {
 			setzero();
 		}
 		else {
@@ -529,8 +512,49 @@ public final class CPUImpl
 		signcalc(result);
 	};
 
+	protected final Runnable cpy = () ->
+	{
+	    /*
+ t = Y - M
+  P.N = t.7
+  P.C = (A>=M) ? 1:0
+  P.Z = (t==0) ? 1:0
+	     */
+		value = getvalue();
+		result = cpu.getY() - value;
+
+		if ( cpu.getY() >= (value & 0x00FF)) {
+			setcarry();
+		}
+		else {
+			clearcarry();
+		}
+
+		if ( result == 0 ) {
+			setzero();
+		}
+		else {
+			clearzero();
+		}
+		signcalc(result);
+	};
+
+<<<<<<< Updated upstream
 	protected final Runnable dec = () -> {
 		value = getvaluereadwrite();
+=======
+	protected final Runnable dec = () -> 
+	{
+		value = getvalue();
+		
+		/* http://dustlayer.com/c64-coding-tutorials/2013/4/8/episode-2-3-did-i-interrupt-you
+		 * Now as coders are looking for optimization all the time somebody found out that the decrement command dec 
+		 * can be used to do both operations with just one single command. 
+		 * This works because dec is a so-called Read-Modify-Write command that writes back the original value during the modify cycle.
+		 */
+	    putvalue(value);
+	      
+>>>>>>> Stashed changes
 		result = value - 1;
 
 		zerocalc(result);
@@ -569,7 +593,10 @@ public final class CPUImpl
 
 	protected final Runnable inc = () ->
 	{
+<<<<<<< Updated upstream
 		value = getvaluereadwrite();
+=======
+		value = getvalue();
 		
         /* http://dustlayer.com/c64-coding-tutorials/2013/4/8/episode-2-3-did-i-interrupt-you
          * Now as coders are looking for optimization all the time somebody found out that the decrement command dec 
@@ -578,6 +605,7 @@ public final class CPUImpl
          */
         putvalue(value);
         
+>>>>>>> Stashed changes
 		result = value + 1;
 
 		zerocalc(result);

@@ -214,13 +214,13 @@ public class CPU
 
 	public void queueInterrupt(IRQType type)
 	{
-		if ( ! isSet(CPU.Flag.IRQ_DISABLE ) ) 
-		{
-		    if ( type == IRQType.NONE ) {
-		        throw new IllegalArgumentException("Cannot queue IRQType.NONE");
-		    }
-			this.interruptQueued = type;
-		}
+	    if ( type == IRQType.NONE ) {
+	        throw new IllegalArgumentException("Cannot queue IRQType.NONE");
+	    }
+	    if ( this.interruptQueued == IRQType.NMI ) {
+	        return; // do not replace NMI with any other interrupt
+	    }
+		this.interruptQueued = type;
 	}
 
 	@Override

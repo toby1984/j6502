@@ -5,7 +5,7 @@ import java.util.function.Consumer;
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.Disassembler.Line;
 
-public class Emulator
+public class Emulator 
 {
 	protected static final boolean PRINT_CURRENT_INS = false;
 
