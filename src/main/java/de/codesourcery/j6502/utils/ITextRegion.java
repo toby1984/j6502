@@ -10,7 +10,7 @@ import java.util.List;
  * throughout the compiler to associate AST nodes with
  * the source code they came from.</p>
  *
- * @author tobias.gierke@voipfuture.com
+ * @author tobias.gierke@code-sourcery.de
  */
 public interface ITextRegion extends Serializable
 {

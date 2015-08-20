@@ -22,7 +22,7 @@ import de.codesourcery.j6502.utils.HexDump;
 /**
  * Disk file format as described on http://unusedino.de/ec64/technical/formats/d64.html
  *
- * @author tobias.gierke@voipfuture.com
+ * @author tobias.gierke@code-sourcery.de
  */
 public class D64File
 {

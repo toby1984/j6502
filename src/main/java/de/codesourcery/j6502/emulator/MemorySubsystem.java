@@ -453,7 +453,7 @@ public final class MemorySubsystem extends IMemoryRegion
 		return charROM;
 	}
 
-	private static void loadROM(String string, WriteOnceMemory region)
+	public static void loadROM(String string, WriteOnceMemory memory)
 	{
 		final String path ="/roms/"+string;
 		if ( DEBUG_ROM_IMAGES ) {
@@ -470,7 +470,7 @@ public final class MemorySubsystem extends IMemoryRegion
 			int bytesRead = 0;
 			while ( (bytesRead= in.read(buffer) ) > 0 )
 			{
-				region.bulkWrite( offset , buffer , 0 , bytesRead );
+				memory.bulkWrite( offset , buffer , 0 , bytesRead );
 				offset += bytesRead;
 			}
 		} catch (final IOException e) {
@@ -482,11 +482,11 @@ public final class MemorySubsystem extends IMemoryRegion
 		}
 
 		if ( DEBUG_ROM_IMAGES ) {
-			System.out.println("Loaded "+string+" @ "+region.getAddressRange() );
+			System.out.println("Loaded "+string+" @ "+memory.getAddressRange() );
 //			System.out.println( region.dump( 0 , 128 ) );
-			System.out.println( region.dump( region.getAddressRange().getSizeInBytes() - 128 , 128 ) );
+			System.out.println( memory.dump( memory.getAddressRange().getSizeInBytes() - 128 , 128 ) );
 		}
-		region.writeProtect();
+		memory.writeProtect();
 	}
 
 	@Override

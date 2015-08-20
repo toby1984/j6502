@@ -309,7 +309,7 @@ public class VIC extends SlowMemory
      *                      Bit 3: 40 Spalten (an)/38 Spalten (aus)
      *                      Bit 2..0: Offset in Pixeln vom linken Bildschirmrand
      *
-     * @author tobias.gierke@voipfuture.com
+     * @author tobias.gierke@code-sourcery.de
      */
     protected static enum GraphicsMode
     {

@@ -27,7 +27,7 @@ import de.codesourcery.j6502.emulator.Keyboard.Modifier;
  * <p>Note that you <b>must</b> attach this listener using {@link #attach(Component)} and
  * <b>not</b> by just using {@link Component#addKeyListener(java.awt.event.KeyListener)}.</p>
  * 
- * @author tobias.gierke@voipfuture.com
+ * @author tobias.gierke@code-sourcery.de
  */
 public class KeyboardInputListener extends KeyAdapter 
 {

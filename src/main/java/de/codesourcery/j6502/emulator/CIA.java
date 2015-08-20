@@ -11,7 +11,7 @@ import de.codesourcery.j6502.utils.Misc;
  *
  * TODO: Have a look at http://ist.uwaterloo.ca/~schepers/MJK/cia6526.html to do it better.
  *
- * @author tobias.gierke@voipfuture.com
+ * @author tobias.gierke@code-sourcery.de
  */
 public class CIA extends Memory
 {
