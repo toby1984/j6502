@@ -11,7 +11,7 @@ import de.codesourcery.j6502.emulator.Keyboard.Key;
  * <p>This class needs to be thread-safe since it gets called asynchronously from the Swing EDT while
  * the emulation itself is running in a separate thread.</p> 
  *
- * @author tobias.gierke@voipfuture.com
+ * @author tobias.gierke@code-sourcery.de
  */
 public class KeyboardBuffer 
 {

@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * A text region.
  *
- * @author tobias.gierke@voipfuture.com
+ * @author tobias.gierke@code-sourcery.de
  */
 public class TextRegion implements ITextRegion
 {

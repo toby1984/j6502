@@ -7,7 +7,7 @@ import de.codesourcery.j6502.utils.HexDump;
 /**
  * Ported from C code in http://codegolf.stackexchange.com/questions/12844/emulate-a-mos-6502-cpu
  *
- * @author tobias.gierke@voipfuture.com
+ * @author tobias.gierke@code-sourcery.de
  */
 public final class CPUImpl
 {

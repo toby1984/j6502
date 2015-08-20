@@ -11,7 +11,7 @@ import javax.swing.JPanel;
 /**
  *
  *
- * @author tobias.gierke@voipfuture.com
+ * @author tobias.gierke@code-sourcery.de
  */
 public class BufferedView extends JPanel
 {

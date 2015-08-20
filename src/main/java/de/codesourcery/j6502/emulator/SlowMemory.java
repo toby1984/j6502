@@ -6,7 +6,7 @@ import de.codesourcery.j6502.utils.HexDump;
  * Memory that implements all operations in terms of {@link #readByte(int)} and {@link #writeByte(int, byte)}
  * instead of directly accessing the internal array.
  *
- * @author tobias.gierke@voipfuture.com
+ * @author tobias.gierke@code-sourcery.de
  */
 public class SlowMemory extends IMemoryRegion
 {
