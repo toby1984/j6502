@@ -120,9 +120,19 @@ public final class MemorySubsystem extends IMemoryRegion
 	        switch(wrappedOffset)
 	        {
 	            case 0:
+	                /*
+	                 * 6510 writes to 0,1 also go through to Ram, Vic-2 reads from those addresses always come from Ram.
+	                 * this is used in some protection schemes.
+	                 */
+	                super.writeByte(wrappedOffset,value);
 	                plaDataDirection = value;
 	                break;
 	            case 1:
+	                /*
+                     * 6510 writes to 0,1 also go through to Ram, Vic-2 reads from those addresses always come from Ram.
+                     * this is used in some protection schemes.
+                     */
+	                super.writeByte(wrappedOffset,value);
 	                int oldValue = plaLatchBits & 0xff;
 	                plaLatchBits = value;
 	                if ( oldValue != (plaLatchBits & 0xff) ) {
