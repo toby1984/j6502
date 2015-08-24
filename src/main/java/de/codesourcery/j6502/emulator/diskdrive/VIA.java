@@ -262,48 +262,46 @@ public class VIA extends Memory {
     @Override
     public void writeByte(int offset, byte value)
     {
-
-    	switch( offset )
-    	{
-		    case PORTB:
-		    	return readPortB;
-		    case PORTA:
-		    	return readPortA;
-		    case DDRB:
-		    	return ddrb;
-		    case DDRA:
-		    	return ddra;
-		    case T1CL:
-		    	return timer1 & 0xff;
-		    case T1CH:
-		    	return (timer1 & 0xff00) >> 8;
-		    case T1LL:
-		    	return t1latchlo;
-		    case T1LH:
-		    	return t1latchhi;
-		    case T2CL:
-		    	irqFlags &= ~(1<<5);
-		    	return (timer2 & 0xff);
-		    case T2CH:
-		    	irqFlags &= ~(1<<5);
-		    	return (timer2 & 0xff00) >> 8;
-		    case SR:
-		    	return sr;
-		    case ACR:
-		    	return acr;
-		    case PCR:
-		    	return pcr;
-		    case IFR:
-		    	return irqFlags;
-		    case IER:
-		    	return irqEnable;
-		    case PORTA_NOHANDSHAKE:
-		    	return readPortA;
-    		default:
-    			throw new IllegalArgumentException("No register at "+HexDump.toAdr(offset));
-    	}
-
-
+//
+//    	switch( offset )
+//    	{
+//		    case PORTB:
+//		    	return readPortB;
+//		    case PORTA:
+//		    	return readPortA;
+//		    case DDRB:
+//		    	return ddrb;
+//		    case DDRA:
+//		    	return ddra;
+//		    case T1CL:
+//		    	return timer1 & 0xff;
+//		    case T1CH:
+//		    	return (timer1 & 0xff00) >> 8;
+//		    case T1LL:
+//		    	return t1latchlo;
+//		    case T1LH:
+//		    	return t1latchhi;
+//		    case T2CL:
+//		    	irqFlags &= ~(1<<5);
+//		    	return (timer2 & 0xff);
+//		    case T2CH:
+//		    	irqFlags &= ~(1<<5);
+//		    	return (timer2 & 0xff00) >> 8;
+//		    case SR:
+//		    	return sr;
+//		    case ACR:
+//		    	return acr;
+//		    case PCR:
+//		    	return pcr;
+//		    case IFR:
+//		    	return irqFlags;
+//		    case IER:
+//		    	return irqEnable;
+//		    case PORTA_NOHANDSHAKE:
+//		    	return readPortA;
+//    		default:
+//    			throw new IllegalArgumentException("No register at "+HexDump.toAdr(offset));
+//    	}
     }
 
     public void tick(boolean clock)
