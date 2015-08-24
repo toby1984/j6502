@@ -72,11 +72,15 @@ public final class BitStream
         }
     }
     
-    public int readBit() throws NoSuchElementException
+    public void advance(int bits) 
     {
-        final int byteOffset = currentBit/8;
-        final int currentMask = 1 << ( 7 - ( currentBit % 8 ) );
-        final int result = (data[ startByteOffset + byteOffset] & currentMask) == 0 ? 0 : 1;
+        for ( int i = 0 ; i <bits ; i++ ) {
+            advanceOneBit();
+        }
+    }
+    
+    private void advanceOneBit() 
+    {
         currentBit++;
         if ( currentBit == bitsAvailable ) 
         {
@@ -84,7 +88,19 @@ public final class BitStream
         }
         if ( currentBit == mark ) {
             wrapCounter++;
-        }        
+        }  
+    }
+    
+    public int readBit() throws NoSuchElementException
+    {
+        final int byteOffset = currentBit/8;
+        final int currentMask = 1 << ( 7 - ( currentBit % 8 ) );
+        final int result = (data[ startByteOffset + byteOffset] & currentMask) == 0 ? 0 : 1;
+        advanceOneBit();
         return result;
+    }
+
+    public int currentBitOffset() {
+        return currentBit;
     }
 }
