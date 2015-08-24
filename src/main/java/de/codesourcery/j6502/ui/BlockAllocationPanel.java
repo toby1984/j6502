@@ -34,7 +34,6 @@ public class BlockAllocationPanel extends JPanel implements IDebuggerView {
 	private int xScale;
 	private int yScale;
 	
-	
 	private final Point lastMousePosition = new Point();
 	
 	private final MouseAdapter mouseListener = new MouseAdapter()
