@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import de.codesourcery.j6502.utils.BitStream;
@@ -22,6 +23,9 @@ import de.codesourcery.j6502.utils.HexDump;
  */
 public class G64File 
 {
+
+    private static final boolean DEBUG = false;
+
     /*
 Nybble  Quintuple   
 0000    01010 = 10      
@@ -41,7 +45,7 @@ Nybble  Quintuple
 1110    11110 = 30
 1111    10101 = 21
      */
-    
+
     private static final int INVALID_GCR = 0xffffffff;
 
     public static final int[] TO_GCR = new int[] {
@@ -62,14 +66,14 @@ Nybble  Quintuple
             0b11110,
             0b10101
     };
-    
+
     public static final int[] FROM_GCR;
-            
+
     static 
     {
         FROM_GCR = new int[32];
         Arrays.fill(FROM_GCR, INVALID_GCR );
-        
+
         FROM_GCR[ 10 ] = 0b0000;     
         FROM_GCR[ 11 ] = 0b0001;     
         FROM_GCR[ 18 ] = 0b0010;     
@@ -87,19 +91,19 @@ Nybble  Quintuple
         FROM_GCR[ 30 ] = 0b1110;
         FROM_GCR[ 21 ] = 0b1111;       
     }
-    
+
     private final SpeedZonesMap speedZonesMap = new SpeedZonesMap();
-    
+
     protected final class TrackZoneSpeeds {
-        
+
         private final int speed;
         private final boolean alwaysSameSpeed;
-        
+
         public TrackZoneSpeeds(int speed) {
             this.speed = speed;
             this.alwaysSameSpeed = speed < 4;
         }
-        
+
         public int getSpeedForByte(int byteOffset) 
         {
             if ( alwaysSameSpeed ) {
@@ -112,7 +116,7 @@ Nybble  Quintuple
             return (value & mask) >>> bitOffsetInSpeedEntry; 
         }
     }
-    
+
     public final class SpeedZonesMap 
     {
         /*
@@ -182,7 +186,7 @@ a speed zone block for the track.
             int offset = (int) ( track*2 -2 );
             offset *= 4 ; // 4 bytes per entry
             offset += 0x015c;
-            
+
             /*
         Track Range  Storage in Bytes    Speed Zone
         -----------  ----------------    ----------
@@ -195,7 +199,7 @@ a speed zone block for the track.
             return new TrackZoneSpeeds( value ); 
         }
     }
-    
+
     public final class FileHeader 
     {
         /**
@@ -234,17 +238,17 @@ a speed zone block for the track.
                 throw new RuntimeException("G64 file format version "+version+" is not supported");
             }
         }
-        
+
         public int getTrackCount() {
             return data[9] & 0xff;
         }
-        
+
         public int getTrackSizeInBytes() 
         {
             return toBigEndian( data[ 0x0a ] , data[ 0x0b ] );
         }
     }    
-    
+
     public final class TrackDataOffsetMap 
     {
         /*
@@ -295,29 +299,37 @@ a speed zone block for the track.
             // 2.0 / 0.4 = 4 => 2
             final float adjusted = (track/0.5f) - 2 ;
             final int index = 0x000c + (int) ( adjusted *4 );
-            System.out.println("Track "+track+" => offset @ "+wordToString(index));
-            
-            HexDump dump = new HexDump();
-            System.out.println( dump.dump( (short) 0 , data , 0x000c , 32 ) );
-            
+            if ( DEBUG ) {
+                System.out.println("Track "+track+" => offset @ "+wordToString(index));
+            }
+
+            if ( DEBUG ) {
+                HexDump dump = new HexDump();
+                System.out.println( dump.dump( (short) 0 , data , 0x000c , 32 ) );
+            }
+
             final int byte1 = data[index  ] & 0xff;
             final int byte2 = data[index+1] & 0xff;
             final int byte3 = data[index+2] & 0xff;
             final int byte4 = data[index+3] & 0xff;
-            
-            System.out.println("byte1: "+byteToString(byte1) );
-            System.out.println("byte2: "+byteToString(byte2) );
-            System.out.println("byte3: "+byteToString(byte3) );
-            System.out.println("byte4: "+byteToString(byte4) );
+
+            if ( DEBUG ) {
+                System.out.println("byte1: "+byteToString(byte1) );
+                System.out.println("byte2: "+byteToString(byte2) );
+                System.out.println("byte3: "+byteToString(byte3) );
+                System.out.println("byte4: "+byteToString(byte4) );
+            }
             final int value = byte4 << 24 | byte3 << 16 | byte2 << 8 | byte1;
-            System.out.println("Track "+track+" => starts at $"+Integer.toHexString( value ));
+            if ( DEBUG ) {
+                System.out.println("Track "+track+" => starts at $"+Integer.toHexString( value ));
+            }
             return value;
         }
     }
-    
+
     private final byte[] data;
     private final BitStream bitStream;
-    
+
     private int readByte() 
     {
         int value = bitStream.readBit();
@@ -327,7 +339,7 @@ a speed zone block for the track.
         }
         return value;
     }
-    
+
     private int readGCRByte() 
     {
         // TODO: What comes first , lo nybble or hi ??
@@ -336,22 +348,22 @@ a speed zone block for the track.
             value <<= 1;
             value |= bitStream.readBit();
         }
-        
+
         int hi = gcrDecode( value );
-        
+
         value = bitStream.readBit();
         for ( int i = 0 ; i < 4 ; i++) {
             value <<= 1;
             value |= bitStream.readBit();
         }
         int lo = gcrDecode( value );
-        
+
         int result = hi << 4 | lo;
         return result;
     }
-    
+
     private final TrackDataOffsetMap trackDataOffsetMap = new TrackDataOffsetMap();
-    
+
     protected static int gcrDecode(int value) throws IllegalArgumentException
     {
         if ( value < 0 || value > 32 ) {
@@ -367,15 +379,15 @@ a speed zone block for the track.
         }
         return result;
     }
-    
+
     private final FileHeader fileHeader = new FileHeader();
-    
+
     public G64File( InputStream in) throws IOException 
     {
         if ( in == null ) {
             throw new IllegalArgumentException("Input stream must not be NULL");
         }
-        
+
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         try 
         { 
@@ -387,41 +399,56 @@ a speed zone block for the track.
             in.close();
         }
         out.close();
-        
+
         this.data = out.toByteArray();
         this.bitStream = new BitStream( data );
-        
-        HexDump dump = new HexDump();
-        System.out.println( dump.dump( (short) 0 , data , 0x000c , 32 ) );
-        
+
+        if ( DEBUG ) {
+            HexDump dump = new HexDump();
+            System.out.println( dump.dump( (short) 0 , data , 0x000c , 32 ) );
+        }
+
         getFileHeader().assertValid();
     }
-    
+
     private static int toBigEndian( int lo , int hi ) {
         return (( hi & 0xff) << 8 ) | ( lo & 0xff);
     }
-    
+
     public FileHeader getFileHeader() {
         return fileHeader;
     }
-    
+
     public TrackDataOffsetMap getTrackOffsetMap() {
         return trackDataOffsetMap;
     }
-    
-    public static enum PartType { HEADER, DATA }
-    
+
+    public static enum PartType { HEADER, DATA , SYNC , GAP  }
+
     public abstract class TrackPart 
     {
         public final PartType type;
-        
-        public TrackPart(PartType type) {
+        public final int firstBit;
+        public final int lengthInBits;
+
+        public TrackPart(PartType type,int firstBit,int lengthInBits) {
             this.type = type;
+            this.firstBit = firstBit;
+            this.lengthInBits = lengthInBits;
+        }
+
+        public abstract void read();
+
+        public int getLengthInBits() {
+            return lengthInBits;
         }
         
-        public abstract void read();
+        @Override
+        public String toString() {
+            return type.toString()+" ( "+firstBit+" - "+firstBit + lengthInBits+" )";
+        }
     }
-    
+
     protected static String byteToString(int value) 
     {
         String result = Integer.toHexString( value & 0xff );
@@ -430,7 +457,7 @@ a speed zone block for the track.
         }
         return "$"+result;
     }
-    
+
     private static String wordToString(int value) 
     {
         String result = Integer.toHexString( value & 0xffff );
@@ -439,7 +466,7 @@ a speed zone block for the track.
         }
         return "$"+result;
     }
-    
+
     public final class HeaderPart extends TrackPart {
 
         private int blockId;
@@ -448,11 +475,11 @@ a speed zone block for the track.
         private int track;
         private int formatIdLo;
         private int formatIdHi;
-        
-        public HeaderPart() {
-            super(PartType.HEADER);
+
+        public HeaderPart(int firstBit) {
+            super(PartType.HEADER,firstBit,6 * 10 ); // 6 GCR-encoded bytes
         }
-        
+
         @Override
         public String toString() {
             return "HEADER[ blockId="+byteToString(blockId)+","+
@@ -461,7 +488,7 @@ a speed zone block for the track.
                     "sector="+byteToString( sector )+","+
                     "formatId="+wordToString( toBigEndian( formatIdLo , formatIdHi ) )+" ]";
         }
-        
+
         public void read() 
         {
             blockId = readGCRByte();
@@ -473,16 +500,39 @@ a speed zone block for the track.
             track = readGCRByte();
             formatIdLo = readGCRByte();
             formatIdHi = readGCRByte();
-            
+
             final int expectedCheckSum = xor( sector , track , formatIdLo , formatIdHi );
             if ( headerBlockChecksum != ( expectedCheckSum & 0xff) ) 
             {
                 throw new RuntimeException("Invalid header checksum, got "+byteToString( headerBlockChecksum )+" but expected "+byteToString( expectedCheckSum) );
             }
         }
-        
     }
-    
+
+    public final class GapPart extends TrackPart 
+    {
+        public GapPart(HeaderPart sectorHeader,int firstBit,int lengthInBits) 
+        {
+            super(PartType.GAP,firstBit,lengthInBits);
+        }
+
+        @Override
+        public void read() {
+        }
+    }
+
+    public final class SyncPart extends TrackPart 
+    {
+        public SyncPart(int firstBit,int lengthInBits) 
+        {
+            super(PartType.SYNC,firstBit,lengthInBits);
+        }
+
+        @Override
+        public void read() {
+        }
+    }    
+
     public final class DataPart extends TrackPart {
 
         public final int trackNo;
@@ -490,19 +540,19 @@ a speed zone block for the track.
         private int blockId;
         private final byte[] sectorData = new byte[256];
         private int checksum;
-        
-        public DataPart(HeaderPart sectorHeader) {
-            super(PartType.DATA);
+
+        public DataPart(HeaderPart sectorHeader,int firstBit) {
+            super(PartType.DATA,firstBit, 258*10);
             this.trackNo = sectorHeader.track;
             this.sectorNo = sectorHeader.sector;
         }
-        
+
         @Override
         public String toString() {
             return "DATA[ blockId="+byteToString(blockId)+","+
                     "checksum="+byteToString( checksum)+" ]";
         }
-        
+
         public void read() {
             /*
 The 325 byte data block (#5) is GCR encoded and must be  decoded  to  its
@@ -533,27 +583,29 @@ Byte    $00 - data block ID ($07)
             }
         }
     }    
-    
+
     public final class TrackData 
     {
         private final float trackNo;
         private final int offset;
-        private final int lengthInBytes;
-        
+        public final int lengthInBytes;
+
         public TrackData(float trackNo, int offset,int lengthInBytes) 
         {
-            System.out.println("Track "+trackNo+" starts at offset "+offset+" and has "+lengthInBytes+" bytes");
+            if ( DEBUG ) {
+                System.out.println("Track "+trackNo+" starts at offset "+offset+" and has "+lengthInBytes+" bytes");
+            }
             this.trackNo = trackNo;
             this.offset = offset;
             this.lengthInBytes = lengthInBytes;
         }
-        
+
         public byte[] getSectorData() {
-            
+
             final List<DataPart> data = getParts().stream().filter( p -> p.type == PartType.DATA ).map( a -> (DataPart) a ).collect( Collectors.toList() );
-            
+
             data.sort( (a,b) -> Integer.compare(a.sectorNo,b.sectorNo) );
-            
+
             final ByteArrayOutputStream out = new ByteArrayOutputStream();
             data.forEach( s -> {
                 try {
@@ -564,13 +616,13 @@ Byte    $00 - data block ID ($07)
             });
             return out.toByteArray();
         }
-        
+
         public List<TrackPart> getParts() 
         {
             bitStream.setStartingOffset( offset , lengthInBytes*8 );
-            
+
             final List<TrackPart> parts = new ArrayList<>(); 
-            
+
             /*
        1. Header sync       FF FF FF FF FF (40 'on' bits, not GCR)
        2. Header info       52 54 B5 29 4B 7A 5E 95 55 55 (10 GCR bytes)
@@ -583,28 +635,33 @@ Byte    $00 - data block ID ($07)
             TrackPart previousPart = null;
             do
             {
+                final int currentBit = bitStream.currentBitOffset();
+
                 if ( ! skipSync() ) 
                 {
-                    System.out.println("No sync");
+                    if ( DEBUG ) {
+                        System.out.println("No sync");
+                    }
                     if ( bitStream.hasWrapped() ) {
                         return parts;
                     }
                     throw new NoSuchElementException("Missing SYNC");
                 }
-                
+
+                parts.add( new SyncPart( currentBit , bitStream.currentBitOffset() - currentBit ) );
+
                 if ( ! firstSyncFound ) {
                     bitStream.mark();
                     firstSyncFound = true;
                 } 
-                
+
                 final int blockId = readGCRByte();
                 bitStream.rewind(10); // 1 byte = 10 bits GCR
-//                System.out.println("Got block ID "+byteToString(blockId)+" @ "+bitStream);
-                
+
                 final TrackPart part;
                 if ( blockId == 0x08 ) 
                 {
-                    part  = new HeaderPart();
+                    part  = new HeaderPart( bitStream.currentBitOffset() );
                 } 
                 else if ( blockId == 0x07 ) // data block
                 { 
@@ -614,19 +671,21 @@ Byte    $00 - data block ID ($07)
                     if ( previousPart.type != PartType.HEADER ) {
                         throw new IllegalStateException("Two data blocks in a row ??");
                     }
-                    part = new DataPart( (HeaderPart) previousPart );
+                    part = new DataPart( (HeaderPart) previousPart , bitStream.currentBitOffset() );
                 } else {
                     throw new RuntimeException("Unrecognized block ID: "+blockId);
                 }
                 part.read();
-                System.out.println("READ: "+part);
+                if ( DEBUG ) {
+                    System.out.println("READ: "+part);
+                }
                 parts.add( part );
                 previousPart = part;
             } while ( ! bitStream.hasWrapped() );
             return parts;
         }
     }
-    
+
     private static int xor(int i1,int i2,int... additional) {
         int result = 0;
         result ^= i1;
@@ -639,22 +698,22 @@ Byte    $00 - data block ID ($07)
         }
         return result;
     }
-    
-    public TrackData getTrackData(float trackNo) 
+
+    public Optional<TrackData> getTrackData(float trackNo) 
     {
         final int offset = trackDataOffsetMap.getTrackOffset( trackNo );
         final int totalSizeInBytes = toBigEndian( data[offset] , data[offset+1] );
         if ( offset == 0 ) { // g64 file holds no data for this track
-            return null;
+            return Optional.empty();
         }
-        return new TrackData( trackNo , offset+2 , totalSizeInBytes );
+        return Optional.of( new TrackData( trackNo , offset+2 , totalSizeInBytes ) );
     }
-    
+
     private boolean skipSync() throws NoSuchElementException
     {
         int successiveOneBits = 0;
-        
-//        System.out.println("Looking for sync @ "+bitStream);
+
+        //        System.out.println("Looking for sync @ "+bitStream);
         while ( ! bitStream.hasWrapped() )
         {
             final int bit = bitStream.readBit();
@@ -666,7 +725,7 @@ Byte    $00 - data block ID ($07)
                 // zero bit read
                 if ( successiveOneBits >= 40 ) 
                 {
-//                    System.out.println("Zero after "+successiveOneBits+" 1'er bits");
+                    //                    System.out.println("Zero after "+successiveOneBits+" 1'er bits");
                     bitStream.rewind(1);
                     return true;
                 }
@@ -675,19 +734,21 @@ Byte    $00 - data block ID ($07)
         }
         return false;
     }
-    
+
     public static void main(String[] args) throws IOException 
     {
         final InputStream in = G64File.class.getResourceAsStream( "/disks/pitfall.g64" );
         final G64File file = new G64File( in );
-        
+
         ByteArrayOutputStream d64Out = new ByteArrayOutputStream();
-        
+
         for ( int i = 1 ; i < 36 ; i++ ) 
         {
             System.out.println("=== Track "+i+" ===");
-            final TrackData trackData = file.getTrackData( i );
-            d64Out.write( trackData.getSectorData() );
+            final Optional<TrackData> trackData = file.getTrackData( i );
+            if ( trackData.isPresent() ) {
+                d64Out.write( trackData.get().getSectorData() );
+            }
         }
         byte[] raw = d64Out.toByteArray();
         FileOutputStream fileOut = new FileOutputStream("/home/tobi/tmp/pitfall_from_g64.d64");
