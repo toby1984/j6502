@@ -27,10 +27,17 @@ import de.codesourcery.j6502.emulator.G64File;
 import de.codesourcery.j6502.emulator.G64File.TrackData;
 import de.codesourcery.j6502.emulator.G64File.TrackPart;
 
-public class G64Viewer extends JPanel {
+public class G64Viewer extends JPanel
+{
+    private static final Color COLOR_DATA =  Color.GREEN;
+    private static final Color COLOR_HEADER = Color.BLACK;
+    private static final Color COLOR_GAP = Color.WHITE;
+    private static final Color COLOR_SYNC = Color.MAGENTA;
+    private static final Color COLOR_EMPTY = Color.GRAY;
+    private static final Color COLOR_UNRECOGNIZED = Color.RED;
 
-    private static final float CENTER_HOLE_RADIUS = 10;
     private static final int TOTAL_TRACKS = 84; // 42 tracks + 42 half-tracks
+
 
     private G64File disk;
 
@@ -38,16 +45,17 @@ public class G64Viewer extends JPanel {
     private Graphics2D graphics;
 
     private float trackWidth;
+    private float centerHoleRadius = 10;
 
     private int centerX;
     private int centerY;
 
-    private boolean xorMode; 
+    private boolean xorMode;
     private Point viewportP0;
     private Point viewportP1;
-    
+
     private Rectangle currentViewPort;
-    
+
     private final Map<Integer,List<Segment>> segments = new HashMap<>();
 
     private final MouseAdapter mouseListener = new MouseAdapter()
@@ -55,9 +63,9 @@ public class G64Viewer extends JPanel {
         @Override
         public void mouseMoved(MouseEvent e)
         {
-            if ( viewportP0 != null ) 
+            if ( viewportP0 != null )
             {
-                if ( viewportP1 != null ) 
+                if ( viewportP1 != null )
                 {
                     repaint();
                 } else {
@@ -67,16 +75,16 @@ public class G64Viewer extends JPanel {
                 repaint();
             }
         }
-        
+
         @Override
-        public void mouseClicked(MouseEvent e) 
+        public void mouseClicked(MouseEvent e)
         {
-            if ( e.getButton() == MouseEvent.BUTTON1 ) 
+            if ( e.getButton() == MouseEvent.BUTTON1 )
             {
-                if ( viewportP0 == null ) { 
+                if ( viewportP0 == null ) {
                     viewportP0 = new Point( e.getPoint() );
-                } 
-                else 
+                }
+                else
                 {
                     viewportP1.setLocation( e.getPoint() );
                     currentViewPort = toRectangle( viewportP0 , viewportP1 );
@@ -84,8 +92,8 @@ public class G64Viewer extends JPanel {
                     xorMode = false;
                     repaint();
                 }
-            } 
-            else if ( e.getButton() == MouseEvent.BUTTON3 ) 
+            }
+            else if ( e.getButton() == MouseEvent.BUTTON3 )
             {
                 viewportP0 = viewportP1 = null;
                 xorMode = false;
@@ -94,7 +102,7 @@ public class G64Viewer extends JPanel {
             }
         }
     };
-    
+
     private static Rectangle toRectangle(Point viewportP0,Point viewportP1) {
         int xmin = Math.min(viewportP0.x,viewportP1.x );
         int xmax = Math.max(viewportP0.x,viewportP1.x );
@@ -102,7 +110,42 @@ public class G64Viewer extends JPanel {
         int ymax = Math.max(viewportP0.y,viewportP1.y );
         return new Rectangle(xmin,ymin, xmax-xmin,ymax-ymin);
     }
-    
+
+    private static boolean intersects(Rectangle r,Point center, float radius)
+    {
+    	final Point[] points = new Point[] { new Point( r.x , r.y ),
+    		new Point( r.x+r.width , r.y ),
+    		new Point( r.x , r.y+r.height ),
+    		new Point( r.x+r.width , r.y+r.height ) };
+
+    	final double[] dist = new double[] {
+	    	points[0].distanceSq( center ),
+	    	points[1].distanceSq( center ),
+	    	points[2].distanceSq( center ),
+	    	points[3].distanceSq( center )
+    	};
+
+    	Point minp = null;
+    	Point maxp = null;
+    	double minDist = 0;
+    	double maxDist = 0;
+    	for ( int i = 0 ; i < 4 ; i++ )
+    	{
+    		double d = dist[i];
+    		if ( minp == null || d < minDist ) {
+    			minp = points[i];
+    			minDist = d;
+    		}
+    		if ( maxp == null || d > minDist ) {
+    			maxp = points[i];
+    			maxDist = d;
+    		}
+    	}
+    	minDist = Math.sqrt(minDist);
+    	maxDist = Math.sqrt(maxDist);
+    	return radius >= minDist && radius <= maxDist;
+    }
+
     protected static final class Segment {
 
         public final TrackPart part;
@@ -110,8 +153,8 @@ public class G64Viewer extends JPanel {
         private double endRadius;
         private double startAngle;
         private double endAngle;
-        
-        public Segment(double startRadius, double endRadius, double startAngle, double endAngle,TrackPart part) 
+
+        public Segment(double startRadius, double endRadius, double startAngle, double endAngle,TrackPart part)
         {
             this.startRadius = startRadius;
             this.endRadius = endRadius;
@@ -120,7 +163,7 @@ public class G64Viewer extends JPanel {
             this.part = part;
         }
 
-        public boolean contains(float angle,float radius) 
+        public boolean contains(float angle,float radius)
         {
             return angle >= startAngle && angle < endAngle &&
                     radius >= startRadius && radius < endRadius;
@@ -131,7 +174,7 @@ public class G64Viewer extends JPanel {
             return "Segment[ radius: "+startRadius+"-"+endRadius+" , angle: "+startAngle+"-"+endAngle+" ]";
         }
     }
-    
+
     public static void main(String[] args) throws IOException {
 
         final JFrame frame = new JFrame("test");
@@ -161,12 +204,12 @@ public class G64Viewer extends JPanel {
         setDisk( disk );
     }
 
-    public void setDisk(G64File disk) 
+    public void setDisk(G64File disk)
     {
         this.disk = disk;
 
         segments.clear();
-        for ( int i = 0 ; i < 84 ; i++ ) 
+        for ( int i = 0 ; i < TOTAL_TRACKS ; i++ )
         {
             final float realTrack = 1+ (i/2.0f);
 
@@ -177,7 +220,7 @@ public class G64Viewer extends JPanel {
             this.segments.put( Integer.valueOf(i) , segments );
         }
     }
-    
+
     @Override
     protected void paintComponent(Graphics g)
     {
@@ -191,10 +234,10 @@ public class G64Viewer extends JPanel {
             graphics.getRenderingHints().put( RenderingHints.KEY_RENDERING , RenderingHints.VALUE_RENDER_QUALITY );
             currentViewPort = new Rectangle(0,0,getWidth(),getHeight() );
         }
-        
+
         final Graphics2D graphics = this.graphics;
 
-        graphics.setColor( Color.BLUE );
+        graphics.setColor( COLOR_DATA );
         graphics.fillRect( 0,0,getWidth() , getHeight() );
 
         final int xMargin = 15;
@@ -202,64 +245,61 @@ public class G64Viewer extends JPanel {
 
         int w = getWidth() - 2*xMargin;
         int h = getHeight() - 2*yMargin;
-        
-        final int xOffset = currentViewPort.x+currentViewPort.width/2;
-        final int yOffset = currentViewPort.y+currentViewPort.height/2;
 
-        if ( currentViewPort.equals( new Rectangle(0,0,getWidth(),getHeight() ) ) ) {
-            centerX = (getWidth() / 2);
-            centerY = ( getHeight() / 2 );
-        } else {
-            centerX = (getWidth() / 2)    + xOffset;
-            centerY = ( getHeight() / 2 ) - yOffset;
-        }
+        final int xOffset = ( getWidth() / 2 ) - (currentViewPort.x+currentViewPort.width/2);
+        final int yOffset = ( getHeight() / 2 ) - (currentViewPort.y+currentViewPort.height/2);
 
-        float xRatio = getWidth() / (float) currentViewPort.width;
+        centerX = (getWidth() / 2)    + xOffset;
+        centerY = ( getHeight() / 2 ) - yOffset;
+
+        float xRatio = getWidth()  / (float) currentViewPort.width;
         float yRatio = getHeight() / (float) currentViewPort.height;
 
-        w = (int) ( getWidth() * xRatio );
+        w = (int) ( getWidth()  * xRatio );
         h = (int) ( getHeight() * yRatio );
-        
+
         final float radius = Math.min(w, h ) / 2f;
         final float centerHoleRadius = w < h ? xRatio * 10 : yRatio*10 ;
 
-        trackWidth  = Math.max(1f ,  (radius-centerHoleRadius) / 84f );
+        trackWidth  = Math.max(1f ,  (radius - centerHoleRadius) / TOTAL_TRACKS );
 
-        for ( int i = 83 ; i >= 0 ; i-- )
+        for ( int i = TOTAL_TRACKS-1 ; i >= 0 ; i-- )
         {
             final List<Segment> segments = this.segments.get( i );
 
             final float rStart = centerHoleRadius + i*trackWidth;
             final float rEnd = rStart + trackWidth;
 
-            for ( Segment s : segments ) 
+outer:
+            for ( Segment s : segments )
             {
                 s.startRadius = rStart;
                 s.endRadius = rEnd;
 
                 final Color currentColor;
-                if ( s.part != null ) 
+                if ( s.part != null )
                 {
-                    switch( s.part.type ) 
+                    switch( s.part.type )
                     {
-                        case DATA: currentColor = Color.GREEN; break;
-                        case GAP: currentColor = Color.BLACK; break;
-                        case HEADER: currentColor = Color.WHITE; break;
-                        case SYNC: currentColor = Color.MAGENTA; break;
+                        case DATA: continue outer; // performance hack: we already use this color when clearing the image, no need to render it
+                        case GAP: currentColor = COLOR_GAP ; break;
+                        case HEADER: currentColor = COLOR_HEADER ; break;
+                        case SYNC: currentColor = COLOR_SYNC; break;
+                        case UNKNOWN: currentColor = COLOR_UNRECOGNIZED; break;
                         default:
                             throw new RuntimeException("Unhandled part type "+s.part.type);
                     }
                 } else {
-                    currentColor = Color.GRAY;
+                    currentColor = COLOR_EMPTY;
                 }
-                renderTrack(i , centerHoleRadius , currentColor , s.startAngle , s.endAngle ); 
+                renderTrack(i , centerHoleRadius , currentColor , s.startAngle , s.endAngle );
             }
         }
-        
-        if ( viewportP0 != null && viewportP1 != null ) 
+
+        if ( viewportP0 != null && viewportP1 != null )
         {
             final Rectangle r = toRectangle( viewportP0 , viewportP1 );
-            if ( xorMode ) 
+            if ( xorMode )
             {
                 graphics.setXORMode( Color.BLACK );
                 graphics.draw( r );
@@ -271,23 +311,23 @@ public class G64Viewer extends JPanel {
         }
         g.drawImage( image, 0 , 0 , null );
     }
-    
-    private List<Segment> trackToSegments(int trackNo, Optional<TrackData> trackData) {
 
-        final float rStart = CENTER_HOLE_RADIUS + trackNo*trackWidth;
+    private List<Segment> trackToSegments(int trackNo, Optional<TrackData> trackData)
+    {
+        final float rStart = centerHoleRadius + trackNo*trackWidth;
         final float rEnd = rStart + trackWidth;
 
-        final List<Segment> result = new ArrayList<Segment>(); 
-        if ( trackData.isPresent() ) 
+        final List<Segment> result = new ArrayList<Segment>();
+        if ( trackData.isPresent() )
         {
             final List<TrackPart> parts = trackData.get().getParts();
-            if ( ! parts.isEmpty() ) 
+            if ( ! parts.isEmpty() )
             {
                 final float totalLength = parts.stream().mapToInt( p -> p.getLengthInBits() ).sum();
-    
+
                 double startAngle = 0;
                 Segment lastSegment = null;
-                for ( TrackPart part : parts ) 
+                for ( TrackPart part : parts )
                 {
                     double angleInc = ( part.getLengthInBits()/totalLength) * 360.0d;
                     lastSegment = new Segment( rStart , rEnd , startAngle , startAngle + angleInc , part );
@@ -300,7 +340,7 @@ public class G64Viewer extends JPanel {
                 if ( startAngle < 360 ) {
                     System.out.println("Track "+trackNo+" falls short");
                 }
-            } 
+            }
         } else { // non-existant track
             result.add( new Segment(rStart, rEnd , 0 , 360 , null ) );
         }
@@ -311,12 +351,12 @@ public class G64Viewer extends JPanel {
     {
         final float rStart = centerHoleRadius + trackNo*trackWidth;
         float end = trackWidth;
-        
+
         startAngle = normalizeAngle( startAngle );
         endAngle = normalizeAngle( endAngle );
 
         double min = Math.min(startAngle, endAngle);
-        double max = Math.max(startAngle, endAngle);        
+        double max = Math.max(startAngle, endAngle);
 
         graphics.setColor( currentColor );
         final Arc2D.Double arc = new Arc2D.Double();
@@ -324,9 +364,9 @@ public class G64Viewer extends JPanel {
         {
             drawCircle( arc , centerX , centerY , rStart+ri , currentColor , min , max );
         }
-    }	
+    }
 
-    private double normalizeAngle(double deg) 
+    private double normalizeAngle(double deg)
     {
         while ( deg < 0 ) {
             deg += 360;
