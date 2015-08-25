@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -495,7 +496,7 @@ a speed zone block for the track.
 
 	public static enum PartType { HEADER, DATA , SYNC , GAP , UNKNOWN  }
 
-	public static enum ErrorType { CHECKSUM_ERROR , BAD_BLOCK_ID , INVALID_GCR }
+	public static enum ErrorType { CHECKSUM_ERROR , UNKNOWN_BLOCK_ID , INVALID_GCR }
 
 	public static final class Error
 	{
@@ -506,6 +507,11 @@ a speed zone block for the track.
 		{
 			this.type = type;
 			this.nibbleOffset = nibbleOffset;
+		}
+		
+		@Override
+		public String toString() {
+		    return type+" at nibble "+nibbleOffset;
 		}
 	}
 
@@ -518,6 +524,11 @@ a speed zone block for the track.
 		@Override
 		public void read(BitStream bitStream)
 		{
+		}
+		
+		@Override
+		protected String getDetailString() {
+		    return "";
 		}
 	}
 
@@ -538,7 +549,7 @@ a speed zone block for the track.
 		}
 
 		public List<Error> getErrors() {
-			return new ArrayList<>();
+			return Collections.emptyList();
 		}
 
 		public abstract void read(BitStream bitStream);
@@ -548,9 +559,24 @@ a speed zone block for the track.
 		}
 
 		@Override
-		public String toString() {
-			return type.toString()+" ( "+firstBit+" - "+firstBit + lengthInBits+" )";
+		public final String toString() 
+		{
+		    String details = getDetailString();
+		    if ( details.length() > 0 ) {
+		        details = " , "+details;
+		    }
+		    String errors = hasErrors() ? ", ERRORS!" : "";
+		    
+			return type.toString()+" ( bit "+firstBit+" , "+lengthInBits+" bits "+errors+details+")";
 		}
+		
+		protected String getDetailString() {
+		    return "";
+		}
+
+        public final boolean hasErrors() {
+            return ! getErrors().isEmpty();
+        }
 	}
 
 	protected static String byteToString(int value)
@@ -586,13 +612,14 @@ a speed zone block for the track.
 		}
 
 		@Override
-		public String toString() {
-			return "HEADER[ blockId="+byteToString(blockId)+","+
-					"headerBlockChecksum="+byteToString( headerBlockChecksum)+","+
-					"track="+byteToString( track )+","+
-					"sector="+byteToString( sector )+","+
-					"formatId="+wordToString( toBigEndian( formatIdLo , formatIdHi ) )+" ]";
-		}
+		protected String getDetailString() 
+		{
+            return "blockId: "+byteToString(blockId)+","+
+                    "checksum: "+byteToString( headerBlockChecksum)+","+
+                    "track: "+byteToString( track )+","+
+                    "sector:"+byteToString( sector )+","+
+                    "formatId: "+wordToString( toBigEndian( formatIdLo , formatIdHi ) );
+		}		
 
 		@Override
 		public List<Error> getErrors()
@@ -600,7 +627,7 @@ a speed zone block for the track.
 			final List<Error> result = new ArrayList<>();
 
 			if ( blockId != 0x08 ) {
-				result.add( new Error(ErrorType.BAD_BLOCK_ID , 0 ) );
+				result.add( new Error(ErrorType.UNKNOWN_BLOCK_ID , 0 ) );
 			}
 
 			final int expectedCheckSum = xor( sector , track , formatIdLo , formatIdHi );
@@ -672,9 +699,8 @@ a speed zone block for the track.
 		}
 
 		@Override
-		public String toString() {
-			return "DATA[ blockId="+byteToString(blockId)+","+
-					"checksum="+byteToString( checksum)+" ]";
+		protected String getDetailString() {
+            return "blockId: "+byteToString(blockId)+", checksum: "+byteToString( checksum);
 		}
 
 		@Override
@@ -710,7 +736,7 @@ Byte    $00 - data block ID ($07)
 			final List<Error> result = new ArrayList<>();
 
 			if ( blockId != 0x07 ) {
-				result.add( new Error(ErrorType.BAD_BLOCK_ID , 0 ) );
+				result.add( new Error(ErrorType.UNKNOWN_BLOCK_ID , 0 ) );
 			}
 
 			int expectedChecksum = 0;
