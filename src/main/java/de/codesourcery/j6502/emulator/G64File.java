@@ -111,8 +111,8 @@ Nybble  Quintuple
 
 	public final class TrackZoneSpeeds {
 
-		private final int speed;
-		private final boolean alwaysSameSpeed;
+		public final int speed;
+		public final boolean alwaysSameSpeed;
 
 		public TrackZoneSpeeds(int speed) {
 			this.speed = speed;
@@ -927,6 +927,11 @@ outer:
 			if ( DEBUG ) {
 				System.out.println("Part count: "+partsList.size());
 			}
+			
+			if ( partsList.isEmpty() ) {
+			    addPart( new UnknownPart( 0 , lengthInBytes*8 ) );
+			}
+			
 			final int partLenInBits = partsList.stream().mapToInt( p->p.lengthInBits).sum();
 			final int trackLenInBits = lengthInBytes*8;
 			if ( partLenInBits != trackLenInBits ) {
