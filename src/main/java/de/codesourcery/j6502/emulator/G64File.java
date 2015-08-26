@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -11,8 +12,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
+
+import org.apache.commons.lang.Validate;
 
 import de.codesourcery.j6502.utils.BitStream;
 import de.codesourcery.j6502.utils.HexDump;
@@ -107,7 +109,7 @@ Nybble  Quintuple
 		}
 	}
 
-	protected final class TrackZoneSpeeds {
+	public final class TrackZoneSpeeds {
 
 		private final int speed;
 		private final boolean alwaysSameSpeed;
@@ -508,10 +510,10 @@ a speed zone block for the track.
 			this.type = type;
 			this.nibbleOffset = nibbleOffset;
 		}
-		
+
 		@Override
 		public String toString() {
-		    return type+" at nibble "+nibbleOffset;
+			return type+" at nibble "+nibbleOffset;
 		}
 	}
 
@@ -525,10 +527,10 @@ a speed zone block for the track.
 		public void read(BitStream bitStream)
 		{
 		}
-		
+
 		@Override
 		protected String getDetailString() {
-		    return "";
+			return "";
 		}
 	}
 
@@ -538,7 +540,15 @@ a speed zone block for the track.
 		public final int firstBit;
 		public final int lengthInBits;
 
-		public TrackPart(PartType type,int firstBit,int lengthInBits) {
+		public TrackPart(PartType type,int firstBit,int lengthInBits)
+		{
+			if ( lengthInBits <= 0 ) {
+				throw new IllegalArgumentException("Part length must be >0 , was: "+lengthInBits);
+			}
+			if ( firstBit < 0 ) {
+				throw new IllegalArgumentException("firstBit must be >= 0, was: "+firstBit);
+			}
+			Validate.notNull(type, "type must not be NULL");
 			this.type = type;
 			this.firstBit = firstBit;
 			this.lengthInBits = lengthInBits;
@@ -559,24 +569,26 @@ a speed zone block for the track.
 		}
 
 		@Override
-		public final String toString() 
+		public final String toString()
 		{
-		    String details = getDetailString();
-		    if ( details.length() > 0 ) {
-		        details = " , "+details;
-		    }
-		    String errors = hasErrors() ? ", ERRORS!" : "";
-		    
-			return type.toString()+" ( bit "+firstBit+" , "+lengthInBits+" bits "+errors+details+")";
-		}
-		
-		protected String getDetailString() {
-		    return "";
+			String details = getDetailString();
+			if ( details.length() > 0 ) {
+				details = " , "+details;
+			}
+			String errors = hasErrors() ? ", ERRORS!" : "";
+
+			final float lengthInBytes = lengthInBits/8f;
+			final DecimalFormat DF = new DecimalFormat("#####0.###");
+			return type.toString()+" ( bit "+firstBit+" , "+lengthInBits+" bits = "+DF.format( lengthInBytes )+" bytes "+errors+details+")";
 		}
 
-        public final boolean hasErrors() {
-            return ! getErrors().isEmpty();
-        }
+		protected String getDetailString() {
+			return "";
+		}
+
+		public final boolean hasErrors() {
+			return ! getErrors().isEmpty();
+		}
 	}
 
 	protected static String byteToString(int value)
@@ -612,14 +624,14 @@ a speed zone block for the track.
 		}
 
 		@Override
-		protected String getDetailString() 
+		protected String getDetailString()
 		{
-            return "blockId: "+byteToString(blockId)+","+
-                    "checksum: "+byteToString( headerBlockChecksum)+","+
-                    "track: "+byteToString( track )+","+
-                    "sector:"+byteToString( sector )+","+
-                    "formatId: "+wordToString( toBigEndian( formatIdLo , formatIdHi ) );
-		}		
+			return "blockId: "+byteToString(blockId)+","+
+					"checksum: "+byteToString( headerBlockChecksum)+","+
+					"track: "+byteToString( track )+","+
+					"sector:"+byteToString( sector )+","+
+					"formatId: "+wordToString( toBigEndian( formatIdLo , formatIdHi ) );
+		}
 
 		@Override
 		public List<Error> getErrors()
@@ -664,7 +676,7 @@ a speed zone block for the track.
 
 	public final class GapPart extends TrackPart
 	{
-		public GapPart(HeaderPart sectorHeader,int firstBit,int lengthInBits)
+		public GapPart(int firstBit,int lengthInBits)
 		{
 			super(PartType.GAP,firstBit,lengthInBits);
 		}
@@ -700,7 +712,7 @@ a speed zone block for the track.
 
 		@Override
 		protected String getDetailString() {
-            return "blockId: "+byteToString(blockId)+", checksum: "+byteToString( checksum);
+			return "blockId: "+byteToString(blockId)+", checksum: "+byteToString( checksum);
 		}
 
 		@Override
@@ -807,7 +819,7 @@ Byte    $00 - data block ID ($07)
 
 		public List<TrackPart> getParts()
 		{
-			final TrackParser parser = new TrackParser( G64File.this.data );
+			final TrackParser parser = new TrackParser( trackNo , G64File.this.data );
 			parser.parse( offset , lengthInBytes );
 			return parser.getParts();
 		}
@@ -815,25 +827,30 @@ Byte    $00 - data block ID ($07)
 
 	protected final class TrackParser
 	{
-		private List<TrackPart>  parts = new ArrayList<>();
+		private List<TrackPart> partsList = new ArrayList<>();
 
 		private boolean firstSyncFound = false;
 		private final BitStream bitStream;
+		private final float trackNo;
 
-		public TrackParser(byte[] g64DiskData) {
+		public TrackParser(final float trackNo,byte[] g64DiskData) {
 			bitStream = new BitStream( g64DiskData );
+			this.trackNo = trackNo;
 		}
 		public List<TrackPart> getParts() {
-			return parts;
+			return partsList;
 		}
 
 		public void parse(int offset,int lengthInBytes )
 		{
 			firstSyncFound = false;
-			parts.clear();
+			partsList.clear();
 			bitStream.reset();
 			bitStream.setStartingOffset( offset , lengthInBytes*8 );
 
+			if ( DEBUG ) {
+				System.out.println("@ start: bitstream @ "+bitStream.currentBitOffset());
+			}
 			/*
        1. Header sync       FF FF FF FF FF (40 'on' bits, not GCR)
        2. Header info       52 54 B5 29 4B 7A 5E 95 55 55 (10 GCR bytes)
@@ -842,137 +859,154 @@ Byte    $00 - data block ID ($07)
        5. Data block        55...4A (325 GCR bytes)
        6. Inter-sector gap  55 55 55 55...55 55 (4 to 12 bytes, never read)
 			 */
-			final Consumer<Integer> nopFunc = syncStartOffset -> {};
-			do
+
+			if ( DEBUG ) {
+				System.out.println("Scanning track "+trackNo+" with "+lengthInBytes+" bytes");
+			}
+
+			if ( skipSync( false , false ) )
 			{
-				final int start = bitStream.currentBitOffset();
-				if ( ! skipSync(nopFunc) )
+outer:
+				do
 				{
-					int length = bitStream.distanceInBits( start , bitStream.currentBitOffset() );
-					if ( length > 0 ) {
-						parts.add( new UnknownPart( start , length ) );
+					if ( DEBUG ) {
+						System.out.println("Bitstream @ "+bitStream.currentBitOffset());
 					}
-					System.err.println("No (more) syncs");
-				    return;
-				}
-
-				int blockId = 0;
-				try
-				{
-					blockId = readGCRByte(bitStream);
-					bitStream.rewind(10); // 1 byte = 10 bits GCR
-				}
-				catch(GCRDecodingException e)
-				{
-					System.err.println("Reading block ID failed with GCR decoding error,advancing to next sync");
-					final int currentOffset = bitStream.currentBitOffset()-10; // 1 byte = 10 GCR bits
-
-					final Consumer<Integer> unknownPartFunc = syncStartOffset ->
+					final int currentStart = bitStream.currentBitOffset();
+					int blockId = 0;
+					try
 					{
-						final int length = bitStream.distanceInBits( currentOffset , syncStartOffset );
-						if ( length > 0 ) {
-							parts.add( new UnknownPart( start , length ) );
-						}
-					};
-
-					final boolean gotSync = skipSync( unknownPartFunc );
-
-					if ( ! gotSync )
-					{
-						unknownPartFunc.accept( bitStream.currentBitOffset() );
-						System.err.println("No (more) sync");
-						return;
+						blockId = readGCRByte(bitStream);
+						bitStream.rewind(10); // 1 byte = 10 bits GCR
 					}
-				}
-
-				final TrackPart part;
-				if ( blockId == 0x08 )
-				{
-					part  = new HeaderPart( bitStream.currentBitOffset() );
-				}
-				else if ( blockId == 0x07 ) // data block
-				{
-					part = new DataPart( bitStream.currentBitOffset() );
-				}
-				else
-				{
-					System.err.println("Unrecognized block ID: "+blockId);
-
-					continue;
-				}
-				part.read(bitStream);
-				if ( DEBUG ) {
-					System.out.println("READ: "+part);
-				}
-				parts.add( part );
-			} while ( ! bitStream.hasWrapped() );
-
-			if ( parts.size() >=4 )
-			{
-				int firstSync = -1;
-				for ( int i = 0 ; i < parts.size() ; i++ )
-				{
-					if ( parts.get(i).hasType( PartType.SYNC ) && (i+1) < parts.size() && parts.get(i+1).hasType( PartType.HEADER ) ) {
-						firstSync = i;
-						break;
-					}
-				}
-				final List<TrackPart> sorted = new ArrayList<>();
-				if ( firstSync > 0 )
-				{
-					HeaderPart previousHeader=null;
-					for ( int j = 0,i=firstSync ; j < parts.size() ; j++ , i = (i+1) % parts.size() )
+					catch(GCRDecodingException e)
 					{
-						final TrackPart currentPart = parts.get(i);
-						if ( currentPart.hasType( PartType.HEADER ) ) {
-							previousHeader = (HeaderPart) currentPart;
-						} else if ( currentPart.hasType( PartType.DATA ) )
+						System.err.println("Reading block ID failed with GCR decoding error,advancing to next sync");
+						bitStream.rewind( 10 );
+						if ( ! skipSync( false , true ) )
 						{
-							((DataPart) currentPart).header = previousHeader;
-							previousHeader = null;
+							System.err.println("No (more) syncs");
+							break;
 						}
-						sorted.add( currentPart );
+						continue;
 					}
-				}
-				parts.clear();
-				parts.addAll( sorted );
+
+					final TrackPart part;
+					switch( blockId ) {
+						case 0x08:
+							part  = new HeaderPart( currentStart );
+							break;
+						case 0x07:  // data block
+							part = new DataPart( currentStart );
+							break;
+						default:
+							System.err.println("Unrecognized block ID: "+blockId);
+							if ( ! skipSync( false , true ) )
+							{
+								System.err.println("No (more) syncs");
+								break outer;
+							}
+							continue;
+					}
+
+					part.read(bitStream);
+
+					if ( DEBUG ) {
+						System.out.println("READ: "+part);
+					}
+
+					addPart( part );
+
+					if ( ! bitStream.hasWrapped() ) {
+						skipSync( true , false );
+					}
+
+				} while ( ! bitStream.hasWrapped() );
+			}
+
+			if ( DEBUG ) {
+				System.out.println("Part count: "+partsList.size());
+			}
+			final int partLenInBits = partsList.stream().mapToInt( p->p.lengthInBits).sum();
+			final int trackLenInBits = lengthInBytes*8;
+			if ( partLenInBits != trackLenInBits ) {
+				throw new RuntimeException("Internal error, track "+trackNo+" has "+trackLenInBits+" bits but combined parts have "+partLenInBits);
 			}
 		}
 
-		private boolean skipSync(Consumer<Integer> onSuccessHook) throws NoSuchElementException
+		private void addPart(TrackPart part)
+		{
+			if ( partsList.size() > 0 )
+			{
+				final TrackPart previousPart = partsList.get( partsList.size()-1 );
+				final int previousEnd = ( previousPart.firstBit + previousPart.lengthInBits) % bitStream.size();
+				if ( previousEnd != part.firstBit )
+				{
+					throw new IllegalArgumentException("Current part "+part+" does not line up with "+previousPart+" ,\n expected part to start @ "+previousEnd+" but started at "+part.firstBit);
+				}
+			}
+			if ( DEBUG ) {
+				System.out.println("Track "+trackNo+" | ADD: "+part);
+			}
+			this.partsList.add( part );
+		}
+
+		private boolean skipSync(boolean addGap,boolean addUnknown) throws NoSuchElementException
 		{
 			int successiveOneBits = 0;
 
-			//        System.out.println("Looking for sync @ "+bitStream);
-			int syncStart = bitStream.currentBitOffset();
+			boolean oneBitFound = false;
+			final int searchStart = bitStream.currentBitOffset();
+			int syncStart = searchStart;
 			while ( ! bitStream.hasWrapped() )
 			{
 				final int offset = bitStream.currentBitOffset();
 				final int bit = bitStream.readBit();
-				if ( bit != 0 )
+				if ( bit != 0 ) // => 1-bit
 				{
-					syncStart = offset;
+					if ( ! oneBitFound ) {
+						syncStart = offset;
+					}
+					oneBitFound = true;
 					successiveOneBits++;
 				}
-				else
+				else // => 0-bit
 				{
 					// zero bit read
 					if ( successiveOneBits >= 10 )
 					{
-						onSuccessHook.accept( syncStart );
+						if ( syncStart != searchStart )
+						{
+							final int length = bitStream.distanceInBits( searchStart , syncStart );
+							if ( addGap )
+							{
+								addPart( new GapPart( searchStart , length ) );
+							} else if ( addUnknown) {
+								addPart( new UnknownPart( searchStart , length ) );
+							}
+						}
 
 						if ( ! firstSyncFound )
 						{
+							if ( DEBUG ) {
+								System.out.println("First sync on track start at bit "+syncStart);
+							}
 							bitStream.mark(syncStart);
 							firstSyncFound = true;
 						}
 
-						parts.add( new SyncPart( syncStart , successiveOneBits ) );
-						bitStream.rewind(1);
+						addPart( new SyncPart( syncStart , successiveOneBits ) );
+						bitStream.rewind(1); // fix offset, we already read a 0-bit from the upcoming bytes
 						return true;
 					}
+					oneBitFound = false;
 					successiveOneBits = 0;
 				}
+			}
+
+			final int length = bitStream.distanceInBits( searchStart , bitStream.currentBitOffset() );
+			if ( length > 0 ) {
+				addPart( new UnknownPart( searchStart , length ) );
 			}
 			return false;
 		}
@@ -1021,5 +1055,9 @@ Byte    $00 - data block ID ($07)
 		fileOut.write( raw );
 		fileOut.close();
 		System.out.println("D64 file has "+raw.length+" bytes");
+	}
+
+	public SpeedZonesMap getSpeedZonesMap() {
+		return speedZonesMap;
 	}
 }
