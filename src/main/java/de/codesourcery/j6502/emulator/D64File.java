@@ -50,34 +50,41 @@ public class D64File
 		DEL,SEQ,PRG,USR,REL,UNKNOWN;
 	}
 
-	public void write(OutputStream out) throws IOException 
+	public void write(OutputStream out) throws IOException
 	{
 		out.write( data );
 	}
 
-	public final class DirectoryEntry 
+	public void getRawData(int track,int sector,byte[] buffer,int bufferOffset)
+	{
+		final int start = getFirstSectorNoForTrack( track );
+		final int offset = start * BYTES_PER_SECTOR;
+		System.arraycopy( this.data , offset , buffer , bufferOffset , 256 );
+	}
+
+	public final class DirectoryEntry
 	{
 		public final int trackNo; // track that holds this directory entry
 		public final int sectorOnTrack; // sector on track that holds this directory entry
-		public final int dirEntryIndexInSector; // index of this directory within the sector ( 0...7) 
+		public final int dirEntryIndexInSector; // index of this directory within the sector ( 0...7)
 		private final int absEntryOffset;
 
-		protected DirectoryEntry(int absEntryOffset,int dirEntryIndexInSector,int trackNo,int sectorOnTrack) 
+		protected DirectoryEntry(int absEntryOffset,int dirEntryIndexInSector,int trackNo,int sectorOnTrack)
 		{
 			if ( dirEntryIndexInSector < 0 || dirEntryIndexInSector > 7 ) {
 				throw new IllegalArgumentException("Invalid directory entry index "+dirEntryIndexInSector);
 			}
-			// NOTE: This method must NEVER write to the data[] buffer , otherwise 
-			// allocDirectoryEntry(boolean) with simulate == true would corrupt the disk 
+			// NOTE: This method must NEVER write to the data[] buffer , otherwise
+			// allocDirectoryEntry(boolean) with simulate == true would corrupt the disk
 			this.absEntryOffset = absEntryOffset;
 			this.dirEntryIndexInSector = dirEntryIndexInSector;
 			this.trackNo = trackNo;
 			this.sectorOnTrack = sectorOnTrack;
 		}
 
-		protected void init() 
+		protected void init()
 		{
-			for ( int i = 0 ; i < DIR_ENTRY_SIZE ; i++ ) 
+			for ( int i = 0 ; i < DIR_ENTRY_SIZE ; i++ )
 			{
 				data[absEntryOffset+i] = 0;
 			}
@@ -94,16 +101,16 @@ public class D64File
 			return true;
 		}
 
-		protected void setFileType(FileType type) 
+		protected void setFileType(FileType type)
 		{
 			data[ absEntryOffset ] &= ~0b111; // clear lowest 3 bits
-			switch ( type ) 
+			switch ( type )
 			{
 				case DEL: break;
 				case PRG: data[ absEntryOffset ] |= 0b010; break;
 				case REL: data[ absEntryOffset ] |= 0b100; break;
 				case SEQ: data[ absEntryOffset ] |= 0b001; break;
-				case UNKNOWN: 
+				case UNKNOWN:
 					throw new RuntimeException("cannot set directory entry to UNKNOWN");
 				case USR: data[ absEntryOffset ] |= 0b011; break;
 				default:
@@ -172,8 +179,8 @@ public class D64File
 				{
 					if ( data[ globalBufferIndex ] == 0 ) { // track == 0 => last data sector
 						bytesLeftInThisSector = data[ globalBufferIndex+1 ] & 0xff;
-					} 
-					else 
+					}
+					else
 					{
 						bytesLeftInThisSector = BYTES_PER_SECTOR - 2; // 2 bytes for track/sector index
 					}
@@ -244,7 +251,7 @@ public class D64File
 			return (data[ absEntryOffset ] & 1<<6) != 0;
 		}
 
-		protected void setLocked(boolean yesNo) 
+		protected void setLocked(boolean yesNo)
 		{
 			if ( yesNo ) {
 				data[ absEntryOffset ] |= 1<<6;
@@ -253,7 +260,7 @@ public class D64File
 			}
 		}
 
-		protected void setFileName(byte[] petASCII) 
+		protected void setFileName(byte[] petASCII)
 		{
 			if ( petASCII.length > 16 ) {
 				throw new IllegalArgumentException("Filename too long");
@@ -315,7 +322,7 @@ public class D64File
 		}
 
 		@Override
-		public String toString() 
+		public String toString()
 		{
 			String dataSector="";
 			try {
@@ -357,7 +364,7 @@ public class D64File
 
 		protected void setFirstSideSector(int sectorNo) {
 			data[absEntryOffset+0x14] = (byte) sectorNo;
-		}		
+		}
 
 		public int getRelFileRecordLength() {
 			return data[absEntryOffset+0x15] & 0xff;
@@ -365,7 +372,7 @@ public class D64File
 
 		protected void setRelFileRecordLength(int length) {
 			data[absEntryOffset+0x15]=(byte) length;
-		}		
+		}
 
 		/*
           1E-1F: File size in sectors, low/high byte  order  ($1E+$1F*SECTOR_SIZE).
@@ -378,7 +385,7 @@ public class D64File
 			return hi<<8 | low;
 		}
 
-		protected void setFileSizeInSectors(int count) 
+		protected void setFileSizeInSectors(int count)
 		{
 			final int lo = count & 0xff;
 			final int hi = (count>>8) & 0xff;
@@ -487,10 +494,10 @@ public class D64File
 		final D64File file = new D64File( "test.d64");
 
 		System.out.println("Disk name: "+file.getDiskNameInASCII());
-		
+
 		InputStream stream = file.createDirectoryInputStream();
 		while( stream.read() != -1 ) {};
-		
+
 //		toHexDump = file.savePRG( "test2.txt" , (short) 0x0801 , new ByteArrayInputStream( "blah".getBytes() ) );
 
 		final List<DirectoryEntry> directory = file.getDirectory();
@@ -521,7 +528,7 @@ public class D64File
 			System.out.println("Bytes read: "+bytesRead+" ( = "+bytesRead/254.0f+" sectors)");
 		});
 
-		if ( toHexDump != null ) 
+		if ( toHexDump != null )
 		{
 			InputStream inputStream = toHexDump.createInputStream();
 
@@ -547,12 +554,12 @@ public class D64File
 		int sectorNo = 1; // => 1 because the first sector on track 18 holds the BAM (block allocation map)
 
 		final List<DirectoryEntry> result = new ArrayList<>();
-		while(true) 
+		while(true)
 		{
 			final int absSector = getFirstSectorNoForTrack( trackNo )+sectorNo;
 			final int offset = absSector*BYTES_PER_SECTOR;
 
-			for ( int offsetInSector = 2 , entryIndexInSector = 0 ; entryIndexInSector < 8 ; entryIndexInSector++ ) 
+			for ( int offsetInSector = 2 , entryIndexInSector = 0 ; entryIndexInSector < 8 ; entryIndexInSector++ )
 			{
 				final DirectoryEntry tmp=  new DirectoryEntry( offset + offsetInSector , entryIndexInSector , trackNo , sectorNo );
 				if ( tmp.isEmpty() ) {
@@ -571,35 +578,35 @@ public class D64File
 		return result;
 	}
 
-	protected static final class DirEntryCreationResult 
+	protected static final class DirEntryCreationResult
 	{
 		public final DirectoryEntry dirEntry;
 		public final boolean allocatedNewDirSector;
 
-		public DirEntryCreationResult(DirectoryEntry dirEntry, boolean allocatedNewDirSector) 
+		public DirEntryCreationResult(DirectoryEntry dirEntry, boolean allocatedNewDirSector)
 		{
 			this.dirEntry = dirEntry;
 			this.allocatedNewDirSector = allocatedNewDirSector;
 		}
 	}
 
-	protected DirEntryCreationResult allocDirectoryEntry(boolean simulate) throws IOException 
+	protected DirEntryCreationResult allocDirectoryEntry(boolean simulate) throws IOException
 	{
 		int trackNo = 18;
 		int sectorNo = 1; // => 1 because the first sector on track 18 holds the BAM (block allocation map)
 
-		while(true) 
+		while(true)
 		{
 			final int absSector = getFirstSectorNoForTrack( trackNo )+sectorNo;
 			final int offset = absSector*BYTES_PER_SECTOR;
 
-			for ( int offsetInSector = 2 , entryIndexInSector = 0 ; offsetInSector < BYTES_PER_SECTOR ; offsetInSector += DIR_ENTRY_SIZE , entryIndexInSector++ ) 
+			for ( int offsetInSector = 2 , entryIndexInSector = 0 ; offsetInSector < BYTES_PER_SECTOR ; offsetInSector += DIR_ENTRY_SIZE , entryIndexInSector++ )
 			{
 				final DirectoryEntry tmp = new DirectoryEntry( offset + offsetInSector , entryIndexInSector , trackNo , sectorNo );
-				if ( tmp.isEmpty() ) 
+				if ( tmp.isEmpty() )
 				{
 					// sector has unused dir entry , no need to allocate a new sector just to hold the new entry
-					if ( ! simulate ) 
+					if ( ! simulate )
 					{
 						tmp.init();
 					}
@@ -608,12 +615,12 @@ public class D64File
 			}
 			final int nextTrackNo = data[ offset ] & 0xff;
 			final int nextSecorNo = data[ offset+1 ] & 0xff;
-			if ( nextTrackNo == 0  ) 
+			if ( nextTrackNo == 0  )
 			{
-				// need to allocate new sector 
-				for ( BAMEntry e : getAllocationMap() ) 
+				// need to allocate new sector
+				for ( BAMEntry e : getAllocationMap() )
 				{
-					if ( e.getFreeSectorCountFromBitmap() > 0 ) 
+					if ( e.getFreeSectorCountFromBitmap() > 0 )
 					{
 						final int relSector = e.getOffsetOfFirstFreeSectorOnThisTrack();
 						if ( relSector == -1 ) {
@@ -623,7 +630,7 @@ public class D64File
 						final int byteOffset = getFirstSectorNoForTrack( e.trackNo ) + relSector;
 						final DirectoryEntry newEntry = new DirectoryEntry( byteOffset+2 , 0 , e.trackNo , relSector );
 
-						if ( ! simulate ) 
+						if ( ! simulate )
 						{
 							e.markAllocated( relSector );
 
@@ -647,7 +654,7 @@ public class D64File
 		}
 	}
 
-	public int getSectorsOnTrack(int trackNo) 
+	public static int getSectorsOnTrack(int trackNo)
 	{
 		if ( trackNo < 1 ) {
 			throw new IllegalArgumentException("Invalid track no. "+trackNo);
@@ -658,7 +665,7 @@ public class D64File
 18 - 24 	19 	16M/4/(13+1) = 285 714
 25 - 30 	18 	16M/4/(13+2) = 266 667
 31 - 35 	17 	16M/4/(13+3) = 250 000
-36 - 42 	17 	16M/4/(13+3) = 250 000		 
+36 - 42 	17 	16M/4/(13+3) = 250 000
 		 */
 		if ( trackNo <= 17 ) {
 			return 21;
@@ -668,7 +675,7 @@ public class D64File
 		}
 		if ( trackNo <= 30 ) {
 			return 18;
-		}		
+		}
 		return 17;
 	}
 
@@ -728,7 +735,7 @@ public class D64File
 		return 35;
 	}
 
-	public int getFreeSectorCount() 
+	public int getFreeSectorCount()
 	{
 		int totalFree = getBAM().getAllocationMap().stream().mapToInt( e -> e.getFreeSectorsCount() ).sum();
 		return totalFree - getBAM().getAllocationMap( 18 ).getFreeSectorsCount();
@@ -823,7 +830,7 @@ public class D64File
 		return new ByteArrayInputStream( buffer );
 	}
 
-	private byte[] createHeaderLine() 
+	private byte[] createHeaderLine()
 	{
 		final ByteArrayOutputStream out = new ByteArrayOutputStream();
 		out.write( DIR_LOAD_ADR & 0xff ); // lo , load address
@@ -849,26 +856,26 @@ public class D64File
 			// write disk name
 			final byte[] diskName = bam.getDiskName();
 			out.write( diskName );
-			
+
 			// write padding bytes
 			for ( int delta = 16 - diskName.length ; delta > 0 ; delta-- )
 			{
 				out.write( 0x20 );
 			}
-			
+
 			// quote
 			out.write( 0x22 );
-			
+
 			// whitespace
 			out.write( 0x20 );
-			
+
 			// two byte disk ID
 			final byte[] diskID = bam.getDiskID();
-			
+
 			out.write( diskID );
-			
-			out.write( data[BAM_OFFSET + 164] );	
-			
+
+			out.write( data[BAM_OFFSET + 164] );
+
 			// two byte DOS version
 			out.write( bam.getDOSType() );
 		}
@@ -925,19 +932,19 @@ public class D64File
 		// the 28 remaining bytes look like this:
 		// <SECTOR COUNT><ALIGNING>"FILENAME       "      PRG<zero byte>
 		// align program type
-		for ( int remaining = 16 - fileName.length ; remaining > 0 ; remaining--) 
-		{ 
+		for ( int remaining = 16 - fileName.length ; remaining > 0 ; remaining--)
+		{
 			out.write(0x20);
 			lineWidth++;
 		}
-		
+
 		if ( ! entry.isClosed() ) {
 			out.write( (byte) '*');
 		} else {
 			out.write( (byte) ' ');
 		}
 		lineWidth+=1;
-		
+
 		// write file type
 		switch( entry.getFileType() ) {
 			case DEL:
@@ -964,32 +971,32 @@ public class D64File
 				out.write( (byte) '?'); out.write( (byte) '?'); out.write( (byte) '?');
 				lineWidth+=3;
 		}
-		
+
 		if ( entry.isLocked() ) {
 			out.write( (byte) '<');
 		} else {
 			out.write( (byte) ' ');
 		}
 		lineWidth+=1;
-		
-		while ( lineWidth < 31 ) 
+
+		while ( lineWidth < 31 )
 		{
 			out.write( 0x20 );
-			lineWidth+=1;	
-		}	
-		
+			lineWidth+=1;
+		}
+
 		// terminate line
 		out.write( 0x00 );
-		
+
 		return out.toByteArray();
 	}
 
-	public final class BAMEntry 
+	public final class BAMEntry
 	{
 		private final int entryOffset;
 		public final int trackNo;
 
-		public BAMEntry(int trackNo) 
+		public BAMEntry(int trackNo)
 		{
 			this.trackNo = trackNo;
 			this.entryOffset = BAM_OFFSET + 4 + (trackNo-1)*4;
@@ -998,11 +1005,11 @@ public class D64File
 		/**
 		 * Returns the number of free sectors as reported by the
 		 * 'freeSectors' field of this BAM entry.
-		 * 
+		 *
 		 * Note that the returned value may not actually reflect the
 		 * true number of free sectors, use {@link #getFreeSectorCountFromBitmap()}
 		 * if you really need this.
-		 * 
+		 *
 		 * @return
 		 */
 		public int getFreeSectorsCount() {
@@ -1022,10 +1029,10 @@ public class D64File
 		 * by directly inspecting the block allocation bitmap.
 		 * @return
 		 */
-		public int getFreeSectorCountFromBitmap() 
+		public int getFreeSectorCountFromBitmap()
 		{
 			int count = 0;
-			for ( int i = 0 , max = sectorsOnTrack() ; i < max ; i++ ) 
+			for ( int i = 0 , max = sectorsOnTrack() ; i < max ; i++ )
 			{
 				if ( isFree( i ) ) {
 					count++;
@@ -1034,11 +1041,11 @@ public class D64File
 			return count;
 		}
 
-		public int getOffsetOfFirstFreeSectorOnThisTrack() 
+		public int getOffsetOfFirstFreeSectorOnThisTrack()
 		{
-			for ( int i = 0, max = sectorsOnTrack() ; i < max ; i++ ) 
+			for ( int i = 0, max = sectorsOnTrack() ; i < max ; i++ )
 			{
-				if ( isFree(i ) ) 
+				if ( isFree(i ) )
 				{
 					return i;
 				}
@@ -1046,7 +1053,7 @@ public class D64File
 			return -1;
 		}
 
-		public boolean isFree(int sectorOnTrack) 
+		public boolean isFree(int sectorOnTrack)
 		{
 			if ( sectorOnTrack >= sectorsOnTrack() ) {
 				throw new IllegalArgumentException("Track #"+trackNo+" only has "+sectorsOnTrack()+" sectors but you requested "+sectorOnTrack);
@@ -1061,11 +1068,11 @@ public class D64File
 			return ! isFree( sectorOnTrack );
 		}
 
-		public void markAllocated(int relSector) 
+		public void markAllocated(int relSector)
 		{
 			if ( relSector >= sectorsOnTrack() ) {
 				throw new IllegalArgumentException("Track #"+trackNo+" only has "+sectorsOnTrack()+" sectors but you requested "+relSector);
-			}			
+			}
 			final int byteOffset = relSector / 8; // 3 bytes allocation map with 1 bit per sector
 			final int bitInByte = relSector - byteOffset*8;
 			data[ entryOffset + 1 + byteOffset ] &= ~(1 << bitInByte);
@@ -1077,10 +1084,10 @@ public class D64File
 	{
 		private final List<BAMEntry> allocationMap;
 
-		public BAM() 
+		public BAM()
 		{
 			final List<BAMEntry> result = new ArrayList<>();
-			for ( int track = 1 ; track < 36 ; track++ ) 
+			for ( int track = 1 ; track < 36 ; track++ )
 			{
 				result.add( new BAMEntry( track ) );
 			}
@@ -1124,7 +1131,7 @@ public class D64File
 		public byte[] getDiskName()
 		{
 			int count = 0;
-			for ( int i = 0 ; i < 16 ; i++ ) 
+			for ( int i = 0 ; i < 16 ; i++ )
 			{
 				if ( data[ BAM_OFFSET + 0x90 + i ] == 0xa0 ) {
 					break;
@@ -1141,7 +1148,7 @@ public class D64File
 			return allocationMap.stream().filter( e -> e.trackNo == track ).findFirst().orElseThrow( () -> new IllegalArgumentException("Invalid track no. "+track));
 		}
 
-		public List<BAMEntry> getAllocationMap() 
+		public List<BAMEntry> getAllocationMap()
 		{
 			return new ArrayList<>( allocationMap );
 		}
@@ -1155,21 +1162,21 @@ public class D64File
 		return bam.getAllocationMap();
 	}
 
-	public String getDiskNameInASCII() 
+	public String getDiskNameInASCII()
 	{
 		byte[] diskName = bam.getDiskName();
-		
+
 		return CharsetConverter.petToASCII( diskName );
 	}
 
-	public DirectoryEntry savePRG(String fileNameInASCII , short prgLoadAdr, InputStream inputStream) throws IOException 
+	public DirectoryEntry savePRG(String fileNameInASCII , short prgLoadAdr, InputStream inputStream) throws IOException
 	{
 		// copy input to byte array so we know the
 		// number of bytes that need to be written
 		final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 
 		int in=-1;
-		while( (in=inputStream.read() ) != -1 ) 
+		while( (in=inputStream.read() ) != -1 )
 		{
 			buffer.write( in );
 		}
@@ -1183,13 +1190,13 @@ public class D64File
 
 		// insert program load address at start of payload
 		payload[ 0 ] = (byte) ( prgLoadAdr & 0xff); // lo
-		payload[ 1 ] = (byte) ((prgLoadAdr>>8) & 0xff); // hi		
+		payload[ 1 ] = (byte) ((prgLoadAdr>>8) & 0xff); // hi
 
-		final int payloadSizeInSectors = (int) Math.ceil( payload.length / 254f ); 
+		final int payloadSizeInSectors = (int) Math.ceil( payload.length / 254f );
 
 		// simulate creating a new directory entry so we know whether we'll need one additional sector to hold the directory entry
 		final int dirEntrySectorCount = allocDirectoryEntry(true).allocatedNewDirSector ? 1 : 0;
-		final int sectorsRequired= payloadSizeInSectors + dirEntrySectorCount; 
+		final int sectorsRequired= payloadSizeInSectors + dirEntrySectorCount;
 
 		// make sure there's enough disk space available
 		final int sectorsAvailable = getAllocationMap().stream().mapToInt( entry -> entry.getFreeSectorCountFromBitmap() ).sum();
@@ -1209,9 +1216,9 @@ public class D64File
 
 		int readOffset = 0;
 		int previousSectorOffset=-1;
-		for (int i = 0; i < allocationMap.size(); i++) 
+		for (int i = 0; i < allocationMap.size(); i++)
 		{
-			if ( readOffset >= payload.length ) 
+			if ( readOffset >= payload.length )
 			{
 				dirEntry.setClosed( true );
 				return dirEntry;
@@ -1219,7 +1226,7 @@ public class D64File
 
 			final BAMEntry bamEntry = allocationMap.get(i);
 			final int relSector = bamEntry.getOffsetOfFirstFreeSectorOnThisTrack();
-			if ( relSector != -1 ) 
+			if ( relSector != -1 )
 			{
 				bamEntry.markAllocated( relSector );
 
@@ -1234,24 +1241,24 @@ public class D64File
 					// first data sector of file, update directory entry to point to it
 					dirEntry.setFirstDataTrack( bamEntry.trackNo );
 					dirEntry.setFirstDataSector( relSector );
-				} 
-				else 
+				}
+				else
 				{
 					this.data[ previousSectorOffset ] = (byte) bamEntry.trackNo;
 					this.data[ previousSectorOffset+1 ] = (byte) relSector;
-				} 
+				}
 
 				previousSectorOffset = dataOffset;
 
 				final int bytesLeftToWrite = payload.length - readOffset;
 				final int bytesUsedInThisSector =  (bytesLeftToWrite > payloadBytesFreeInThisSector ? payloadBytesFreeInThisSector : bytesLeftToWrite);
 
-				this.data[ dataOffset    ] = 0; // track number, 0 = last sector in file	... clear link to track of next data sector just in case this is the last sector we're writing		
+				this.data[ dataOffset    ] = 0; // track number, 0 = last sector in file	... clear link to track of next data sector just in case this is the last sector we're writing
 				this.data[ dataOffset +1 ] = (byte) bytesUsedInThisSector; // bytes used in this sector, will be overwritten with sector number if this is not the last sector we're writing
 
-				for ( int j = 0 ; j < payloadBytesFreeInThisSector ; j++ ) 
+				for ( int j = 0 ; j < payloadBytesFreeInThisSector ; j++ )
 				{
-					if ( readOffset < payload.length ) 
+					if ( readOffset < payload.length )
 					{
 						this.data[ writeOffset + j ] = payload[ readOffset++ ];
 					} else {
@@ -1262,5 +1269,5 @@ public class D64File
 		}
 		// not reachable, unless the block allocation bitmap handling is screwed up for some reason (bug)
 		throw new RuntimeException("Internal error, disk full ??");
-	}	
+	}
 }

@@ -15,8 +15,16 @@ public final class BitStream
     private int mark;
 
     public BitStream(byte[] data) {
+    	this(data, data.length * 8 );
+    }
+
+    public BitStream(byte[] data,int bitsAvailable)
+    {
+    	if ( (bitsAvailable/8) > data.length ) {
+    		throw new IllegalArgumentException("bitsAvailable > array len ??");
+    	}
         this.data = data;
-        setStartingOffset( 0 , data.length * 8 );
+        setStartingOffset( 0 , bitsAvailable);
     }
 
     public void reset()
