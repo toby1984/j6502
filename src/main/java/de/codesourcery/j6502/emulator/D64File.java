@@ -58,7 +58,7 @@ public class D64File
 	public void getRawData(int track,int sector,byte[] buffer,int bufferOffset)
 	{
 		final int start = getFirstSectorNoForTrack( track );
-		final int offset = start * BYTES_PER_SECTOR;
+		final int offset = (start+sector)* BYTES_PER_SECTOR;
 		System.arraycopy( this.data , offset , buffer , bufferOffset , 256 );
 	}
 
@@ -677,6 +677,17 @@ public class D64File
 			return 18;
 		}
 		return 17;
+	}
+	public static int getTrackForSectorNumber(int sectorNo) 
+	{
+	    int sum = 0;
+	    for ( int track = 1 ; track <= 42 ; track++ ) {
+	        sum += getSectorsOnTrack( track );
+	        if ( sectorNo <= sum ) {
+	            return track;
+	        }
+	    }
+	    throw new IllegalArgumentException("Sector number "+sectorNo+" is out of range");
 	}
 
 	public static int getFirstSectorNoForTrack(int trackNo)
