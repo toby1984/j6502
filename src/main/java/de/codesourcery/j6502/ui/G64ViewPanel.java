@@ -43,7 +43,7 @@ Track Range  Storage in Bytes    Speed Zone
   18-24           7170               2
   25-30           6300               1
   31-4x           6020               0  (fastest writing speed)
-     */    
+     */
     protected static final Color COLOR_SPEED_00 = Color.RED;
     protected static final Color COLOR_SPEED_01 = Color.ORANGE;
     protected static final Color COLOR_SPEED_10 = Color.YELLOW;
@@ -90,7 +90,7 @@ Track Range  Storage in Bytes    Speed Zone
             legend( "Unknown" , COLOR_UNRECOGNIZED ),
             legend( "Selected" , COLOR_HIGHLIGHT ),
             legend( "Has errors" , COLOR_HAS_ERRORS )
-            );
+    );
 
     protected static final class LegendItem {
         public final Color color;
@@ -110,10 +110,10 @@ Track Range  Storage in Bytes    Speed Zone
             this.items = items;
         }
 
-        public void render(int x,int y,Graphics2D g) 
+        public void render(int x,int y,Graphics2D g)
         {
             g.setTransform( IDENTITY );
-            
+
             final FontMetrics fm = g.getFontMetrics();
             final int heightPerRow = (int) (Math.max( fm.getHeight()  , fm.getHeight() )*1.1f);
 
@@ -134,7 +134,7 @@ Track Range  Storage in Bytes    Speed Zone
             }
         }
 
-        private void renderItem(LegendItem item,Rectangle r,Graphics2D g) 
+        private void renderItem(LegendItem item,Rectangle r,Graphics2D g)
         {
             final FontMetrics fm = g.getFontMetrics();
 
@@ -171,9 +171,9 @@ Track Range  Storage in Bytes    Speed Zone
         return new LegendItem(label,color);
     }
 
-    protected static enum ViewMode 
-    { 
-        DATA("Data"), 
+    protected static enum ViewMode
+    {
+        DATA("Data"),
         BITRATE("Bitrate");
 
         private final String label;
@@ -221,7 +221,7 @@ Track Range  Storage in Bytes    Speed Zone
                     if ( segmentToHighlight.part.hasErrors() )
                     {
                         String errors = segmentToHighlight.part.getErrors().stream().limit(15).map( s -> s.toString() ).collect( Collectors.joining("<BR/>" ) );
-                        if ( segmentToHighlight.part.getErrors().size() > 15 ) 
+                        if ( segmentToHighlight.part.getErrors().size() > 15 )
                         {
                             final int delta = segmentToHighlight.part.getErrors().size() -15;
                             errors += "<BR/>&lt; "+delta+" more errors &gt;</BR>";
@@ -234,24 +234,27 @@ Track Range  Storage in Bytes    Speed Zone
             }
         }
 
-        public void mouseDragged(MouseEvent e) 
+        @Override
+		public void mouseDragged(MouseEvent e)
         {
-            if (viewportP0 != null ) 
+            if (viewportP0 != null )
             {
                 viewportRadius = viewportP0.distance( e.getPoint() );
                 repaint();
             }
         }
-        
-        public void mousePressed(MouseEvent e) 
+
+        @Override
+		public void mousePressed(MouseEvent e)
         {
-            if ( e.getButton() == MouseEvent.BUTTON1 && viewportP0 == null && currentViewPort.x == 0 ) 
+            if ( e.getButton() == MouseEvent.BUTTON1 && viewportP0 == null && currentViewPort.x == 0 )
             {
                 viewportP0 = new Point( e.getPoint() );
             }
         }
-        
-        public void mouseReleased(MouseEvent e) 
+
+        @Override
+		public void mouseReleased(MouseEvent e)
         {
             if ( e.getButton() == MouseEvent.BUTTON1 && viewportP0 != null )
             {
@@ -342,23 +345,25 @@ Track Range  Storage in Bytes    Speed Zone
     }
 
     private Legend getLegend() {
-        return viewMode.equals( ViewMode.DATA ) ? new Legend( LEGEND_DATA ) : new Legend( LEGEND_BITRATE ); 
+        return viewMode.equals( ViewMode.DATA ) ? new Legend( LEGEND_DATA ) : new Legend( LEGEND_BITRATE );
     }
 
-    private void setupSegments() 
+    private void setupSegments()
     {
         segments.clear();
+
+        // Track 35 is nearest the center hub, and track 1 is the outermost
         for ( int i = 0 ; i < TOTAL_TRACKS ; i++ )
         {
-            final float realTrack = 1+ (i/2.0f);
+            final float realTrack = 1+ ( (83-i)/2.0f);
 
             final Optional<TrackData> trackData = disk.getTrackData( realTrack );
             switch( viewMode ) {
                 case DATA:
-                    this.segments.put( Integer.valueOf(i) , trackToSegments( i , trackData ) );
+                    this.segments.put( Integer.valueOf( i) , createDataMap( i , trackData ) );
                     break;
                 case BITRATE:
-                    this.segments.put( Integer.valueOf(i) , createSpeedMap( i , trackData ) );
+                    this.segments.put( Integer.valueOf( i) , createSpeedMap( i , realTrack , trackData ) );
                     break;
                 default:
                     throw new RuntimeException("Unreachable code reached");
@@ -369,60 +374,6 @@ Track Range  Storage in Bytes    Speed Zone
             System.exit(0);
         }
         forceRepaint();
-    }
-
-    private List<Segment> createSpeedMap(int trackNo,Optional<TrackData> trackData)
-    {
-        final double rStart = CENTER_HOLE_RADIUS + trackNo*trackWidth;
-        final double rEnd = rStart + trackWidth;
-        final float realFloppyTrack = 1+ ( trackNo /2.0f);
-
-        final TrackZoneSpeeds zoneSpeeds = disk.getSpeedZonesMap().getSpeedZone( realFloppyTrack );
-
-        final List<Segment> result = new ArrayList<Segment>();
-        if ( trackData.isPresent() )
-        {
-            if ( zoneSpeeds.alwaysSameSpeed ) 
-            {
-                result.add( new Segment( trackNo , rStart, rEnd , 0 , 360 , null , zoneSpeeds.speed ) );
-            } 
-            else 
-            {
-                final List<TrackPart> parts = trackData.get().getParts();
-                final int totalLengthInBytes = (int) Math.ceil( parts.stream().mapToInt( p -> p.getLengthInBits() ).sum() / 8f );
-                final double angleIncrement = 360.0d / totalLengthInBytes;
-
-                int previousSpeed = zoneSpeeds.getSpeedForByte( 0 );
-                int currentSpeed = previousSpeed;
-
-                double previousAngle = 0;
-                int previousOffset = 0;
-                int currentOffset = 1;
-                int lastOffset = -1;
-                for ( ; currentOffset < totalLengthInBytes ; currentOffset++ )
-                {
-                    currentSpeed = zoneSpeeds.getSpeedForByte( currentOffset );
-                    if ( currentSpeed != previousSpeed )
-                    {
-                        final int len = currentOffset - previousOffset;
-                        result.add( new Segment( trackNo , rStart , rEnd , previousAngle , previousAngle + len*angleIncrement , previousSpeed ) );
-                        lastOffset = currentOffset;
-                        previousOffset = currentOffset;
-                        previousSpeed = currentSpeed;
-                    }
-                }
-
-                if ( lastOffset != -1 && lastOffset != currentOffset ) {
-                    final int len = currentOffset - previousOffset;
-                    result.add( new Segment( trackNo , rStart , rEnd , previousAngle , previousAngle + len*angleIncrement , currentSpeed ) );
-                }
-            }
-        }
-
-        if ( result.isEmpty() ) {
-            result.add( new Segment( trackNo , rStart, rEnd , 0 , 360 , null , SPEED_UNKNOWN ) );
-        }
-        return result;
     }
 
     private void forceRepaint()
@@ -452,7 +403,7 @@ Track Range  Storage in Bytes    Speed Zone
         graphics.setColor( Color.WHITE);
         graphics.fillRect( 0,0,getWidth() , getHeight() );
 
-        if ( ! segments.isEmpty() ) 
+        if ( ! segments.isEmpty() )
         {
             int w = getWidth() - 2*HORIZIONTAL_BORDER;
             int h = getHeight() - 2*VERTICAL_BORDER;
@@ -509,7 +460,7 @@ Track Range  Storage in Bytes    Speed Zone
 
                     Color currentColor = null;
 
-                    if ( viewMode.equals( ViewMode.BITRATE ) ) 
+                    if ( viewMode.equals( ViewMode.BITRATE ) )
                     {
                         switch( segment.speed ) {
                             case 0: currentColor = COLOR_SPEED_00; break;
@@ -519,18 +470,14 @@ Track Range  Storage in Bytes    Speed Zone
                             default:
                                 currentColor = COLOR_SPEED_UNKNOWN;
                         }
-                    } 
-                    else 
+                    }
+                    else
                     {
                         if ( segment.part != null )
                         {
                             if ( segment.part.hasErrors() )
                             {
-                                if ( segment.floppyTrackNo() == 19f ) {
-                                    currentColor = Color.PINK;
-                                } else {
-                                    currentColor = COLOR_HAS_ERRORS;
-                                }
+                                currentColor = COLOR_HAS_ERRORS;
                             } else {
                                 switch( segment.part.type )
                                 {
@@ -594,9 +541,9 @@ Track Range  Storage in Bytes    Speed Zone
             graphics.drawString( msg , 15, 15);
             graphics.setTransform( old );
         }
-        
-        getLegend().render( 15,25, graphics );        
-        
+
+        getLegend().render( 15,25, graphics );
+
         // render image
         g.drawImage( image, 0 , 0 , null );
     }
@@ -621,11 +568,6 @@ Track Range  Storage in Bytes    Speed Zone
 
             final double rad = 10;
 
-            if ( s.floppyTrackNo() == 19f ) {
-                graphics.setColor( Color.PINK );
-            } else {
-                graphics.setColor( Color.RED );
-            }
             arc.setArc( x0 - rad , y0 - rad, rad*2, rad*2, 0, 360, Arc2D.OPEN );
             graphics.draw( arc );
         }
@@ -688,7 +630,7 @@ Track Range  Storage in Bytes    Speed Zone
         return new Rectangle( p0.x , p0.y , p1.x - p0.x , p2.y - p0.y );
     }
 
-    private List<Segment> trackToSegments(int trackNo, Optional<TrackData> trackData)
+    private List<Segment> createDataMap(int trackNo, Optional<TrackData> trackData)
     {
         final double rStart = CENTER_HOLE_RADIUS + trackNo*trackWidth;
         final double rEnd = rStart + trackWidth;
@@ -709,7 +651,7 @@ Track Range  Storage in Bytes    Speed Zone
                 for ( TrackPart part : parts )
                 {
                     double angleInc = ( part.getLengthInBits()/ (double) totalLength) * 360.0d;
-                    lastSegment = new Segment( trackNo , rStart , rEnd , startAngle , startAngle + angleInc , part );
+                    lastSegment = new Segment( 83-trackNo , rStart , rEnd , startAngle , startAngle + angleInc , part );
                     result.add( lastSegment  );
                     startAngle += angleInc;
                 }
@@ -721,7 +663,60 @@ Track Range  Storage in Bytes    Speed Zone
                 }
             }
         } else { // non-existent track
-            result.add( new Segment( trackNo , rStart, rEnd , 0 , 360 , null ) );
+            result.add( new Segment( 83-trackNo , rStart, rEnd , 0 , 360 , null ) );
+        }
+        return result;
+    }
+
+    private List<Segment> createSpeedMap(int trackNo,float realFloppyTrack , Optional<TrackData> trackData)
+    {
+        final double rStart = CENTER_HOLE_RADIUS + (83-trackNo)*trackWidth;
+        final double rEnd = rStart + trackWidth;
+
+        final TrackZoneSpeeds zoneSpeeds = disk.getSpeedZonesMap().getSpeedZone( realFloppyTrack );
+
+        final List<Segment> result = new ArrayList<Segment>();
+        if ( trackData.isPresent() )
+        {
+            if ( zoneSpeeds.alwaysSameSpeed )
+            {
+                result.add( new Segment( 83-trackNo , rStart, rEnd , 0 , 360 , null , zoneSpeeds.speed ) );
+            }
+            else
+            {
+                final List<TrackPart> parts = trackData.get().getParts();
+                final int totalLengthInBytes = (int) Math.ceil( parts.stream().mapToInt( p -> p.getLengthInBits() ).sum() / 8f );
+                final double angleIncrement = 360.0d / totalLengthInBytes;
+
+                int previousSpeed = zoneSpeeds.getSpeedForByte( 0 );
+                int currentSpeed = previousSpeed;
+
+                double previousAngle = 0;
+                int previousOffset = 0;
+                int currentOffset = 1;
+                int lastOffset = -1;
+                for ( ; currentOffset < totalLengthInBytes ; currentOffset++ )
+                {
+                    currentSpeed = zoneSpeeds.getSpeedForByte( currentOffset );
+                    if ( currentSpeed != previousSpeed )
+                    {
+                        final int len = currentOffset - previousOffset;
+                        result.add( new Segment( 83-trackNo , rStart , rEnd , previousAngle , previousAngle + len*angleIncrement , previousSpeed ) );
+                        lastOffset = currentOffset;
+                        previousOffset = currentOffset;
+                        previousSpeed = currentSpeed;
+                    }
+                }
+
+                if ( lastOffset != -1 && lastOffset != currentOffset ) {
+                    final int len = currentOffset - previousOffset;
+                    result.add( new Segment( 83-trackNo , rStart , rEnd , previousAngle , previousAngle + len*angleIncrement , currentSpeed ) );
+                }
+            }
+        }
+
+        if ( result.isEmpty() ) {
+            result.add( new Segment( 83-trackNo , rStart, rEnd , 0 , 360 , null , SPEED_UNKNOWN ) );
         }
         return result;
     }
