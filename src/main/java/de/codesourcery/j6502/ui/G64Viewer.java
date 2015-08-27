@@ -56,6 +56,26 @@ public class G64Viewer extends JPanel
             }
         });
     }
+    
+    public static void show(final G64File file) throws InvocationTargetException, InterruptedException 
+    {
+        SwingUtilities.invokeAndWait( () ->
+        {
+            try {
+                final JFrame frame = new JFrame("test");
+                frame.setDefaultCloseOperation( JFrame.EXIT_ON_CLOSE );
+
+                frame.getContentPane().add( new G64Viewer( file ) );
+
+                frame.pack();
+                frame.setLocationRelativeTo( null );
+                frame.setVisible( true );
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.exit(0);;
+            }
+        });
+    }
 
     public G64Viewer() {
         this(null);
