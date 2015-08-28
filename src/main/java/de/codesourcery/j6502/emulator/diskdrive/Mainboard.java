@@ -17,11 +17,15 @@ public class Mainboard extends IMemoryRegion
 {
     protected static final boolean PRINT_DISASSEMBLY = false;
     
-    private static final int ROM_START = 0xc000;
-    private static final AddressRange ROM_RANGE = AddressRange.range(ROM_START,0x10000);
+    private static final int ROM_START1 = 0x8000;
+    private static final int ROM_START2 = 0xc000;
+    
+    private static final AddressRange ROM1_RANGE = AddressRange.range(ROM_START1,0xc000);
+    private static final AddressRange ROM2_RANGE = AddressRange.range(ROM_START2,0x10000);
     
     private final Memory ram = new Memory( "RAM" , new AddressRange(0,2*1024) );
-    private WriteOnceMemory rom = new WriteOnceMemory( "ROM" , ROM_RANGE );
+    private WriteOnceMemory rom1 = new WriteOnceMemory( "ROM" , ROM1_RANGE );
+    private WriteOnceMemory rom2 = new WriteOnceMemory( "ROM" , ROM2_RANGE );
 
     private final CPU cpu = new CPU( this );
     private final CPUImpl cpuImpl = new CPUImpl( cpu , this );
@@ -105,8 +109,10 @@ public class Mainboard extends IMemoryRegion
                 memoryMap[i] = busController;
             } else if ( i >= 0x1c00 && i < 0x1c10 ) {
                 memoryMap[i] = diskController;
+            } else if ( i >= 0x8000 ) {
+                memoryMap[i] = rom1;
             } else if ( i >= 0xc000 ) {
-                memoryMap[i] = rom;
+                memoryMap[i] = rom2;
             } else {
                 memoryMap[i] = nonExistant;
             }
@@ -120,14 +126,8 @@ public class Mainboard extends IMemoryRegion
         diskController.reset();
         ram.reset();
         
-        final WriteOnceMemory newRom = new WriteOnceMemory( "ROM" , ROM_RANGE );
-        MemorySubsystem.loadROM( "1541-c000.325302-01.bin" , rom );        
-        for ( int i = 0 ; i < 65536 ; i++ ) {
-            if ( memoryMap[i] == rom ) {
-                memoryMap[i] = newRom;
-            }
-        }
-        rom = newRom;
+        MemorySubsystem.loadROM( "1541-c000.325302-01.bin" , rom1 );        
+        MemorySubsystem.loadROM( "1541-c000.325302-01.bin" , rom2 );
         
         cpu.reset();
     }
