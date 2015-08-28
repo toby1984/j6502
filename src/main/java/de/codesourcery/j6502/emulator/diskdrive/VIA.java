@@ -21,11 +21,11 @@ public class VIA extends Memory {
      * - If you read a pin on IRA and input latching is enabled for port A, then you
      *   will read the actual IRA, which is the last value that was latched into IRA.
      *
-     * - If you read a pin on IRB and the pin is set to be an input (with latching
-     *   disabled), then you will read the current state of the corresponding PB pin.
+     * - If you read a pin on IRB and the pin is set to be an input with latching
+     *   disabled, then you will read the current state of the corresponding PB pin.
      *
-     * - If you read a pin on IRB and the pin is set to be an input (with latching
-     *   enabled), then you will read the actual IRB.
+     * - If you read a pin on IRB and the pin is set to be an input with latching
+     *   enabled, then you will read the actual IRB.
      *
      * - If you read a pin on IRB and the pin is set to be an output, then you will
      *   actually read ORB, which contains the last value that was written to port B.
@@ -33,6 +33,19 @@ public class VIA extends Memory {
      * - Writing to a pin which is set to be an input will change the OR for that pin,
      *   but the state of the pin itself will not change as long as the DDR dictates
      *   that it is an input.
+     *
+     *   Port A:
+     *
+     *   | Latching |     DDR      |  Result
+     *   | disabled |   dont-care  |  state of PA pin
+     *   | enabled  |   dont-care  |  state of IR
+     *
+     *   Port B:
+     *
+     *   | Latching  |     DDR      |  Result
+     *   | disabled  |   input      |  state of PB pin
+     *   | enabled   |   input      |  state of IR
+     *   | dont-care |   output     |  state of OR <<< !!
      *
      *   Note that there is no such thing as "output latching" on the 6522; Writing to
      *   ORA or ORB will always simply set the OR, and the OR will then retain that
@@ -44,6 +57,109 @@ public class VIA extends Memory {
      *
      *   >>> Writing to a pin which is set to be an input does nothing. <<<<
      */
+
+	private final Port portA = new Port();
+	private final Port portB = new Port() {
+
+		@Override
+		protected int readRegisterLatchingDisabled()
+		{
+			int result = 0;
+			for ( int i = 7, mask = 1<<7 ; i >= 0 ; i-- , mask = mask >>> 1 )
+			{
+				if ( isOutput( i ) ) {
+					result |= ( or & mask);
+				} else {
+					result |= ( externalPins & mask);
+				}
+			}
+			return result;
+		}
+
+		@Override
+		protected int readRegisterLatchingEnabled()
+		{
+			int result = 0;
+			for ( int i = 7, mask = 1<<7 ; i >= 0 ; i-- , mask = mask >>> 1 )
+			{
+				if ( isOutput( i ) ) {
+					result |= ( or & mask);
+				} else {
+					result |= ( ir & mask);
+				}
+			}
+			return result;
+		}
+	};
+
+	protected static class Port
+	{
+		protected boolean latchingEnabled = false;
+
+		protected int ddr;
+		protected int ir;
+		protected int or;
+		protected int externalPins;
+
+		public final int readRegister()
+		{
+			return latchingEnabled ? readRegisterLatchingEnabled() : readRegisterLatchingDisabled();
+		}
+
+		public void tick()
+		{
+			int result = externalPins;
+			int value = or;
+
+			for ( int i = 7, mask = 1<<7 ; i >= 0 ; i-- , mask = mask >>> 1 )
+			{
+				if ( isOutput( i ) )
+				{
+					if ( (value & mask) != 0 )
+					{
+						result |= mask;
+					} else {
+						result &= ~mask;
+					}
+				}
+			}
+			externalPins = result;
+		}
+
+		public int getDDR() {
+			return ddr;
+		}
+
+		public void setDDR(int ddr) {
+			this.ddr = ddr & 0xff;
+		}
+
+		public final void writeRegister(int value)
+		{
+			or = value & 0xff;
+		}
+
+		public final boolean isInput(int bit) {
+			return (ddr & (1<<bit)) == 0;
+		}
+
+		public final boolean isOutput(int bit) {
+			return (ddr & (1<<bit)) != 0;
+		}
+
+		protected int readRegisterLatchingDisabled() {
+			return externalPins;
+		}
+
+		protected int readRegisterLatchingEnabled() {
+			return ir;
+		}
+
+		public void setLatchingEnabled(boolean latchingEnabled) {
+			this.latchingEnabled = latchingEnabled;
+		}
+	}
+
     protected static final int PORTB = 0x0000; // Data port B
     protected static final int PORTA = 0x0001; // Data port A
 
@@ -171,18 +287,6 @@ public class VIA extends Memory {
      */
     protected static final int PORTA_NOHANDSHAKE  = 0x000F;
 
-    private int readPortA; // port A read buffer
-    private int readPortB; // port B read buffer
-
-    private int writePortA; // port A write buffer
-    private int writePortB; // port B write buffer
-
-    private int porta;
-    private int portb;
-
-    private int ddra;
-    private int ddrb;
-
     private int timer1;
 
     private int t1latchlo;
@@ -221,13 +325,13 @@ public class VIA extends Memory {
     	switch( offset )
     	{
 		    case PORTB:
-		    	return readPortB;
+		    	return portB.readRegister();
 		    case PORTA:
-		    	return readPortA;
+		    	return portA.readRegister();
 		    case DDRB:
-		    	return ddrb;
+		    	return portB.getDDR();
 		    case DDRA:
-		    	return ddra;
+		    	return portA.getDDR();
 		    case T1CL:
 		    	return timer1 & 0xff;
 		    case T1CH:
@@ -253,7 +357,7 @@ public class VIA extends Memory {
 		    case IER:
 		    	return irqEnable;
 		    case PORTA_NOHANDSHAKE:
-		    	return readPortA;
+		    	return portA.readRegister();
     		default:
     			throw new IllegalArgumentException("No register at "+HexDump.toAdr(offset));
     	}
@@ -262,46 +366,57 @@ public class VIA extends Memory {
     @Override
     public void writeByte(int offset, byte value)
     {
-//
-//    	switch( offset )
-//    	{
-//		    case PORTB:
-//		    	return readPortB;
-//		    case PORTA:
-//		    	return readPortA;
-//		    case DDRB:
-//		    	return ddrb;
-//		    case DDRA:
-//		    	return ddra;
-//		    case T1CL:
-//		    	return timer1 & 0xff;
-//		    case T1CH:
-//		    	return (timer1 & 0xff00) >> 8;
-//		    case T1LL:
-//		    	return t1latchlo;
-//		    case T1LH:
-//		    	return t1latchhi;
-//		    case T2CL:
-//		    	irqFlags &= ~(1<<5);
-//		    	return (timer2 & 0xff);
-//		    case T2CH:
-//		    	irqFlags &= ~(1<<5);
-//		    	return (timer2 & 0xff00) >> 8;
-//		    case SR:
-//		    	return sr;
-//		    case ACR:
-//		    	return acr;
-//		    case PCR:
-//		    	return pcr;
-//		    case IFR:
-//		    	return irqFlags;
-//		    case IER:
-//		    	return irqEnable;
-//		    case PORTA_NOHANDSHAKE:
-//		    	return readPortA;
-//    		default:
-//    			throw new IllegalArgumentException("No register at "+HexDump.toAdr(offset));
-//    	}
+    	switch( offset )
+    	{
+    		case PORTA:
+    			portA.writeRegister( value );
+    			break;
+		    case PORTB:
+		    	portB.writeRegister( value );
+		    	break;
+		    case DDRA:
+		    	portA.setDDR( value );
+		    	break;
+		    case DDRB:
+		    	portB.setDDR( value );
+		    	break;
+		    case T1CL:
+		    	return timer1 & 0xff;
+		    case T1CH:
+		    	return (timer1 & 0xff00) >> 8;
+		    case T1LL:
+		    	return t1latchlo;
+		    case T1LH:
+		    	return t1latchhi;
+		    case T2CL:
+		    	irqFlags &= ~(1<<5);
+		    	return (timer2 & 0xff);
+		    case T2CH:
+		    	irqFlags &= ~(1<<5);
+		    	return (timer2 & 0xff00) >> 8;
+		    case SR:
+		    	return sr;
+		    case ACR:
+		    	this.acr = value & 0xff;
+		    	/*
+     * bit 1 - port B latching ( 0 = disable , 1 = enable)
+     * bit 0 - port A latching ( 0 = disable , 1 = enable)
+		    	 */
+		    	portA.setLatchingEnabled( ( value & 1 ) != 0 );
+		    	portB.setLatchingEnabled( ( value & 2 ) != 0 );
+		    	break;
+		    case PCR:
+		    	return pcr;
+		    case IFR:
+		    	return irqFlags;
+		    case IER:
+		    	return irqEnable;
+		    case PORTA_NOHANDSHAKE:
+		    	portA.writeRegister( value );
+		    	break;
+    		default:
+    			throw new IllegalArgumentException("No register at "+HexDump.toAdr(offset));
+    	}
     }
 
     public void tick(boolean clock)
