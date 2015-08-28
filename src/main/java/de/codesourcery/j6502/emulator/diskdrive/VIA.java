@@ -10,8 +10,18 @@ import de.codesourcery.j6502.utils.HexDump;
  * Datasheet: http://www.princeton.edu/~mae412/HANDOUTS/Datasheets/6522.pdf
  * @author tobias.gierke@code-sourcery.de
  */
-public class VIA extends Memory {
-
+public class VIA extends Memory 
+{
+    public interface VIAChangeListener 
+    {
+        public void portAChanged(VIA via);
+        public void portBChanged(VIA via);
+        public void caChanged(VIA via);
+        public void cbChanged(VIA via);
+    }
+    
+    private VIAChangeListener changeListener;
+    
     /* Behaviour of input registers (IR) / output registers (OR)
      *
      * - If you read a pin on IRA and input latching is disabled for port A, then you
@@ -58,107 +68,135 @@ public class VIA extends Memory {
      *   >>> Writing to a pin which is set to be an input does nothing. <<<<
      */
 
-	private final Port portA = new Port();
-	private final Port portB = new Port() {
+    private final Port portA = new Port();
+    private final Port portB = new Port() {
 
-		@Override
-		protected int readRegisterLatchingDisabled()
-		{
-			int result = 0;
-			for ( int i = 7, mask = 1<<7 ; i >= 0 ; i-- , mask = mask >>> 1 )
-			{
-				if ( isOutput( i ) ) {
-					result |= ( or & mask);
-				} else {
-					result |= ( externalPins & mask);
-				}
-			}
-			return result;
-		}
+        @Override
+        protected int readRegisterLatchingDisabled()
+        {
+            int result = 0;
+            for ( int i = 7, mask = 1<<7 ; i >= 0 ; i-- , mask = mask >>> 1 )
+            {
+                if ( isOutput( i ) ) {
+                    result |= ( or & mask);
+                } else {
+                    result |= ( externalPins & mask);
+                }
+            }
+            return result;
+        }
 
-		@Override
-		protected int readRegisterLatchingEnabled()
-		{
-			int result = 0;
-			for ( int i = 7, mask = 1<<7 ; i >= 0 ; i-- , mask = mask >>> 1 )
-			{
-				if ( isOutput( i ) ) {
-					result |= ( or & mask);
-				} else {
-					result |= ( ir & mask);
-				}
-			}
-			return result;
-		}
-	};
+        @Override
+        protected int readRegisterLatchingEnabled()
+        {
+            int result = 0;
+            for ( int i = 7, mask = 1<<7 ; i >= 0 ; i-- , mask = mask >>> 1 )
+            {
+                if ( isOutput( i ) ) {
+                    result |= ( or & mask);
+                } else {
+                    result |= ( ir & mask);
+                }
+            }
+            return result;
+        }
+    };
 
-	protected static class Port
-	{
-		protected boolean latchingEnabled = false;
+    protected class Port
+    {
+        protected boolean latchingEnabled = false;
 
-		protected int ddr;
-		protected int ir;
-		protected int or;
-		protected int externalPins;
+        protected int ddr; // 0 = pin is input , 1 = pin is output
+        protected int ir;
+        protected int or;
+        protected int externalPins;
+        
+        private boolean ca1;
+        private boolean ca2;
+        
+        private boolean cb1;
+        private boolean cb2;
 
-		public final int readRegister()
-		{
-			return latchingEnabled ? readRegisterLatchingEnabled() : readRegisterLatchingDisabled();
-		}
+        public final int readRegister()
+        {
+            return latchingEnabled ? readRegisterLatchingEnabled() : readRegisterLatchingDisabled();
+        }
 
-		public void tick()
-		{
-			int result = externalPins;
-			int value = or;
+        public void tick()
+        {
+            int result = externalPins;
+            int value = or & ddr; // retain only bits for output
+            result &= ~ddr; // clear all output bits
+            result |= value;
+            externalPins = result;
+        }
 
-			for ( int i = 7, mask = 1<<7 ; i >= 0 ; i-- , mask = mask >>> 1 )
-			{
-				if ( isOutput( i ) )
-				{
-					if ( (value & mask) != 0 )
-					{
-						result |= mask;
-					} else {
-						result &= ~mask;
-					}
-				}
-			}
-			externalPins = result;
-		}
+        public int getDDR() {
+            return ddr;
+        }
+        
+        public boolean getCA1() {
+            return ca1;
+        }
+        
+        public boolean getCA2() {
+            return ca2;
+        }
+        
+        public boolean getCB1() {
+            return cb1;
+        }
+        
+        public boolean getCB2() {
+            return cb2;
+        }
+        
+        public void setCA1(boolean ca1) {
+            this.ca1 = ca1;
+        }
+        
+        public void setCA2(boolean ca2) {
+            this.ca2 = ca2;
+        }
+        
+        public void setCB1(boolean cb1) {
+            this.cb1 = cb1;
+        }
+        
+        public void setCB2(boolean cb2) {
+            this.cb2 = cb2;
+        }
 
-		public int getDDR() {
-			return ddr;
-		}
+        public void setDDR(int ddr) 
+        {
+            this.ddr = ddr & 0xff;
+        }
 
-		public void setDDR(int ddr) {
-			this.ddr = ddr & 0xff;
-		}
+        public final void writeRegister(int value)
+        {
+            or = value & 0xff;
+        }
 
-		public final void writeRegister(int value)
-		{
-			or = value & 0xff;
-		}
+        public final boolean isInput(int bit) {
+            return (ddr & (1<<bit)) == 0;
+        }
 
-		public final boolean isInput(int bit) {
-			return (ddr & (1<<bit)) == 0;
-		}
+        public final boolean isOutput(int bit) {
+            return (ddr & (1<<bit)) != 0;
+        }
 
-		public final boolean isOutput(int bit) {
-			return (ddr & (1<<bit)) != 0;
-		}
+        protected int readRegisterLatchingDisabled() {
+            return externalPins;
+        }
 
-		protected int readRegisterLatchingDisabled() {
-			return externalPins;
-		}
+        protected int readRegisterLatchingEnabled() {
+            return ir;
+        }
 
-		protected int readRegisterLatchingEnabled() {
-			return ir;
-		}
-
-		public void setLatchingEnabled(boolean latchingEnabled) {
-			this.latchingEnabled = latchingEnabled;
-		}
-	}
+        public void setLatchingEnabled(boolean latchingEnabled) {
+            this.latchingEnabled = latchingEnabled;
+        }
+    }
 
     protected static final int PORTB = 0x0000; // Data port B
     protected static final int PORTA = 0x0001; // Data port A
@@ -287,6 +325,81 @@ public class VIA extends Memory {
      */
     protected static final int PORTA_NOHANDSHAKE  = 0x000F;
 
+    protected static enum PCRControlBits 
+    {
+        /*
+         * |3|2|1| *** CA2/CB2 control bits ***
+         * |0|0|0| Input negative active edge
+         * |0|0|1| Independent interrupt input negative edge (*)
+         * |0|1|0| Input positive active edge
+         * |0|1|1| Independent interrupt input positive edge (*)
+         * |1|0|0| Handshake output
+         * |1|0|1| Pulse output
+         * |1|1|0| Low output
+         * |1|1|1| High output         
+         * 
+         *  (*) if CA2/CB2 is set to "independent interrupt input" than
+         *  writing to/reading from PORTA/PORTB will NOT clear the IRQ flag
+         *  bit, instead the bit must be cleared by writing into the IFR.         
+         */
+        INPUT_NEG_ACTIVE_EDGE(0),
+        INDEPENDENT_IRQ_INPUT_NEG_EDGE(1),
+        INPUT_POS_ACTIVE_EDGE(2),
+        INDEPENDENT_IRQ_INPUT_POS_EDGE(3),
+        HANDSHAKE_OUTPUT(4),
+        PULSE_OUTPUT(5),
+        LOW_OUTPUT(6),
+        HIGH_OUTPUT(7);
+
+        public final int mask;
+
+        private PCRControlBits(int mask) {
+            this.mask = mask;
+        }
+    }
+    protected final class ControlLines 
+    {
+        private boolean line1;
+        private boolean line2;
+        
+        private PCRControlBits mode = PCRControlBits.INPUT_NEG_ACTIVE_EDGE;
+
+        // If that bit is 0, CA1 is active-low; If that bit is 1, CA1 is active-high.          
+        private boolean irqActiveHi;
+
+        public void setLine1(boolean line1) {
+            this.line1 = line1;
+        }
+        
+        public void setLine2(boolean line2) {
+            this.line2 = line2;
+        }
+        
+        public boolean getLine1() {
+            return line1;
+        }
+        
+        public boolean getLine2() {
+            return line2;
+        }
+        
+        public PCRControlBits getMode() {
+            return mode;
+        }
+
+        public void setMode(PCRControlBits mode) {
+            this.mode = mode;
+        }
+
+        public void setIRQActiveHi(boolean activeHi) {
+            this.irqActiveHi = activeHi;
+        }
+
+        public boolean isIRQActiveHi() {
+            return irqActiveHi;
+        }
+    }
+
     private int timer1;
 
     private int t1latchlo;
@@ -322,105 +435,118 @@ public class VIA extends Memory {
     @Override
     public int readByte(int offset)
     {
-    	switch( offset )
-    	{
-		    case PORTB:
-		    	return portB.readRegister();
-		    case PORTA:
-		    	return portA.readRegister();
-		    case DDRB:
-		    	return portB.getDDR();
-		    case DDRA:
-		    	return portA.getDDR();
-		    case T1CL:
-		    	return timer1 & 0xff;
-		    case T1CH:
-		    	return (timer1 & 0xff00) >> 8;
-		    case T1LL:
-		    	return t1latchlo;
-		    case T1LH:
-		    	return t1latchhi;
-		    case T2CL:
-		    	irqFlags &= ~(1<<5);
-		    	return (timer2 & 0xff);
-		    case T2CH:
-		    	irqFlags &= ~(1<<5);
-		    	return (timer2 & 0xff00) >> 8;
-		    case SR:
-		    	return sr;
-		    case ACR:
-		    	return acr;
-		    case PCR:
-		    	return pcr;
-		    case IFR:
-		    	return irqFlags;
-		    case IER:
-		    	return irqEnable;
-		    case PORTA_NOHANDSHAKE:
-		    	return portA.readRegister();
-    		default:
-    			throw new IllegalArgumentException("No register at "+HexDump.toAdr(offset));
-    	}
+        switch( offset )
+        {
+            case PORTB:
+                return portB.readRegister();
+            case PORTA:
+                return portA.readRegister();
+            case DDRB:
+                return portB.getDDR();
+            case DDRA:
+                return portA.getDDR();
+            case T1CL:
+                return timer1 & 0xff;
+            case T1CH:
+                return (timer1 & 0xff00) >> 8;
+            case T1LL:
+                return t1latchlo;
+            case T1LH:
+                return t1latchhi;
+            case T2CL:
+                irqFlags &= ~(1<<5);
+                return (timer2 & 0xff);
+            case T2CH:
+                irqFlags &= ~(1<<5);
+                return (timer2 & 0xff00) >> 8;
+                case SR:
+                    return sr;
+                case ACR:
+                    return acr;
+                case PCR:
+                    return pcr;
+                case IFR:
+                    return irqFlags;
+                case IER:
+                    return irqEnable;
+                case PORTA_NOHANDSHAKE:
+                    return portA.readRegister();
+                default:
+                    throw new IllegalArgumentException("No register at "+HexDump.toAdr(offset));
+        }
     }
 
     @Override
     public void writeByte(int offset, byte value)
     {
-    	switch( offset )
-    	{
-    		case PORTA:
-    			portA.writeRegister( value );
-    			break;
-		    case PORTB:
-		    	portB.writeRegister( value );
-		    	break;
-		    case DDRA:
-		    	portA.setDDR( value );
-		    	break;
-		    case DDRB:
-		    	portB.setDDR( value );
-		    	break;
-		    case T1CL:
-		    	return timer1 & 0xff;
-		    case T1CH:
-		    	return (timer1 & 0xff00) >> 8;
-		    case T1LL:
-		    	return t1latchlo;
-		    case T1LH:
-		    	return t1latchhi;
-		    case T2CL:
-		    	irqFlags &= ~(1<<5);
-		    	return (timer2 & 0xff);
-		    case T2CH:
-		    	irqFlags &= ~(1<<5);
-		    	return (timer2 & 0xff00) >> 8;
-		    case SR:
-		    	return sr;
-		    case ACR:
-		    	this.acr = value & 0xff;
-		    	/*
-     * bit 1 - port B latching ( 0 = disable , 1 = enable)
-     * bit 0 - port A latching ( 0 = disable , 1 = enable)
-		    	 */
-		    	portA.setLatchingEnabled( ( value & 1 ) != 0 );
-		    	portB.setLatchingEnabled( ( value & 2 ) != 0 );
-		    	break;
-		    case PCR:
-		    	return pcr;
-		    case IFR:
-		    	return irqFlags;
-		    case IER:
-		    	return irqEnable;
-		    case PORTA_NOHANDSHAKE:
-		    	portA.writeRegister( value );
-		    	break;
-    		default:
-    			throw new IllegalArgumentException("No register at "+HexDump.toAdr(offset));
-    	}
+        switch( offset )
+        {
+            case PORTA:
+                portA.writeRegister( value );
+                break;
+            case PORTB:
+                portB.writeRegister( value );
+                break;
+            case DDRA:
+                portA.setDDR( value );
+                break;
+            case DDRB:
+                portB.setDDR( value );
+                break;
+            case T1CL:
+                return timer1 & 0xff;
+            case T1CH:
+                return (timer1 & 0xff00) >> 8;
+                case T1LL:
+                    return t1latchlo;
+                case T1LH:
+                    return t1latchhi;
+                case T2CL:
+                    irqFlags &= ~(1<<5);
+                    return (timer2 & 0xff);
+                case T2CH:
+                    irqFlags &= ~(1<<5);
+                    return (timer2 & 0xff00) >> 8;
+                    case SR:
+                        return sr;
+                    case ACR:
+                        this.acr = value & 0xff;
+                        /*
+                         * bit 1 - port B latching ( 0 = disable , 1 = enable)
+                         * bit 0 - port A latching ( 0 = disable , 1 = enable)
+                         */
+                        portA.setLatchingEnabled( ( value & 1 ) != 0 );
+                        portB.setLatchingEnabled( ( value & 2 ) != 0 );
+                        break;
+                    case PCR:
+                        return pcr;
+                    case IFR:
+                        return irqFlags;
+                    case IER:
+                        return irqEnable;
+                    case PORTA_NOHANDSHAKE:
+                        portA.writeRegister( value );
+                        break;
+                    default:
+                        throw new IllegalArgumentException("No register at "+HexDump.toAdr(offset));
+        }
     }
 
     public void tick(boolean clock)
     {
+        portA.tick();
+        portB.tick();
+    }
 
+    public Port getPortA() {
+        return portA;
+    }
+    
+    public Port getPortB() {
+        return portB;
+    }
+    
+    public void setChangeListener(VIAChangeListener changeListener) {
+        this.changeListener = changeListener;
     }
 }
