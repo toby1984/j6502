@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.emulator.diskdrive;
 
+import java.io.ObjectInputStream.GetField;
 import java.util.function.Consumer;
 
 import de.codesourcery.j6502.disassembler.Disassembler;
@@ -30,8 +31,10 @@ public class Mainboard extends IMemoryRegion
     private final CPU cpu = new CPU( this );
     private final CPUImpl cpuImpl = new CPUImpl( cpu , this );
     
-    private final VIA busController = new BusController();
-    private final VIA diskController = new DiskController();
+    private final VIA busController = new VIA("BusController VIA 6522 #1", new AddressRange( 0x1800 , 0x1810 ) , cpu );
+    private final VIA diskController = new VIA("DiskController VIA 6522 #2", AddressRange.range( 0x1c00 , 0x1c10) , cpu ); 
+    
+    private final FloppyHardware hardware;
     
     private final IMemoryRegion[] memoryMap;
     
@@ -82,9 +85,10 @@ public class Mainboard extends IMemoryRegion
         }
     };    
     
-    public Mainboard() 
+    public Mainboard(int driveAddress) 
     {
         super("1541", AddressRange.range(0,65536) );
+        this.hardware = new FloppyHardware(busController,diskController, driveAddress);
         
         memoryMap = new IMemoryRegion[65536];
         
@@ -226,5 +230,9 @@ public class Mainboard extends IMemoryRegion
     @Override
     public boolean isReadsReturnWrites(int offset) {
         return true;
+    }
+
+    public FloppyHardware getHardware() {
+        return hardware;
     }
 }

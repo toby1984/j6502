@@ -1,16 +1,139 @@
 package de.codesourcery.j6502.emulator.diskdrive;
 
-import de.codesourcery.j6502.emulator.diskdrive.VIA.Port;
-import de.codesourcery.j6502.emulator.diskdrive.VIA.VIAChangeListener;
+import java.util.Optional;
 
-public class FloppyHardware 
+import de.codesourcery.j6502.emulator.G64File;
+import de.codesourcery.j6502.emulator.G64File.TrackData;
+import de.codesourcery.j6502.emulator.IECBus;
+import de.codesourcery.j6502.emulator.SerialDevice;
+import de.codesourcery.j6502.emulator.diskdrive.VIA.Port;
+import de.codesourcery.j6502.emulator.diskdrive.VIA.PortName;
+import de.codesourcery.j6502.emulator.diskdrive.VIA.VIAChangeListener;
+import de.codesourcery.j6502.utils.BitStream;
+
+public class FloppyHardware implements SerialDevice 
 {
-	/*
-	 * 1541 uses 16 Mhz base clock.
-	 * 
-	 * 
-	 *
-	 * Tracks Clock Frequency Divide By
+    protected static final int SPEED00_CYCLES_PER_BYTE = 32;
+    protected static final int SPEED01_CYCLES_PER_BYTE = 30;
+    protected static final int SPEED10_CYCLES_PER_BYTE = 28;
+    protected static final int SPEED11_CYCLES_PER_BYTE = 26;
+
+    protected abstract class DriveMode 
+    {
+        private long cycles = 0;
+
+        public final void tick() 
+        {
+            cycles--;
+            if ( cycles == 0 ) 
+            {
+                cycles = cyclesPerByte;
+                processByte();
+            }
+        }
+
+        public abstract void processByte();
+
+        public final void onEnter() {
+            cycles = cyclesPerByte;
+        }
+
+        public abstract void onEnterHook();        
+    }
+
+    protected final class ReadMode extends DriveMode 
+    {
+        private int oneBits=0;
+
+        @Override
+        public void processByte() 
+        {
+            if ( motorsRunning )
+            {
+                int value = 0;
+                boolean syncFound = false;
+                for ( int i = 7 ; i >= 0 ; i-- ) 
+                {
+                    value = value << 1;
+                    final int bit = bitStream.readBit();
+                    value |= bit;
+                    if ( bit == 0 ) 
+                    {
+                        if ( syncFound ) 
+                        {
+                            bitStream.rewind(1); /* align bitstream */
+                            value = bitStream.readByte();
+                            break; /* break */
+                        }
+                        oneBits = 0;
+                    } else {
+                        oneBits++;
+                        if ( oneBits >= 10 ) 
+                        {
+                            syncFound = true;
+                        }                        
+                    }
+                }
+
+                via2.getPortB().setInputPin(7, syncFound ); 
+                // TODO: Find out whether sync bits are visible to the CPU or not ...
+                via2.getPortA().setInputPins( value );
+            }
+            /* Das Byte Ready Signal kann nur mit SOE abgestellt werden,ansonsten kommt es regelmässig nach 8 Bits. 
+             * Das ist unabhängig davon ob sich das Laufwerk dreht oder nicht. Das ist ein Zähler auf der Platine der vom SYNC Signal 
+             * mit 0 geladen wird und immer wenn die Zeit für ein Bit abgelaufen ist eins hoch zählt. 
+             * Wenn sich nichts tut (Kein Flusswechel am Lesekopf) denkt das Laufwerk, dass es ein "0" Bit ist.              
+             */
+            if ( via2.getPortA().getControlLine2() ) // Trigger byte read signal ?
+            {
+                via2.getPortB().setControlLine1( true , false ); // signal byte ready
+            }
+        }
+
+        @Override
+        public void onEnterHook() 
+        {
+            oneBits = 0;
+        }
+    }
+
+    protected final class WriteMode extends DriveMode 
+    {
+        @Override
+        public void processByte() {
+            // TODO: Implement writing
+            throw new RuntimeException("Write mode not implemented yet");
+        }
+
+        @Override
+        public void onEnterHook() {
+            // TODO: Implement writing
+            throw new RuntimeException("Write mode not implemented yet");
+        }
+    }
+
+    protected final int driveAddress;
+    protected int cyclesPerByte = SPEED10_CYCLES_PER_BYTE;
+    protected float headPosition = 18;
+    protected boolean driveLED;
+    protected boolean motorsRunning;
+    protected boolean writeProtectOn;
+
+    protected G64File disk;
+    protected Optional<TrackData> currentTrackData;
+    protected BitStream bitStream = new BitStream( new byte[0] , 0 );
+
+    protected final ReadMode READ = new ReadMode();
+    protected final WriteMode WRITE = new WriteMode();
+
+    private int previousStep;
+
+    private DriveMode driveMode = READ;
+
+    /*
+     * 1541 uses 16 Mhz base clock.
+     * 
+     * Tracks Clock Frequency Divide By
      * 1-17    1.2307 MHz 13
      * 18-24  1.1428 MHz  14
      * 15-30  1.0666 MHz  15
@@ -31,87 +154,88 @@ public class FloppyHardware
      * 
      * Wenn der Zähler auf 15 steht wird ein Puls generiert. Ein Bit ist genau 4 solcher Pulse lang.
      * 
-     * Wenn bei 16 Mhz der Zähler von 0 bis 15 zählt das ist das genau 1 µs. 4 Pulse sind dann 4 µs pro Bit:
+     * Wenn bei 16 Mhz der Zähler von 0 bis 15 zählt das ist das genau 1 µs. 4 Pulse sind dann 4 µs pro Bit = 32 1Mhz cycles per byte
      * 
-     * 16/16*4 = 4.00 µs
-     * 15/16*4 = 3.75 µs
-     * 14/16*4 = 3.50 µs
-     * 13/16*4 = 3.25 µs
-	 */
+     * 16/16*4 = 4.00 µs = 32 1Mhz cycles per byte
+     * 15/16*4 = 3.75 µs = 29.92
+     * 14/16*4 = 3.50 µs = 28
+     * 13/16*4 = 3.25 µs = 26 cycles per byte
+     */
 
-	/*
-	 * Taken from http://c64preservation.com/protection
-	 *
-	 * Tracks on the disk are organized as concentric circles, and the drive's
-	 * stepper motor can stop at 84 different locations (tracks) on a disk.
-	 * However, the read/write head on the drive is too wide to use each one
-	 * separately, so every other track is skipped for a total of 42 theoretical
-	 * tracks. The common terminology for the step in between each track is a
-	 * "half-track" and a specific track would be referred to as (for example)
-	 * "35.5" instead of the actual track (which would be 71). Commodore limited
-	 * use to only the first 35 tracks in their standard DOS, but commercial
-	 * software isn't limited by this. Most floppy media is rated to use 40
-	 * tracks, and the drives usually have no trouble reading out to track 41,
-	 * although some will bump and not get past 40. Most software does not use
-	 * any track past 35 except for copy protection, but alternative DOS systems
-	 * like Speed-DOS used all 40 tracks in their own DOS implementation.
-	 *
-	 * Sectoring Tracks are further divided into sectors, which are sections of
-	 * each track divided by the aforementioned software-generated sync marks.
-	 * The drive motor spins at 300rpm and can store data at 4 different bit
-	 * densities (essentially 4 different clock speed rates of the read/write
-	 * hardware). The different densities are needed because being round and the
-	 * motor running at a constant speed, the disk surface travels over the head
-	 * at different speeds depending on whether the drive is accessing the
-	 * outermost or innermost tracks. Since the surface is moving faster on the
-	 * outermost tracks, they can store more data, so they use the highest
-	 * density setting. Consequently, the innermost tracks use the slowest
-	 * density setting. Because we're recording at a higher density, more
-	 * sectors are stored on the outer tracks, and fewer on the inner tracks.
-	 * There is nothing stopping the hardware from reading/writing at the
-	 * highest density across the entire disk surface, but it isn't generally
-	 * done due to media reliability, and slight speed differences between
-	 * drives. The media itself is only rated for a certain bit rate at a
-	 * certain speed.
-	 * 
-	 * VIA1:
-	 * 
-	 * PA0..7 - unused
-	 * PB0 - (IN) Data in
-	 * PB1 - (OUT) Data out
-	 * PB2 - (IN) Clock in
-	 * PB3 - (OUT) Clock out
-	 * PB4 - (OUT) ATN Acknowledge
-	 * PB5 - (IN) Device address
-	 * PB6 - (IN) Device address
-	 * 
-	 * CA1 - Unused
-	 * CA2 - Unused
-	 * CB1 - Unused
-	 * CB2 - (IN) ATN IN
-	 * 
-	 * VIA2:
-	 * 
-	 * PA0...8 - (IN/OUT) Read data/Write data 
-	 * 
-	 * 
-	 * PB0 - (OUT) Step 1  |   Sequence 00/01/10/11/00... moves inwards      | 
+    /*
+     * Taken from http://c64preservation.com/protection
+     *
+     * Tracks on the disk are organized as concentric circles, and the drive's
+     * stepper motor can stop at 84 different locations (tracks) on a disk.
+     * However, the read/write head on the drive is too wide to use each one
+     * separately, so every other track is skipped for a total of 42 theoretical
+     * tracks. The common terminology for the step in between each track is a
+     * "half-track" and a specific track would be referred to as (for example)
+     * "35.5" instead of the actual track (which would be 71). Commodore limited
+     * use to only the first 35 tracks in their standard DOS, but commercial
+     * software isn't limited by this. Most floppy media is rated to use 40
+     * tracks, and the drives usually have no trouble reading out to track 41,
+     * although some will bump and not get past 40. Most software does not use
+     * any track past 35 except for copy protection, but alternative DOS systems
+     * like Speed-DOS used all 40 tracks in their own DOS implementation.
+     *
+     * Sectoring Tracks are further divided into sectors, which are sections of
+     * each track divided by the aforementioned software-generated sync marks.
+     * The drive motor spins at 300rpm and can store data at 4 different bit
+     * densities (essentially 4 different clock speed rates of the read/write
+     * hardware). The different densities are needed because being round and the
+     * motor running at a constant speed, the disk surface travels over the head
+     * at different speeds depending on whether the drive is accessing the
+     * outermost or innermost tracks. Since the surface is moving faster on the
+     * outermost tracks, they can store more data, so they use the highest
+     * density setting. Consequently, the innermost tracks use the slowest
+     * density setting. Because we're recording at a higher density, more
+     * sectors are stored on the outer tracks, and fewer on the inner tracks.
+     * There is nothing stopping the hardware from reading/writing at the
+     * highest density across the entire disk surface, but it isn't generally
+     * done due to media reliability, and slight speed differences between
+     * drives. The media itself is only rated for a certain bit rate at a
+     * certain speed.
+     * 
+     * VIA1:
+     * 
+     * PA0..7 - unused
+     * 
+     * PB0 - (IN) Data in
+     * PB1 - (OUT) Data out
+     * PB2 - (IN) Clock in
+     * PB3 - (OUT) Clock out
+     * PB4 - (OUT) ATN Acknowledge
+     * PB5 - (IN) Device address
+     * PB6 - (IN) Device address
+     * 
+     * CA1 - Unused
+     * CA2 - Unused
+     * CB1 - Unused
+     * CB2 - (IN) ATN IN
+     * 
+     * VIA2:
+     * 
+     * PA0...8 - (IN/OUT) Read data/Write data 
+     * 
+     * 
+     * PB0 - (OUT) Step 1  |   Sequence 00/01/10/11/00... moves inwards      | 
      * PB1 - (OUT) Step 0  |   Sequence 00/11/10/01/00... moves outwards     | 
      * PB2 - (OUT) Drive motor AND Step Motor on/off
      * PB3 - (OUT) LED
-     * PB4 - (INT) Write-protect
+     * PB4 - (IN) Write-protect
      * PB5 - (OUT) bitrate select A (??)
      * PB6 - (OUT) bitrate select B (??)
      * PB7 - (IN)  SYNC detected
      * 
-     * CA1 - (IN/OUT) Byte ready (to be read in read mode / to be written in write mode)
+     * CA1 - (IN) Byte read / Byte written (to be read in read mode / to be written in write mode)
      * 
      *                Das Byte Ready Signal kann nur mit SOE abgestellt werden,ansonsten kommt es regelmässig nach 8 Bits. 
      *                Das ist unabhängig davon ob sich das Laufwerk dreht oder nicht. Das ist ein Zähler auf der Platine der vom SYNC Signal 
      *                mit 0 geladen wird und immer wenn die Zeit für ein Bit abgelaufen ist eins hoch zählt. 
      *                Wenn sich nichts tut (Kein Flusswechel am Lesekopf) denkt das Laufwerk, dass es ein "0" Bit ist. 
      *                Wenn sich das Laufwerk nicht dreht kommen eben nur "0" Bits ...
-     * CA2 - (OUT?) SOE / Enable/disable Byte Ready signal (High = activate BYTE-READY)
+     * CA2 - (OUT) SOE / Enable/disable Byte Ready signal (High = activate BYTE-READY)
      * 
      * CB1 - Unused
      * CB2 - (OUT) Read/Write mode (Low = Write, High = Read))
@@ -194,95 +318,311 @@ public class FloppyHardware
      * 
      * Eingang CA1 BYTE READY = L (?)
      *  	 */
-    
+
     private VIA via1;
     private VIA via2;
-    
-    private final VIAChangeListener via1Listener = new VIAChangeListener() {
 
-		@Override
-		public void portAChanged(VIA via, Port port) {
-			// TODO Auto-generated method stub
-			
-		}
+    private final VIAChangeListener via1Listener = new VIAChangeListener() 
+    {
+        /*
+         * VIA1:
+         * 
+         * PA0..7 - unused
+         * PB0 - (IN) Data in
+         * PB1 - (OUT) Data out
+         * PB2 - (IN) Clock in
+         * PB3 - (OUT) Clock out
+         * PB4 - (OUT) ATN Acknowledge
+         * PB5 - (IN) Device address
+         * PB6 - (IN) Device address
+         * 
+         * CA1 - Unused
+         * CA2 - Unused
+         * CB1 - Unused
+         * CB2 - (IN) ATN IN
+         */
+        @Override
+        public void portChanged(VIA via, Port port) {
+            // TODO Auto-generated method stub
 
-		@Override
-		public void portBChanged(VIA via, Port port) {
-			// TODO Auto-generated method stub
-			
-		}
+        }
 
-		@Override
-		public void ca1Changed(VIA via, Port port) {
-			// TODO Auto-generated method stub
-			
-		}
+        @Override
+        public void controlLine1Changed(VIA via, Port port) {
+            // TODO Auto-generated method stub
 
-		@Override
-		public void ca2Changed(VIA via, Port port) {
-			// TODO Auto-generated method stub
-			
-		}
+        }
 
-		@Override
-		public void cb1Changed(VIA via, Port port) {
-			// TODO Auto-generated method stub
-			
-		}
-
-		@Override
-		public void cb2Changed(VIA via, Port port) {
-			// TODO Auto-generated method stub
-			
-		}
+        @Override
+        public void controlLine2Changed(VIA via, Port port) {
+            // TODO Auto-generated method stub
+        }
     };
-    
+
     private final VIAChangeListener via2Listener = new VIAChangeListener() {
 
-		@Override
-		public void portAChanged(VIA via, Port port) {
-			// TODO Auto-generated method stub
-			
-		}
+        /* VIA2:
+         * 
+         * PA0...8 - (IN/OUT) Read data/Write data 
+         * 
+         * 
+         * PB0 - (OUT) Step 1  |   Sequence 00/01/10/11/00... moves inwards      | 
+         * PB1 - (OUT) Step 0  |   Sequence 00/11/10/01/00... moves outwards     | 
+         * PB2 - (OUT) Drive motor AND Step Motor on/off
+         * PB3 - (OUT) LED
+         * PB4 - (INT) Write-protect
+         * PB5 - (OUT) bitrate select 1
+         * PB6 - (OUT) bitrate select 0
+         * PB7 - (IN)  SYNC detected
+         * 
+         * CA1 - (IN) Byte ready (to be read in read mode / to be written in write mode)
+         * 
+         *                Das Byte Ready Signal kann nur mit SOE abgestellt werden,ansonsten kommt es regelmässig nach 8 Bits. 
+         *                Das ist unabhängig davon ob sich das Laufwerk dreht oder nicht. Das ist ein Zähler auf der Platine der vom SYNC Signal 
+         *                mit 0 geladen wird und immer wenn die Zeit für ein Bit abgelaufen ist eins hoch zählt. 
+         *                Wenn sich nichts tut (Kein Flusswechel am Lesekopf) denkt das Laufwerk, dass es ein "0" Bit ist. 
+         *                Wenn sich das Laufwerk nicht dreht kommen eben nur "0" Bits ...
+         * CA2 - (OUT) SOE / Enable/disable Byte Ready signal (High = activate BYTE-READY)
+         * 
+         * CB1 - Unused
+         * CB2 - (OUT) Read/Write mode (Low = Write, High = Read))
+         */
+        @Override
+        public void portChanged(VIA via, Port port) 
+        {
+            if ( port.getPortName() == PortName.B ) 
+            {
+                final int value = port.getPinsOut();
+                final int speed = value & 0b0110_0000;
+                switch( speed ) 
+                {
+                    case 0b0000_0000:
+                        cyclesPerByte = SPEED00_CYCLES_PER_BYTE;
+                        break;
+                    case 0b0010_0000:
+                        cyclesPerByte = SPEED01_CYCLES_PER_BYTE;
+                        break;
+                    case 0b0100_0000:
+                        cyclesPerByte = SPEED10_CYCLES_PER_BYTE;
+                        break;
+                    case 0b0110_0000:
+                        cyclesPerByte = SPEED11_CYCLES_PER_BYTE;
+                        break;
+                    default:
+                        throw new RuntimeException("Unreachable code reached");
+                }
+                int step = value & 0b11;
+                if ( step != previousStep ) 
+                {
+                    if ( ( step % 2 ) == 0 && motorsRunning ) 
+                    {
+                        if ( step > previousStep ) { // incrementing .. move head inwards
+                            if ( headPosition < 41.5f ) 
+                            {
+                                headPosition += 0.5f;
+                                setTrack( headPosition );
+                            }
+                        }
+                        else 
+                        {
+                            // decrementing.. move head outwards
+                            if ( headPosition > 1f ) 
+                            {
+                                headPosition -= 0.5f;
+                                setTrack( headPosition );
+                            }
+                        }
+                    }
+                    previousStep = step;
+                }
+                FloppyHardware.this.driveLED = (value & 0b0000_1000) != 0;
+                FloppyHardware.this.motorsRunning = (value & 0b0000_0100) != 0;
+            }
+        }
 
-		@Override
-		public void portBChanged(VIA via, Port port) {
-			// TODO Auto-generated method stub
-			
-		}
+        @Override
+        public void controlLine1Changed(VIA via, Port port) {
+            if ( port.getPortName() == PortName.A ) 
+            {
 
-		@Override
-		public void ca1Changed(VIA via, Port port) {
-			// TODO Auto-generated method stub
-			
-		}
+            }
+        }
 
-		@Override
-		public void ca2Changed(VIA via, Port port) {
-			// TODO Auto-generated method stub
-			
-		}
+        @Override
+        public void controlLine2Changed(VIA via, Port port) 
+        {
+            if ( port.getPortName() == PortName.B ) 
+            {
+                setDriveMode( port.getControlLine2() ? READ : WRITE );
+            }
+        }
 
-		@Override
-		public void cb1Changed(VIA via, Port port) {
-			// TODO Auto-generated method stub
-			
-		}
-
-		@Override
-		public void cb2Changed(VIA via, Port port) {
-			// TODO Auto-generated method stub
-			
-		}
     };    
-    
-    public FloppyHardware(VIA via1,VIA via2) {
+
+    public FloppyHardware(VIA via1,VIA via2,int driveAddress) 
+    {
+        if ( driveAddress < 8 || driveAddress > 11 ) {
+            throw new IllegalArgumentException("Invalid drive address "+driveAddress);
+        }
+        this.driveAddress = driveAddress;
         this.via1=via1;
         this.via2=via2;
         via1.setChangeListener( via1Listener );
         via2.setChangeListener( via2Listener );
     }
+
+    public void reset() 
+    {
+        setDriveMode( READ );
+        headPosition = 18f; 
+        cyclesPerByte = SPEED10_CYCLES_PER_BYTE; // default speed for track #18
+        driveLED = false;
+        motorsRunning = false;
+        writeProtectOn = true; // TODO: Set to 'false' once writing to disk is enabled
+        previousStep = 0;
+
+        // setup VIA1 inputs
+
+        via1.getPortB().setInputPins( 0 ); // clear input
+        via1.getPortB().setControlLine2(false,false); // clear ATN
+
+        // set drive address
+        final int adr = this.driveAddress - 8;
+        via1.getPortB().setInputPin( 5,  ( adr & 1 ) != 0 );
+        via1.getPortB().setInputPin(  6 , ( adr & 2 ) != 0);
+
+        // setup VIA2 inputs
+
+        /*
+         * PA0...8 - (IN/OUT) Read data/Write data 
+         * 
+         * 
+         * PB0 - (OUT) Step 1  |   Sequence 00/01/10/11/00... moves inwards      | 
+         * PB1 - (OUT) Step 0  |   Sequence 00/11/10/01/00... moves outwards     | 
+         * PB2 - (OUT) Drive motor AND Step Motor on/off
+         * PB3 - (OUT) LED
+         * PB4 - (IN) Write-protect
+         * PB5 - (OUT) bitrate select 1
+         * PB6 - (OUT) bitrate select 0
+         * PB7 - (IN)  SYNC detected
+         * 
+         * CA1 - (IN) Byte read / Byte written (to be read in read mode / to be written in write mode)
+         * 
+         *                Das Byte Ready Signal kann nur mit SOE abgestellt werden,ansonsten kommt es regelmässig nach 8 Bits. 
+         *                Das ist unabhängig davon ob sich das Laufwerk dreht oder nicht. Das ist ein Zähler auf der Platine der vom SYNC Signal 
+         *                mit 0 geladen wird und immer wenn die Zeit für ein Bit abgelaufen ist eins hoch zählt. 
+         *                Wenn sich nichts tut (Kein Flusswechel am Lesekopf) denkt das Laufwerk, dass es ein "0" Bit ist. 
+         *                Wenn sich das Laufwerk nicht dreht kommen eben nur "0" Bits ...
+         * CA2 - (OUT) SOE / Enable/disable Byte Ready signal (High = activate BYTE-READY)
+         * 
+         * CB1 - Unused
+         * CB2 - (OUT) Read/Write mode (Low = Write, High = Read))         
+         */
+        via2.getPortB().setInputPin( 7 , false ); // clear sync detected signal
+        via2.getPortB().setControlLine1(false,false); // clear 'Byte read/written' signal
+        via2.getPortB().setInputPin( 4 , writeProtectOn ); // => disk is write protected
+    }
+
+    public void setDriveMode(DriveMode mode) 
+    {
+        if ( mode != this.driveMode ) 
+        {
+            this.driveMode = mode;
+            mode.onEnter();
+        }
+    }
+
+    public void tick() 
+    {
+        this.driveMode.tick();
+    }
+
+    public void ejectDisk() {
+        currentTrackData = Optional.empty();
+        bitStream = new BitStream(new byte[0] , 0 );
+    }
+
+    private void setTrack(float track) 
+    {
+        this.headPosition = track;
+
+        if ( disk != null ) 
+        {
+            currentTrackData = disk.getTrackData( track );
+        } 
+        else {
+            currentTrackData = Optional.empty();
+        }
+
+        if ( currentTrackData.isPresent() ) 
+        {
+            final byte[] data = currentTrackData.get().getRawBytes();
+            bitStream = new BitStream( data , data.length*8 );
+        } else {
+            bitStream = new BitStream(new byte[0x55] , 8 ); // fake bitstream
+        }
+    }
+
+    public void loadDisk(G64File disk) {
+        this.disk = disk;
+        setTrack( 18 );
+    }
+
+    // ====== SerialDevice interface implementation ==========
+
+    @Override
+    public void tick(IECBus bus, boolean atnLowered) 
+    {
+        /* VIA1: 
+         * PB0 - (IN) Data in
+         * PB1 - (OUT) Data out
+         * PB2 - (IN) Clock in
+         * PB3 - (OUT) Clock out
+         * PB4 - (OUT) ATN Acknowledge
+         * PB5 - (IN) Device address
+         * PB6 - (IN) Device address
+         * PB7 - (IN) ATN IN
+         * 
+         * CA1 - Unused
+         * CA2 - Unused
+         * CB1 - Unused
+         * CB2 - (IN) ATN IN         
+         */
+        final Port portB = via1.getPortB();
+        portB.setControlLine2( atnLowered , false );
+        
+        portB.setInputPin( 0 , bus.getData() );
+        portB.setInputPin( 2 , bus.getClk() );
+        portB.setInputPin( 7 , atnLowered);
+        
+        driveMode.tick();
+    }
     
-    public void tick() {
+    @Override
+    public boolean getData() {
+        return ( via1.getPortB().getPinsOut() & 1<< 1 ) != 0;
+    }
+
+    @Override
+    public boolean getClock() 
+    {
+        return ( via1.getPortB().getPinsOut() & 1<< 3 ) != 0;
+    }
+
+    @Override
+    public boolean getATN() {
+        // TODO: What about the ATN acknowledge line ??
+        return false;
+    }
+
+    @Override
+    public int getPrimaryAddress() {
+        return driveAddress;
+    }
+
+    @Override
+    public boolean isDataTransferActive() 
+    {
+        return this.motorsRunning;
     }
 }
