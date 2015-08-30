@@ -21,13 +21,14 @@ import javax.swing.SwingUtilities;
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.emulator.Breakpoint;
+import de.codesourcery.j6502.emulator.BreakpointsController;
+import de.codesourcery.j6502.emulator.BreakpointsController.IBreakpointLister;
 import de.codesourcery.j6502.emulator.Emulator;
-import de.codesourcery.j6502.emulator.EmulatorDriver;
-import de.codesourcery.j6502.emulator.EmulatorDriver.IBreakpointLister;
+import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.ui.Debugger.LineWithBounds;
 import de.codesourcery.j6502.utils.HexDump;
 
-public final class DisassemblyPanel extends BufferedView implements WindowLocationHelper.IDebuggerView , IBreakpointLister
+public abstract class DisassemblyPanel extends BufferedView implements WindowLocationHelper.IDebuggerView , IBreakpointLister
 {
     private final Disassembler dis = new Disassembler().setAnnotate(true);
 
@@ -36,9 +37,6 @@ public final class DisassemblyPanel extends BufferedView implements WindowLocati
     protected static final int X_OFFSET = 30;
     protected static final int Y_OFFSET = Debugger.LINE_HEIGHT;
 
-    private final Emulator emulator;
-    private final EmulatorDriver driver;
-    
     private final int bytesToDisassemble = 48;
 
     private short currentAddress;
@@ -87,15 +85,13 @@ public final class DisassemblyPanel extends BufferedView implements WindowLocati
     @Override
     public void refresh(Emulator emulator)
     {
-        synchronized( emulator )
-        {
-            doRefresh( emulator );
-        }
+        doRefresh();
         repaint();
     }
 
-    private void doRefresh(Emulator emulator)
+    private void doRefresh()
     {
+        final BreakpointsController controller = getBreakpointsController();
         final Graphics2D g = getBackBufferGraphics();
         try
         {
@@ -103,7 +99,7 @@ public final class DisassemblyPanel extends BufferedView implements WindowLocati
             Short adrToMark = addressToMark;
             if ( adrToMark != null )
             {
-                pc = emulator.getCPU().pc();
+                pc = controller.getCPU().pc();
                 adrToMark = (short) pc;
                 internalSetAddress( (short) pc , TRACK_CURRENT_PC );
             } else {
@@ -128,7 +124,7 @@ public final class DisassemblyPanel extends BufferedView implements WindowLocati
                 final int circleX = 5;
                 final int circleY = line.bounds.y;
 
-                if ( driver.getBreakpoint( line.line.address ) != null ) {
+                if ( controller.getBreakpoint( line.line.address ) != null ) {
                     g.fillArc( circleX , circleY , lineHeight , lineHeight , 0 , 360 );
                 } else {
                     g.drawArc( circleX , circleY , lineHeight , lineHeight , 0 , 360 );
@@ -139,11 +135,8 @@ public final class DisassemblyPanel extends BufferedView implements WindowLocati
         }
     }
 
-    public DisassemblyPanel(Emulator emulator,EmulatorDriver driver)
+    public DisassemblyPanel()
     {
-        this.emulator = emulator;
-        this.driver = driver;
-        
         setFocusable( true );
         setRequestFocusEnabled(true);
         requestFocus();
@@ -184,13 +177,14 @@ public final class DisassemblyPanel extends BufferedView implements WindowLocati
                     final Short adr = getAddressForPoint( e.getX(), e.getY() );
                     if ( adr != null )
                     {
-                        final Breakpoint breakpoint = driver.getBreakpoint( adr );
+                        final BreakpointsController controller = getBreakpointsController();
+                        final Breakpoint breakpoint = controller.getBreakpoint( adr );
                         if ( breakpoint != null ) {
-                            driver.removeBreakpoint( breakpoint );
+                            controller.removeBreakpoint( breakpoint );
                         } else {
-                            driver.addBreakpoint( new Breakpoint( adr , false , true ) );
+                            controller.addBreakpoint( new Breakpoint( adr , false , true ) );
                         }
-                        refresh( emulator );
+                        refresh(null);
                     }
                 }
             }
@@ -200,27 +194,27 @@ public final class DisassemblyPanel extends BufferedView implements WindowLocati
     public void pageUp() {
         this.currentAddress = (short) ( this.currentAddress - bytesToDisassemble/2 );
         lines.clear();
-        refresh(emulator);
+        refresh(null);
     }
 
     public void lineUp() {
         this.currentAddress = (short) ( ( this.currentAddress -1 ));
         this.addressToMark = null;
         lines.clear();
-        refresh(emulator);
+        refresh(null);
     }
 
     public void lineDown() {
         this.currentAddress = (short) (  this.currentAddress + 1 );
         this.addressToMark = null;
         lines.clear();
-        refresh(emulator);
+        refresh(null);
     }
 
     public void pageDown() {
         this.currentAddress = (short) ( this.currentAddress + bytesToDisassemble/2 );
         lines.clear();
-        refresh(emulator);
+        refresh(null);
     }
 
     public void setAddress(short adr,Short addressToMark)
@@ -228,10 +222,7 @@ public final class DisassemblyPanel extends BufferedView implements WindowLocati
         System.out.println("Disassembling starts @ "+HexDump.toAdr( adr ) );
         internalSetAddress(adr, addressToMark);
 
-        synchronized( emulator )
-        {
-            doRefresh( emulator );
-        }
+        doRefresh();
         repaint();
     }
 
@@ -252,33 +243,32 @@ public final class DisassemblyPanel extends BufferedView implements WindowLocati
          */
         boolean alignmentCorrect =false;
 
+        final BreakpointsController controller = getBreakpointsController();
+        final IMemoryRegion memory = controller.getMemory();
         final short pc;
-        synchronized( emulator )
+        pc = currentAddress;
+        short offset = (short) (pc - bytesToDisassemble/2);
+        while ( offset != pc && ! alignmentCorrect )
         {
-            pc = currentAddress;
-            short offset = (short) (pc - bytesToDisassemble/2);
-            while ( offset != pc && ! alignmentCorrect )
+            alignmentCorrect = false;
+            lines.clear();
+            final Consumer<Line> lineConsumer = new Consumer<Line>()
             {
-                alignmentCorrect = false;
-                lines.clear();
-                final Consumer<Line> lineConsumer = new Consumer<Line>()
-                {
-                    private int y = Y_OFFSET;
+                private int y = Y_OFFSET;
 
-                    @Override
-                    public void accept(Line line) {
-                        final LineMetrics lineMetrics = g.getFontMetrics().getLineMetrics( line.toString(),  g );
-                        final Rectangle2D stringBounds = g.getFontMetrics().getStringBounds( line.toString(),  g );
+                @Override
+                public void accept(Line line) {
+                    final LineMetrics lineMetrics = g.getFontMetrics().getLineMetrics( line.toString(),  g );
+                    final Rectangle2D stringBounds = g.getFontMetrics().getStringBounds( line.toString(),  g );
 
-                        final Rectangle bounds = new Rectangle( X_OFFSET , (int) (y - lineMetrics.getAscent() ) , (int) stringBounds.getWidth() , (int) (lineMetrics.getHeight() ) );
-                        lines.add( new LineWithBounds( line , bounds ) );
-                        y += Debugger.LINE_HEIGHT;
-                    }
-                };
-                dis.disassemble( emulator.getMemory() , offset, bytesToDisassemble , lineConsumer);
-                alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
-                offset++;
-            }
+                    final Rectangle bounds = new Rectangle( X_OFFSET , (int) (y - lineMetrics.getAscent() ) , (int) stringBounds.getWidth() , (int) (lineMetrics.getHeight() ) );
+                    lines.add( new LineWithBounds( line , bounds ) );
+                    y += Debugger.LINE_HEIGHT;
+                }
+            };
+            dis.disassemble( memory , offset, bytesToDisassemble , lineConsumer);
+            alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
+            offset++;
         }
     }
 
@@ -307,6 +297,11 @@ public final class DisassemblyPanel extends BufferedView implements WindowLocati
     public void breakpointAdded(Breakpoint bp) {
         SwingUtilities.invokeLater( () -> repaint() );
     }
+    
+    @Override
+    public void allBreakpointsChanged() {
+        SwingUtilities.invokeLater( () -> repaint() );        
+    }
 
     @Override
     public void breakpointRemoved(Breakpoint bp) {
@@ -317,4 +312,6 @@ public final class DisassemblyPanel extends BufferedView implements WindowLocati
     public void breakpointReplaced(Breakpoint old, Breakpoint newBp) {
         SwingUtilities.invokeLater( () -> repaint() );
     }
+    
+    public abstract BreakpointsController getBreakpointsController();
 }

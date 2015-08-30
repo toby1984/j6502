@@ -14,7 +14,6 @@ public class Emulator
 	protected static final String EMPTY_STRING = "";
 
 	private final MemorySubsystem memory = new MemorySubsystem();
-
 	private final CPU cpu = new CPU( this.memory );
 
 	private IMemoryProvider memoryProvider;

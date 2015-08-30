@@ -480,6 +480,9 @@ public final class MemorySubsystem extends IMemoryRegion
 				memory.bulkWrite( offset , buffer , 0 , bytesRead );
 				offset += bytesRead;
 			}
+			if ( offset > memory.getAddressRange().getSizeInBytes() ) {
+			    throw new RuntimeException("ROM file '"+string+"' ("+offset+" bytes) does not fit into "+memory);
+			}
 		} catch (final IOException e) {
 			throw new RuntimeException("Failed to load ROM from classpath: "+string,e);
 		}

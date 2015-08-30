@@ -42,4 +42,8 @@ public final class WriteOnceMemory extends Memory {
 		}
 		super.bulkWrite(startingAddress, data, datapos, len);
 	}
+	
+	public boolean isWriteProtected() {
+        return writeProtected;
+    }
 }
