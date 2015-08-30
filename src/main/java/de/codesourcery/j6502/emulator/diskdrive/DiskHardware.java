@@ -600,20 +600,11 @@ public class DiskHardware implements SerialDevice
         final boolean newClk = bus.getClk();
         final boolean newATN = ! bus.getATN();
         
-        if ( previousData != newData ) {
-            portB.setInputPin( 0 , newData );
-            previousData = newData;
-        }
-        if ( previousClock != newClk ) {
-            portB.setInputPin( 2 , newClk );
-            previousClock = newClk;
-        }
+        portB.setInputPin( 0 , newData );
+        portB.setInputPin( 2 , newClk );
         
-        if ( previousATN != newATN ) {
-            portB.setInputPin( 7 , newATN );
-            via1.getPortA().setControlLine1( newATN , false );
-            previousATN = newATN;
-        }
+        portB.setInputPin( 7 , newATN );
+        via1.getPortA().setControlLine1( newATN , false );
         
         diskDrive.tick();
         
@@ -624,19 +615,18 @@ public class DiskHardware implements SerialDevice
     
     @Override
     public boolean getData() {
-        return ( via1.getPortB().getPinsOut() & 1<< 1 ) == 0;
+        return ( via1.getPortB().getPinsOut() & 1<< 1 ) != 0;
     }
 
     @Override
     public boolean getClock() 
     {
-        return ( via1.getPortB().getPinsOut() & 1<< 3 ) == 0;
+        return ( via1.getPortB().getPinsOut() & 1<< 3 ) != 0;
     }
 
     @Override
     public boolean getATN() {
-        // TODO: What about the ATN acknowledge line ??
-        return false;
+        throw new RuntimeException("Should not been called, only used on CPU");
     }
 
     @Override
