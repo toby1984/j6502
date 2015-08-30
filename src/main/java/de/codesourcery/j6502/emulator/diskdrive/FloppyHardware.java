@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.emulator.diskdrive;
 
+import de.codesourcery.j6502.emulator.diskdrive.VIA.Port;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.VIAChangeListener;
 
 public class FloppyHardware 
@@ -84,6 +85,9 @@ public class FloppyHardware
 	 * PB5 - (IN) Device address
 	 * PB6 - (IN) Device address
 	 * 
+	 * CA1 - Unused
+	 * CA2 - Unused
+	 * CB1 - Unused
 	 * CB2 - (IN) ATN IN
 	 * 
 	 * VIA2:
@@ -195,57 +199,81 @@ public class FloppyHardware
     private VIA via2;
     
     private final VIAChangeListener via1Listener = new VIAChangeListener() {
-        
-        @Override
-        public void portBChanged(VIA via) {
-            // TODO Auto-generated method stub
-            
-        }
-        
-        @Override
-        public void portAChanged(VIA via) {
-            // TODO Auto-generated method stub
-            
-        }
-        
-        @Override
-        public void cbChanged(VIA via) {
-            // TODO Auto-generated method stub
-            
-        }
-        
-        @Override
-        public void caChanged(VIA via) {
-            // TODO Auto-generated method stub
-            
-        }
+
+		@Override
+		public void portAChanged(VIA via, Port port) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void portBChanged(VIA via, Port port) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void ca1Changed(VIA via, Port port) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void ca2Changed(VIA via, Port port) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void cb1Changed(VIA via, Port port) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void cb2Changed(VIA via, Port port) {
+			// TODO Auto-generated method stub
+			
+		}
     };
     
     private final VIAChangeListener via2Listener = new VIAChangeListener() {
-        
-        @Override
-        public void portBChanged(VIA via) {
-            // TODO Auto-generated method stub
-            
-        }
-        
-        @Override
-        public void portAChanged(VIA via) {
-            // TODO Auto-generated method stub
-            
-        }
-        
-        @Override
-        public void cbChanged(VIA via) {
-            // TODO Auto-generated method stub
-            
-        }
-        
-        @Override
-        public void caChanged(VIA via) {
-            // TODO Auto-generated method stub
-            
-        }
+
+		@Override
+		public void portAChanged(VIA via, Port port) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void portBChanged(VIA via, Port port) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void ca1Changed(VIA via, Port port) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void ca2Changed(VIA via, Port port) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void cb1Changed(VIA via, Port port) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void cb2Changed(VIA via, Port port) {
+			// TODO Auto-generated method stub
+			
+		}
     };    
     
     public FloppyHardware(VIA via1,VIA via2) {
