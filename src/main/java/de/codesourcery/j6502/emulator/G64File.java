@@ -677,6 +677,13 @@ Byte    $00 - data block ID ($07)
 			this.offset = offset;
 			this.lengthInBytes = lengthInBytes;
 		}
+		
+		public byte[] getRawBytes() 
+		{
+		    final byte[] result = new byte[lengthInBytes];
+		    System.arraycopy(data , offset , result , 0 , lengthInBytes );
+		    return result;
+		}
 
 		public boolean isTrackComplete()
 		{
