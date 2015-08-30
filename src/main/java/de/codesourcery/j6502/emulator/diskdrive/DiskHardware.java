@@ -11,7 +11,7 @@ import de.codesourcery.j6502.emulator.diskdrive.VIA.PortName;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.VIAChangeListener;
 import de.codesourcery.j6502.utils.BitStream;
 
-public class FloppyHardware implements SerialDevice 
+public class DiskHardware implements SerialDevice 
 {
     protected static final int SPEED00_CYCLES_PER_BYTE = 32;
     protected static final int SPEED01_CYCLES_PER_BYTE = 30;
@@ -435,8 +435,8 @@ public class FloppyHardware implements SerialDevice
                     }
                     previousStep = step;
                 }
-                FloppyHardware.this.driveLED = (value & 0b0000_1000) != 0;
-                FloppyHardware.this.motorsRunning = (value & 0b0000_0100) != 0;
+                DiskHardware.this.driveLED = (value & 0b0000_1000) != 0;
+                DiskHardware.this.motorsRunning = (value & 0b0000_0100) != 0;
             }
         }
 
@@ -459,7 +459,7 @@ public class FloppyHardware implements SerialDevice
 
     };    
 
-    public FloppyHardware(VIA via1,VIA via2,int driveAddress) 
+    public DiskHardware(VIA via1,VIA via2,int driveAddress) 
     {
         if ( driveAddress < 8 || driveAddress > 11 ) {
             throw new IllegalArgumentException("Invalid drive address "+driveAddress);
@@ -624,5 +624,9 @@ public class FloppyHardware implements SerialDevice
     public boolean isDataTransferActive() 
     {
         return this.motorsRunning;
+    }
+    
+    public Optional<G64File> getDisk() {
+        return Optional.ofNullable( disk );
     }
 }
