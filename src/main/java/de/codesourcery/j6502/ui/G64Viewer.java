@@ -43,7 +43,7 @@ public class G64Viewer extends JPanel
                 frame.setDefaultCloseOperation( JFrame.EXIT_ON_CLOSE );
 
                 final InputStream in = G64File.class.getResourceAsStream( "/disks/pitfall.g64" );
-                final G64File file = new G64File( in );
+                final G64File file = new G64File( in , "/disks/pitfall.g64");
 
                 frame.getContentPane().add( new G64Viewer( file ) );
 
@@ -200,7 +200,7 @@ public class G64Viewer extends JPanel
 		{
 			try ( FileInputStream in = new FileInputStream( chooser.getSelectedFile() ) )
 			{
-				viewerPanel.setDisk( new G64File( in ) );
+				viewerPanel.setDisk( new G64File( in , chooser.getSelectedFile().getAbsolutePath() ) );
 				lastLoadedFile = chooser.getSelectedFile();
 			} catch(IOException e) {
 				e.printStackTrace();

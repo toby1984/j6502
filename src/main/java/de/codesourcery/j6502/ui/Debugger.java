@@ -15,10 +15,10 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.font.LineMetrics;
-import java.awt.geom.Rectangle2D;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
@@ -53,6 +53,7 @@ import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.border.TitledBorder;
+import javax.swing.filechooser.FileFilter;
 import javax.swing.table.AbstractTableModel;
 
 import org.apache.commons.io.IOUtils;
@@ -64,7 +65,6 @@ import de.codesourcery.j6502.assembler.parser.Parser;
 import de.codesourcery.j6502.assembler.parser.Scanner;
 import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.disassembler.Disassembler;
-import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.Breakpoint;
 import de.codesourcery.j6502.emulator.CPU;
@@ -75,10 +75,11 @@ import de.codesourcery.j6502.emulator.EmulatorDriver;
 import de.codesourcery.j6502.emulator.EmulatorDriver.IBreakpointLister;
 import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
 import de.codesourcery.j6502.emulator.EmulatorTest;
-import de.codesourcery.j6502.emulator.Floppy;
+import de.codesourcery.j6502.emulator.G64File;
 import de.codesourcery.j6502.emulator.IECBus.StateSnapshot;
 import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
+import de.codesourcery.j6502.emulator.diskdrive.DiskHardware;
 import de.codesourcery.j6502.ui.KeyboardInputListener.JoystickPort;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
@@ -315,8 +316,19 @@ public class Debugger
 
 		updateWindows(false);
 
-		final Optional<D64File> current = doWithFloppyAndReturn( floppy -> floppy.getDisk() );
-		bamPanel.setDisk( current.orElse( null ) );
+		final Optional<G64File> current = doWithFloppyAndReturn( floppy -> floppy.getDisk() );
+		if ( current.isPresent() ) 
+		{
+		    ByteArrayOutputStream out = new ByteArrayOutputStream();
+		    try {
+                current.get().toD64( out );
+                bamPanel.setDisk( new D64File( new ByteArrayInputStream( out.toByteArray() ) , current.get().getSource() ) );
+            } catch (Exception e1) {
+                e1.printStackTrace();
+            }
+		} else {
+		    bamPanel.setDisk( null );
+		}
 	}
 
 	private JMenuBar createMenu()
@@ -396,24 +408,24 @@ public class Debugger
 		}
 	}
 
-	private void doWithFloppy(Consumer<Floppy> consumer)
+	private void doWithFloppy(Consumer<DiskHardware> consumer)
 	{
 		synchronized(emulator)
 		{
 			emulator.getMemory().ioArea.iecBus.getDevices()
-			.stream().filter( dev -> dev instanceof Floppy).map( dev -> (Floppy) dev).findFirst().ifPresent( consumer );
+			.stream().filter( dev -> dev instanceof DiskHardware).map( dev -> (DiskHardware) dev).findFirst().ifPresent( consumer );
 		}
 	}
 
-	private <T> Optional<T> doWithFloppyAndReturn(Function<Floppy,T> consumer)
+	private <T> Optional<T> doWithFloppyAndReturn(Function<DiskHardware,Optional<T>> consumer)
 	{
 		synchronized(emulator)
 		{
-			Optional<Floppy> floppy = emulator.getMemory().ioArea.iecBus.getDevices()
-					.stream().filter( dev -> dev instanceof Floppy).map( dev -> (Floppy) dev).findFirst();
+			Optional<DiskHardware> floppy = emulator.getMemory().ioArea.iecBus.getDevices()
+					.stream().filter( dev -> dev instanceof DiskHardware).map( dev -> (DiskHardware) dev).findFirst();
 			if ( floppy.isPresent() )
 			{
-				return Optional.ofNullable( consumer.apply( floppy.get() ) );
+				return consumer.apply( floppy.get() );
 			}
 			return Optional.empty();
 		}
@@ -429,26 +441,62 @@ public class Debugger
 		} else {
 			chooser = new JFileChooser( new File("/home/tobi/mars_workspace/j6502/src/main/resources/disks"));
 		}
+		
+		chooser.setFileFilter( new FileFilter() 
+		{
+            @Override
+            public boolean accept(File f) {
+                return f.isDirectory() || ( f.isFile() && ( f.getName().toLowerCase().endsWith(".g64" ) || f.getName().toLowerCase().endsWith(".d64" ) ) );
+            }
+
+            @Override
+            public String getDescription() {
+                return ".g64 / .d64";
+            }
+		});
+		
 		if ( chooser.showOpenDialog( null ) != JFileChooser.APPROVE_OPTION )
 		{
 			return;
 		}
 		final File file = chooser.getSelectedFile();
+		
+	      // TODO: Implement file-type (.d64 / .g64) detection based on file content and not just the suffix...
+		final boolean isD64File = file.getName().toLowerCase().endsWith(".d64");
+		
 		loc.getConfigProperties().put( "last_d64_file" , file.getAbsolutePath() );
 
 		try
 		{
 			doWithFloppy( floppy ->
 			{
-				D64File d64File;
-				try {
-					d64File = new D64File( file );
-				} catch(RuntimeException e) {
-					throw e;
-				} catch (Exception e) {
-					throw new RuntimeException(e);
-				}
-				floppy.insertDisk( d64File );
+				final G64File g64File;
+				final D64File d64File;
+				try 
+				{
+                    final ByteArrayOutputStream out = new ByteArrayOutputStream();
+    				if ( isD64File ) 
+    				{
+    					d64File = new D64File( file );
+    				    G64File.toG64( d64File , out );
+    				    g64File = new G64File( new ByteArrayInputStream( out.toByteArray() ) , file.getAbsolutePath() );
+    				} 
+    				else 
+    				{
+                        g64File = new G64File( new FileInputStream( file ) , file.getAbsolutePath() );
+                        g64File.toD64( out );
+                        d64File = new D64File( new ByteArrayInputStream( out.toByteArray() ) , file.getAbsolutePath() );
+    				}
+                } 
+                catch(Exception e) 
+                {
+                    if ( e instanceof RuntimeException) {
+                        throw (RuntimeException) e;
+                    }
+                    throw new RuntimeException(e);
+                }
+				
+				floppy.loadDisk( g64File );
 				bamPanel.setDisk( d64File );
 			});
 		} catch (Exception e) {

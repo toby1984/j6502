@@ -5,6 +5,8 @@ import java.util.List;
 
 import org.apache.commons.lang.StringUtils;
 
+import de.codesourcery.j6502.emulator.diskdrive.DiskDrive;
+
 public class IECBus
 {
 	public static final boolean CAPTURE_BUS_SNAPSHOTS = true;
@@ -148,7 +150,9 @@ public class IECBus
 		this.identifier = identifier;
 		this.cpu = cpu;
 		addDevice(cpu);
-		addDevice( new Floppy( 8 ) );
+		
+		final DiskDrive diskDrive = new DiskDrive(8);
+		addDevice( diskDrive.getHardware() );
 	}
 
 	@Override

@@ -973,12 +973,14 @@ Byte    $00 - data block ID ($07)
 	private final TrackDataOffsetMap trackDataOffsetMap = new TrackDataOffsetMap();
 	private final FileHeader fileHeader = new FileHeader();
 	private final byte[] data;
+	private final String source; 
 
-	public G64File( InputStream in) throws IOException
+	public G64File( InputStream in,String source) throws IOException
 	{
 		if ( in == null ) {
 			throw new IllegalArgumentException("Input stream must not be NULL");
 		}
+		this.source = source;
 
 		final ByteArrayOutputStream out = new ByteArrayOutputStream();
 		try
@@ -1005,7 +1007,7 @@ Byte    $00 - data block ID ($07)
 			System.out.println("G64 file has "+bytesWritten+" bytes");
 		}
 
-		final G64File file = new G64File( new FileInputStream("/home/tobi/tmp/pitfall_from_d64.g64") );
+		final G64File file = new G64File( new FileInputStream("/home/tobi/tmp/pitfall_from_d64.g64") , "/home/tobi/tmp/pitfall_from_d64.g64" );
 		G64Viewer.show( file);
 
 		final File roundtripFile = new File("/home/tobi/tmp/pitfall_roundtrip.d64");
@@ -1446,4 +1448,8 @@ speeds. On a normal 1541 disk, these zones are as follows:
 			stream.writeBit(1);
 		}
 	}
+	
+	public String getSource() {
+        return source;
+    }
 }
