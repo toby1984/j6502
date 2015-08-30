@@ -21,7 +21,7 @@ public class VIA extends Memory
     private static final boolean DEBUG_CLEAR_IRQ= false;
     private static final boolean DEBUG_START_TIMER1 = false;
     
-    private static final boolean DEBUG_WRITE_PORT_B = false;
+    private static final boolean DEBUG_WRITE_PORT_B = true;
 
     /*
      * bit 6 - Timer 1
@@ -91,6 +91,8 @@ public class VIA extends Memory
         public void controlLine2Changed(VIA via,VIA.Port port);
     }
 
+    private long cycles;
+    
     private ShiftRegisterMode shiftRegisterMode = ShiftRegisterMode.DISABLED;
 
     private Timer1Mode timer1Mode=Timer1Mode.IRQ_ON_LOAD;
@@ -161,7 +163,7 @@ public class VIA extends Memory
                 if ( isOutput( i ) ) {
                     result |= ( or & mask);
                 } else {
-                    result |= ( pinsIn & mask);
+                    result |= ( pins & mask);
                 }
             }
             return result;
@@ -191,19 +193,17 @@ public class VIA extends Memory
         protected int ir;
         protected int or;
 
-        protected int pinsOut;
+        protected ControlLine2Mode line2Mode = ControlLine2Mode.INPUT_NEG_ACTIVE_EDGE; // Control line #2 mode
+        protected ControlLine1Mode line1Mode; // Control line #1 IRQ trigger 
 
-        private ControlLine2Mode line2Mode = ControlLine2Mode.INPUT_NEG_ACTIVE_EDGE; // Control line #2 mode
-        private ControlLine1Mode line1Mode; // Control line #1 IRQ trigger 
+        protected int pins;
+        protected boolean controlLine1In;
+        protected boolean controlLine2In;
 
-        protected int pinsIn;
-        private boolean controlLine1In;
-        private boolean controlLine2In;
+        protected final PortName portName;
 
-        private final PortName portName;
-
-        private final int irqMaskBitsControlLine1;
-        private final int irqMaskBitsControlLine2;
+        protected final int irqMaskBitsControlLine1;
+        protected final int irqMaskBitsControlLine2;
 
         public Port(PortName portName,int irqMaskBitsControlLine1,int irqMaskBitsControlLine2) {
             this.portName = portName;
@@ -211,30 +211,29 @@ public class VIA extends Memory
             this.irqMaskBitsControlLine2 = irqMaskBitsControlLine2;
         }
 
-        public void reset() 
+        public final void reset() 
         {
             ddr = 0;
             ir = 0;
             or = 0;
-
-            pinsOut = 0;
-
+            pins = 0;
+            
             line2Mode = ControlLine2Mode.INPUT_NEG_ACTIVE_EDGE;
             line1Mode = ControlLine1Mode.IRQ_NEG_ACTIVE_EDGE;
 
             latchingEnabled = false;
         }
 
-        public boolean isControlLine2Input()
+        public final boolean isControlLine2Input()
         {
             return line2Mode.isInput;
         }
 
-        public boolean isControlLine2Output() {
+        public final boolean isControlLine2Output() {
             return ! line2Mode.isInput;
         }
 
-        public void setControlLine2Mode(ControlLine2Mode mode) 
+        public final void setControlLine2Mode(ControlLine2Mode mode) 
         {
             if ( DEBUG & this.line2Mode != mode ) 
             {
@@ -257,11 +256,11 @@ public class VIA extends Memory
             } 
         }
 
-        public ControlLine2Mode getControlLine2Mode() {
+        public final ControlLine2Mode getControlLine2Mode() {
             return line2Mode;
         }
 
-        public void setControlLine1Mode(ControlLine1Mode mode) 
+        public final void setControlLine1Mode(ControlLine1Mode mode) 
         {
             if ( DEBUG & this.line1Mode != mode ) {
                 logDebug( "port "+portName+" control line #1 mode: "+this.line1Mode+" -> "+mode);
@@ -269,16 +268,16 @@ public class VIA extends Memory
             this.line1Mode = mode;
         }
 
-        public ControlLine1Mode getControlLine1Mode() {
+        public final ControlLine1Mode getControlLine1Mode() {
             return this.line1Mode;
         }
 
-        public PortName getPortName() {
+        public final PortName getPortName() {
             return portName;
         }
 
-        public int getPinsOut() {
-            return pinsOut;
+        public final int getPinsOut() {
+            return pins;
         }
 
         public final int readRegister()
@@ -286,30 +285,30 @@ public class VIA extends Memory
             return latchingEnabled ? readRegisterLatchingEnabled() : readRegisterLatchingDisabled();
         }
 
-        public void tick()
+        public final void tick()
         {
-            int result = pinsOut;
+            int result = pins;
             int oldValue = result;
             int value = or & ddr; // retain only bits for output
             result &= ~ddr; // clear all output bits
             result |= value;
-            pinsOut = result;
+            pins = result;
             if ( oldValue != result ) 
             {
                 changeListener.portChanged( VIA.this , this );
             }
         }
 
-        public int getDDR() {
+        public final int getDDR() {
             return ddr;
         }
 
-        public boolean getControlLine1() 
+        public final boolean getControlLine1() 
         {
             return controlLine1In;
         }
 
-        public boolean getControlLine2() 
+        public final  boolean getControlLine2() 
         {
             if ( line2Mode.isInput ) {
                 return controlLine2In;
@@ -325,7 +324,7 @@ public class VIA extends Memory
             }
         }
 
-        public void setControlLine1(boolean newValue,boolean notifyListeners) 
+        public final void setControlLine1(boolean newValue,boolean notifyListeners) 
         {
             final boolean oldValue = this.controlLine1In;
             if ( oldValue != newValue ) 
@@ -357,7 +356,7 @@ public class VIA extends Memory
             } 
         }
 
-        public void setControlLine2(boolean newValue,boolean notifyListeners) 
+        public final void setControlLine2(boolean newValue,boolean notifyListeners) 
         {
             final boolean oldValue = getControlLine2();
             if ( oldValue != newValue && isControlLine2Input() ) 
@@ -380,7 +379,7 @@ public class VIA extends Memory
             } 		
         }
 
-        public void setDDR(int ddr) 
+        public final void setDDR(int ddr) 
         {
             this.ddr = ddr & 0xff;
             if ( DEBUG ) 
@@ -391,30 +390,51 @@ public class VIA extends Memory
 
         public final void writeRegister(int value)
         {
+            // ddr = 1 => output
+            int newValue = this.pins & ~ddr;
+            newValue = newValue | ( (value & 0xff) & ddr );
             if ( DEBUG && ( DEBUG_WRITE_PORT_B || portName != PortName.B) ) 
             {
-                final int newValue = value & 0xff;
-                if ( or != newValue ) 
+                if ( newValue != pins ) 
                 {
-                    or = newValue;
-                    debugPrint( portName , "writeRegister" , newValue );
+                    debugPrint( portName , "writeRegister: current "+HexDump.toBinaryString( (byte) pins )+" , DDR: "
+                +HexDump.toBinaryString( (byte) ddr )+" , value:"+HexDump.toBinaryString( (byte) value )+" => "+
+                HexDump.toBinaryString( (byte) newValue ), newValue );
                 }
-            } else {
-                or = value & 0xff;
-            }
+            } 
+            this.or = value & 0xff;
+            this.pins = newValue;
         }
-
+        
         public final void setInputPins(int value) 
         {
-            this.pinsIn = value & 0xff;
+            // DDR: 0 = input, 1 = output
+            int newValue = pins & ddr;
+            newValue = newValue | (value & ~ddr);
+            this.pins = newValue & 0xff;
             if ( DEBUG ) 
             {
-                debugPrint( portName , "setInputPins" , value );
+                debugPrint( portName , "setInputPins" , newValue );
             }
-        }
+        }        
+
+        public final void setInputPin(int bit, boolean set) 
+        {
+            final int mask = 1<<bit & ~ddr;
+            int newValue;
+            if ( set ) {
+                newValue = this.pins | mask;
+            } else {
+                newValue = this.pins & ~mask;
+            }
+            if ( DEBUG && this.pins != newValue) {
+                debugPrint( portName , set ? "setInputBit" : "clearInputBit" , newValue , bit );
+            }
+            this.pins = newValue;
+        }        
 
         public final int getPinsIn() {
-            return pinsIn;
+            return pins & ~ddr;
         }
 
         public final boolean isInput(int bit) {
@@ -426,29 +446,17 @@ public class VIA extends Memory
         }
 
         protected int readRegisterLatchingDisabled() {
-            return pinsIn;
+            return pins & ~ddr;
         }
 
         protected int readRegisterLatchingEnabled() {
             return ir;
         }
 
-        public void setLatchingEnabled(boolean latchingEnabled) {
+        public final void setLatchingEnabled(boolean latchingEnabled) {
             this.latchingEnabled = latchingEnabled;
             if ( DEBUG ) {
                 logDebug( "port "+portName+" : latching_enabled: "+latchingEnabled);
-            }
-        }
-
-        public void setInputPin(int bit, boolean set) 
-        {
-            if ( set ) {
-                this.pinsIn |= 1<<bit;
-            } else {
-                this.pinsIn &= ~1<<bit;
-            }
-            if ( DEBUG ) {
-                debugPrint( portName , set ? "setInputBit" : "clearInputBit" , this.pinsIn , bit );
             }
         }
     }
@@ -694,6 +702,8 @@ public class VIA extends Memory
         /* Clear all internal registers
          * except t1/t2 counter, latches and SR
          */
+        
+        cycles = 0;
 
         portA.reset();
         portB.reset();
@@ -1013,6 +1023,8 @@ public class VIA extends Memory
 
     public void tick()
     {
+        cycles++;
+        
         if ( timer1Running && --timer1 == 0 ) 
         {
             switch( timer1Mode ) 
@@ -1041,8 +1053,10 @@ public class VIA extends Memory
     {
         if ( (irqEnable & bitMask) != 0 ) 
         {
-            if ( ( irqFlags & bitMask) == 0 ) {
-                irqFlags |= ( IRQBIT_IRQ_OCCURRED | bitMask );
+            final int currentFlags = irqFlags;
+            irqFlags |= ( IRQBIT_IRQ_OCCURRED | bitMask );
+            if ( ( currentFlags & bitMask) == 0 ) 
+            {
                 if ( DEBUG_SET_IRQ ) {
                     logDebug(" SET INTERRUPT - IRQ flags : "+HexDump.toBinaryString( (byte) irqFlags ) ); 
                 }
@@ -1078,7 +1092,7 @@ public class VIA extends Memory
 
     protected void logDebug(String message) 
     {
-        System.out.println( getIdentifier()+" - "+message);
+        System.out.println( getIdentifier()+" - cycle "+cycles+" - "+message);
         System.out.flush();
     }
 
@@ -1089,16 +1103,16 @@ public class VIA extends Memory
 
     private void debugPrint(PortName portName,String msg , int value,String bitSetMsg,String bitClearedMsg) 
     {
-        final StringBuilder buffer = new StringBuilder( msg+"( port "+portName+"): \n");
+        final StringBuilder buffer = new StringBuilder( msg+"( cycle "+cycles+" , port "+portName+"): \n");
         for ( int i = 0 ; i < 7 ; i++ ) 
         {
             boolean bitSet = (value & 1<<i) != 0;
             switch( portName ) {
                 case A:
-                    buffer.append( getNamePortA( i )).append(" - ").append( bitSet ? bitSetMsg  : bitClearedMsg ).append("\n");
+                    buffer.append( getNamePortA( i ) ).append("bit ").append( i ).append(" - ").append( bitSet ? bitSetMsg  : bitClearedMsg ).append("\n");
                     break;
                 case B:
-                    buffer.append( getNamePortB( i )).append(" - ").append( bitSet ? bitSetMsg  : bitClearedMsg  ).append("\n");
+                    buffer.append( getNamePortB( i )).append("bit ").append( i ).append(" - ").append( bitSet ? bitSetMsg  : bitClearedMsg  ).append("\n");
                     break;
                 default:
                     throw new RuntimeException("Unhandled switch/case: "+portName);
@@ -1109,15 +1123,15 @@ public class VIA extends Memory
 
     private void debugPrint(PortName portName,String msg , int value,int bitNum) 
     {
-        final StringBuilder buffer = new StringBuilder( msg+"( port "+portName+"): \n");
+        final StringBuilder buffer = new StringBuilder( msg+"( cycle "+cycles+", port "+portName+"): \n");
         boolean bitSet = (value & 1<<bitNum) != 0;
         switch( portName ) 
         {
             case A:
-                buffer.append( getNamePortA( bitNum )).append(" - ").append( bitSet ? "ON" : "off" ).append("\n");
+                buffer.append( getNamePortA( bitNum )).append("bit ").append( bitNum ).append(" - ").append( bitSet ? "ON" : "off" ).append("\n");
                 break;
             case B:
-                buffer.append( getNamePortB( bitNum )).append(" - ").append( bitSet ? "ON" : "off" ).append("\n");
+                buffer.append( getNamePortB( bitNum )).append("bit ").append( bitNum ).append(" - ").append( bitSet ? "ON" : "off" ).append("\n");
                 break;
             default:
                 throw new RuntimeException("Unhandled switch/case: "+portName);
