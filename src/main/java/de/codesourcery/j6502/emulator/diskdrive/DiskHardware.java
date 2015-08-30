@@ -2,9 +2,11 @@ package de.codesourcery.j6502.emulator.diskdrive;
 
 import java.util.Optional;
 
+import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.G64File;
 import de.codesourcery.j6502.emulator.G64File.TrackData;
 import de.codesourcery.j6502.emulator.IECBus;
+import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.emulator.SerialDevice;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.Port;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.PortName;
@@ -112,6 +114,7 @@ public class DiskHardware implements SerialDevice
         }
     }
 
+    protected final DiskDrive diskDrive;
     protected final int driveAddress;
     protected int cyclesPerByte = SPEED10_CYCLES_PER_BYTE;
     protected float headPosition = 18;
@@ -121,7 +124,7 @@ public class DiskHardware implements SerialDevice
 
     protected G64File disk;
     protected Optional<TrackData> currentTrackData;
-    protected BitStream bitStream = new BitStream( new byte[0] , 0 );
+    protected BitStream bitStream = new BitStream( new byte[] {0x55} , 8 );
 
     protected final ReadMode READ = new ReadMode();
     protected final WriteMode WRITE = new WriteMode();
@@ -217,7 +220,6 @@ public class DiskHardware implements SerialDevice
      * VIA2:
      * 
      * PA0...8 - (IN/OUT) Read data/Write data 
-     * 
      * 
      * PB0 - (OUT) Step 1  |   Sequence 00/01/10/11/00... moves inwards      | 
      * PB1 - (OUT) Step 0  |   Sequence 00/11/10/01/00... moves outwards     | 
@@ -459,11 +461,12 @@ public class DiskHardware implements SerialDevice
 
     };    
 
-    public DiskHardware(VIA via1,VIA via2,int driveAddress) 
+    public DiskHardware(DiskDrive diskDrive,VIA via1,VIA via2,int driveAddress) 
     {
         if ( driveAddress < 8 || driveAddress > 11 ) {
             throw new IllegalArgumentException("Invalid drive address "+driveAddress);
         }
+        this.diskDrive = diskDrive;
         this.driveAddress = driveAddress;
         this.via1=via1;
         this.via2=via2;
@@ -473,6 +476,10 @@ public class DiskHardware implements SerialDevice
 
     public void reset() 
     {
+        diskDrive.reset();
+        
+        previousData =  previousClock =  previousATN = false;
+        
         setDriveMode( READ );
         headPosition = 18f; 
         cyclesPerByte = SPEED10_CYCLES_PER_BYTE; // default speed for track #18
@@ -532,11 +539,6 @@ public class DiskHardware implements SerialDevice
         }
     }
 
-    public void tick() 
-    {
-        this.driveMode.tick();
-    }
-
     public void ejectDisk() {
         currentTrackData = Optional.empty();
         bitStream = new BitStream(new byte[0] , 0 );
@@ -570,6 +572,10 @@ public class DiskHardware implements SerialDevice
 
     // ====== SerialDevice interface implementation ==========
 
+    protected boolean previousData;
+    protected boolean previousClock;
+    protected boolean previousATN;
+    
     @Override
     public void tick(IECBus bus, boolean atnLowered) 
     {
@@ -583,30 +589,48 @@ public class DiskHardware implements SerialDevice
          * PB6 - (IN) Device address
          * PB7 - (IN) ATN IN
          * 
-         * CA1 - Unused
+         * CA1 - (IN) ATN IN 
          * CA2 - Unused
          * CB1 - Unused
-         * CB2 - (IN) ATN IN         
+         * CB2 - Unused     
          */
         final Port portB = via1.getPortB();
-        portB.setControlLine2( atnLowered , false );
+
+        final boolean newData = bus.getData();
+        final boolean newClk = bus.getClk();
+        final boolean newATN = ! bus.getATN();
         
-        portB.setInputPin( 0 , bus.getData() );
-        portB.setInputPin( 2 , bus.getClk() );
-        portB.setInputPin( 7 , atnLowered);
+        if ( previousData != newData ) {
+            portB.setInputPin( 0 , newData );
+            previousData = newData;
+        }
+        if ( previousClock != newClk ) {
+            portB.setInputPin( 2 , newClk );
+            previousClock = newClk;
+        }
+        
+        if ( previousATN != newATN ) {
+            portB.setInputPin( 7 , newATN );
+            via1.getPortA().setControlLine1( newATN , false );
+            previousATN = newATN;
+        }
+        
+        diskDrive.tick();
         
         driveMode.tick();
+        this.via1.tick();
+        this.via2.tick();           
     }
     
     @Override
     public boolean getData() {
-        return ( via1.getPortB().getPinsOut() & 1<< 1 ) != 0;
+        return ( via1.getPortB().getPinsOut() & 1<< 1 ) == 0;
     }
 
     @Override
     public boolean getClock() 
     {
-        return ( via1.getPortB().getPinsOut() & 1<< 3 ) != 0;
+        return ( via1.getPortB().getPinsOut() & 1<< 3 ) == 0;
     }
 
     @Override
@@ -628,5 +652,17 @@ public class DiskHardware implements SerialDevice
     
     public Optional<G64File> getDisk() {
         return Optional.ofNullable( disk );
+    }
+    
+    public CPU getCPU() {
+        return diskDrive.getCPU();
+    }
+    
+    public IMemoryRegion getMemory() {
+        return diskDrive;
+    }
+    
+    public DiskDrive getDiskDrive() {
+        return diskDrive;
     }
 }

@@ -138,15 +138,15 @@ public class CPU
 	    {
             case BRK:
                 pushByte( CPU.Flag.BREAK.set( flags ) , memory ); // push processor flags
-                pc = (short) memory.readWord( (short) CPU.BRK_VECTOR_LOCATION );
+                pc = memory.readWord( CPU.BRK_VECTOR_LOCATION );
                 break;
             case NMI:
                 pushByte( flags , memory ); // push processor flags
-                pc = (short) memory.readWord( (short) CPU.NMI_VECTOR_LOCATION );
+                pc = memory.readWord( CPU.NMI_VECTOR_LOCATION );
                 break;
             case REGULAR:
                 pushByte( flags , memory ); // push processor flags
-                pc = (short) memory.readWord( (short) CPU.IRQ_VECTOR_LOCATION );
+                pc = memory.readWord( CPU.IRQ_VECTOR_LOCATION );
                 break;
             default:
                 throw new RuntimeException("Unhandled IRQ type: "+interruptQueued);
@@ -202,7 +202,9 @@ public class CPU
 	public void reset()
 	{
 		cycles = 0;
-		pc = (short) memory.readWord( (short) RESET_VECTOR_LOCATION );
+		pc = memory.readWord( RESET_VECTOR_LOCATION );
+		System.out.println("RESET: PC of CPU "+this.memory+" now points to "+HexDump.toAdr( pc ) );
+		
 		previousPC = (short) pc;
 		setAccumulator(0);
 		setX(0);

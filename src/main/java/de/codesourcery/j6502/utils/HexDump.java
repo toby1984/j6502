@@ -59,7 +59,7 @@ public class HexDump {
 			{
 				final int adr = index % region.getAddressRange().getSizeInBytes();
 				index++;
-				final byte value = (byte) region.readByte( adr );
+				final byte value = (byte) region.readByte( adr & 0xffff );
 				final char intValue = CharsetConverter.petToASCII( value );
 				final boolean doMark = mark && adr == addressToMark;
 				char toAppend;

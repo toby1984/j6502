@@ -879,7 +879,7 @@ bbb	addressing mode
 	private byte readByte()
 	{
 		bytesLeft--;
-		return (byte) data.readByte( currentOffset++ );
+		return (byte) data.readByte( ( currentOffset++ & 0xffff) );
 	}
 
 	private short readWord()

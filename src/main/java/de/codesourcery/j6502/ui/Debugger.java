@@ -67,18 +67,20 @@ import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.Breakpoint;
+import de.codesourcery.j6502.emulator.BreakpointsController;
+import de.codesourcery.j6502.emulator.BreakpointsController.IBreakpointLister;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.D64File;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.EmulatorDriver;
-import de.codesourcery.j6502.emulator.EmulatorDriver.IBreakpointLister;
 import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
 import de.codesourcery.j6502.emulator.EmulatorTest;
 import de.codesourcery.j6502.emulator.G64File;
 import de.codesourcery.j6502.emulator.IECBus.StateSnapshot;
 import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
+import de.codesourcery.j6502.emulator.SerialDevice;
 import de.codesourcery.j6502.emulator.diskdrive.DiskHardware;
 import de.codesourcery.j6502.ui.KeyboardInputListener.JoystickPort;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
@@ -100,6 +102,11 @@ public class Debugger
 	protected static final int VERTICAL_LINE_SPACING = 2;
 	protected static final Font MONO_FONT = new Font( "Monospaced", Font.PLAIN, 12 );
 
+	protected static enum DebugTarget {
+	    COMPUTER,
+	    FLOPPY_8;
+	}
+	
 	protected final WindowLocationHelper locationHelper = new WindowLocationHelper();
 
 	protected final EmulatorDriver driver = new EmulatorDriver( emulator ) {
@@ -140,8 +147,20 @@ public class Debugger
 				}
 			}
 		}
-	};
 
+        @Override
+        protected BreakpointsController getBreakPointsController() {
+            return Debugger.this.getBreakPointsController();
+        }
+	};
+	
+	private final BreakpointsController c64BreakpointsController = new BreakpointsController( emulator.getCPU() , emulator.getMemory() );
+	private BreakpointsController floppyBreakpointsController;
+	private volatile CPU debugCPU = emulator.getCPU();
+	private volatile IMemoryRegion debugMemory = emulator.getMemory();
+	private volatile BreakpointsController breakpointsController = c64BreakpointsController;
+	private DebugTarget debugTarget = DebugTarget.COMPUTER;
+	
 	private final JDesktopPane desktop = new JDesktopPane();
 
 	private final KeyboardInputListener keyboardListener = new KeyboardInputListener(emulator);
@@ -150,17 +169,32 @@ public class Debugger
 
 	private final BreakpointModel bpModel = new BreakpointModel();
 	private final ButtonToolbar toolbar = new ButtonToolbar();
-	private final DisassemblyPanel disassembly = new DisassemblyPanel( emulator , driver );
+	private final DisassemblyPanel disassembly = new DisassemblyPanel() {
+
+        @Override
+        public BreakpointsController getBreakpointsController() {
+            return Debugger.this.getBreakPointsController();
+        }
+	};
+	
 	private final HexDumpPanel hexPanel = new HexDumpPanel();
-	private final CPUStatusPanel cpuPanel = new CPUStatusPanel( emulator.getCPU() );
+	
+	private final CPUStatusPanel cpuPanel = new CPUStatusPanel() 
+	{
+	    protected CPU getCPU() 
+	    {
+	        return Debugger.this.getCPU();
+	    }
+	};
+	
 	private final BreakpointsWindow breakpointsWindow = new BreakpointsWindow();
 	private final ScreenPanel screenPanel = new ScreenPanel();
 	private final BlockAllocationPanel bamPanel = new BlockAllocationPanel();
 	private final CalculatorPanel calculatorPanel = new CalculatorPanel();
 	private final SpriteViewer spriteView = new SpriteViewer(emulator);
 
-	private final AsmPanel asmPanel = new AsmPanel(desktop) {
-
+	private final AsmPanel asmPanel = new AsmPanel(desktop) 
+	{
 		@Override
 		protected void binaryUploadedToEmulator()
 		{
@@ -187,8 +221,6 @@ public class Debugger
 
 		emulator.reset();
 
-		driver.addBreakpointListener( disassembly );
-		driver.addBreakpointListener( bpModel );
 		driver.start();
 
 		final JInternalFrame toolbarFrame = wrap( "Buttons" , toolbar );
@@ -349,6 +381,17 @@ public class Debugger
 		// add 'Views' menu
 		final JMenu views = new JMenu("Views");
 		menuBar.add( views );
+		
+		setDebugTarget( DebugTarget.COMPUTER );
+		
+		JCheckBoxMenuItem debugTargetSelector = new JCheckBoxMenuItem("Debug Floppy #8" , false );
+		debugTargetSelector.setSelected( debugTarget == DebugTarget.FLOPPY_8 );
+		debugTargetSelector.addActionListener( ev -> 
+		{
+		    setDebugTarget( debugTargetSelector.isSelected() ? DebugTarget.FLOPPY_8 : DebugTarget.COMPUTER );
+		});
+		
+		views.add( debugTargetSelector );
 
 		panels.sort( (a,b) ->
 		{
@@ -396,6 +439,62 @@ public class Debugger
 			}
 		});
 		return menuBar;
+	}
+	
+	private void setDebugTarget(DebugTarget target) 
+	{
+	    this.debugTarget = target;
+	    
+        final boolean debugC64;
+        DiskHardware floppy = null;
+        
+        switch( target ) 
+        {
+            case FLOPPY_8:
+                final SerialDevice device = emulator.getBus().getDevice( 8 );
+                if ( device instanceof DiskHardware ) 
+                {
+                    floppy = (DiskHardware) device;
+                    debugC64 = false;
+                } else {
+                    debugC64 = true;
+                }
+                break;
+            case COMPUTER:
+                debugC64 = true;
+                break;
+            default:
+                throw new RuntimeException("Unhandled switch/case: "+debugTarget);
+        }
+        
+        c64BreakpointsController.removeBreakpointListener( disassembly );
+        c64BreakpointsController.removeBreakpointListener( bpModel );
+        
+        if ( floppyBreakpointsController != null ) 
+        {
+            floppyBreakpointsController.removeBreakpointListener( disassembly );
+            floppyBreakpointsController.removeBreakpointListener( bpModel );
+        }
+        
+        if ( debugC64 || floppy == null ) 
+        {
+            debugCPU = emulator.getCPU();
+            debugMemory =  emulator.getMemory();
+            breakpointsController = c64BreakpointsController;
+        } else {
+            debugCPU = floppy.getCPU();
+            debugMemory = floppy.getMemory();
+            
+            if ( floppyBreakpointsController == null ) {
+                floppyBreakpointsController = new BreakpointsController( debugCPU , debugMemory );
+            }
+            breakpointsController = floppyBreakpointsController;
+        }
+        
+        breakpointsController.addBreakpointListener( disassembly );
+        breakpointsController.addBreakpointListener( bpModel );
+        disassembly.allBreakpointsChanged();
+        bpModel.allBreakpointsChanged();
 	}
 
 	private void ejectDisk()
@@ -647,9 +746,11 @@ public class Debugger
 				emulator.setMemoryProvider( provider );
 				emulator.getCPU().pc( origin );
 			}
-			driver.removeAllBreakpoints();
-			driver.addBreakpoint( new Breakpoint( (short) 0x45bf , false , true ) );
-			driver.addBreakpoint( new Breakpoint( (short) 0x40cb , false , true ) );
+			
+			final BreakpointsController bpController = getBreakPointsController();
+            bpController.removeAllBreakpoints();
+			bpController.addBreakpoint( new Breakpoint( (short) 0x45bf , false , true ) );
+			bpController.addBreakpoint( new Breakpoint( (short) 0x40cb , false , true ) );
 			hexPanel.setAddress( (short) 0x210 );
 			updateWindows(false);
 		}
@@ -710,7 +811,7 @@ public class Debugger
 			runButton.addActionListener( ev -> driver.setMode(Mode.CONTINOUS) );
 			stopButton.addActionListener( event -> driver.setMode(Mode.SINGLE_STEP) );
 
-			stepOverButton.addActionListener( ev -> driver.stepReturn() );
+			stepOverButton.addActionListener( ev -> getBreakPointsController().stepReturn() );
 			refreshUIButton.addActionListener( ev ->
 			{
 				updateWindows( false );
@@ -735,7 +836,7 @@ public class Debugger
 			stopButton.setEnabled( currentMode != Mode.SINGLE_STEP );
 			runButton.setEnabled( currentMode == Mode.SINGLE_STEP);
 			resetButton.setEnabled( currentMode == Mode.SINGLE_STEP);
-			stepOverButton.setEnabled( driver.canStepOver() );
+			stepOverButton.setEnabled( getBreakPointsController().canStepOver() );
 		}
 	}
 
@@ -1044,18 +1145,17 @@ public class Debugger
 		public void refresh(Emulator emulator)
 		{
 			final Graphics2D g = getBackBufferGraphics();
-			try {
-				synchronized( emulator )
-				{
-					final String[] lines = hexdump.dump( startAddress , emulator.getMemory() , startAddress , bytesToDisplay).split("\n");
+			try 
+			{
+			    final IMemoryRegion memory = getBreakPointsController().getMemory();
+				final String[] lines = hexdump.dump( startAddress , memory , startAddress , bytesToDisplay).split("\n");
 
-					int y = 15;
+				int y = 15;
 
-					g.setColor( Color.GREEN );
-					for ( String line : lines ) {
-						g.drawString( line , 5 , y );
-						y += LINE_HEIGHT;
-					}
+				g.setColor( Color.GREEN );
+				for ( String line : lines ) {
+					g.drawString( line , 5 , y );
+					y += LINE_HEIGHT;
 				}
 			}
 			finally {
@@ -1149,7 +1249,7 @@ public class Debugger
 							for ( int idx : selectedRows ) {
 								toRemove.add( bpModel.getRow(idx) );
 							}
-							toRemove.forEach( driver::removeBreakpoint );
+							toRemove.forEach( bp -> getBreakPointsController().removeBreakpoint(bp) );
 						}
 					}
 				}
@@ -1212,7 +1312,7 @@ public class Debugger
 			if ( breakpointsChanged || cachedBreakpoints == null )
 			{
 				synchronized( emulator ) {
-					cachedBreakpoints = driver.getBreakpoints();
+					cachedBreakpoints = getBreakPointsController().getBreakpoints();
 					cachedBreakpoints.sort( (bp1,bp2 ) -> Integer.compare(bp1.address, bp2.address ));
 					breakpointsChanged = false;
 				}
@@ -1291,7 +1391,7 @@ public class Debugger
 	            }
 	            newBP = new Breakpoint( currentBP.address , false , CPU.Flag.toBitMask( flags ) , true );
 		    }
-			driver.addBreakpoint( newBP );
+	        getBreakPointsController().addBreakpoint( newBP );
 		}
 
 		@Override
@@ -1312,6 +1412,12 @@ public class Debugger
 					throw new RuntimeException("Unreachable code reached");
 			}
 		}
+		
+		@Override
+		public void allBreakpointsChanged() {
+	          breakpointsChanged = true;
+	          fireTableDataChanged();
+		}
 
 		@Override
 		public void breakpointAdded(Breakpoint bp) {
@@ -1331,4 +1437,19 @@ public class Debugger
 			fireTableDataChanged();
 		}
 	};
+	
+    protected final CPU getCPU() 
+    {
+        return debugCPU;
+    }
+    
+    protected final IMemoryRegion getMemory() 
+    {
+        return debugMemory;
+    }
+    
+    protected final BreakpointsController getBreakPointsController() 
+    {
+        return breakpointsController;
+    }
 }

@@ -11,7 +11,7 @@ import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.utils.HexDump;
 
 // CPU status
-public final class CPUStatusPanel extends BufferedView implements WindowLocationHelper.IDebuggerView
+public abstract class CPUStatusPanel extends BufferedView implements WindowLocationHelper.IDebuggerView
 {
     private Component peer;
     private boolean isDisplayed;
@@ -19,13 +19,12 @@ public final class CPUStatusPanel extends BufferedView implements WindowLocation
     // @GuardedBy( lines )
     private final List<String> lines = new ArrayList<>();
 
-    private final CPU cpu;
-    
-    public CPUStatusPanel(CPU cpu)
+    public CPUStatusPanel()
     {
-        this.cpu = cpu;
         setPreferredSize( new Dimension(200,150 ) );
     }
+    
+    protected abstract CPU getCPU();
     
     @Override
     public void setLocationPeer(Component frame) {
@@ -58,8 +57,8 @@ public final class CPUStatusPanel extends BufferedView implements WindowLocation
     @Override
     public void refresh(Emulator emulator)
     {
+        final CPU cpu = getCPU();
         lines.clear();
-
         lines.add( "PC: "+HexDump.toAdr( cpu.pc() ) + "   Flags: "+ cpu.getFlagsString() );
         lines.add("Cycles: "+cpu.cycles);
         lines.add("Previous PC: "+HexDump.toAdr( cpu.previousPC ) );

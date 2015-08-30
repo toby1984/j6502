@@ -62,10 +62,10 @@ public class Memory extends IMemoryRegion
 	public int readWord(int offset)
 	{
 		int realOffset = offset & 0xffff;
-		final byte low = data[realOffset];
+		final int low = data[realOffset] & 0xff;
 		realOffset = (realOffset+1) & 0xffff;
-		final byte hi = data[realOffset];
-		return (hi<<8|low) & 0xffff;
+		final int hi = data[realOffset] & 0xff;
+		return (hi<<8|low);
 	}
 
 	@Override

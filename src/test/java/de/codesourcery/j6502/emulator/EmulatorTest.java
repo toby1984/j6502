@@ -608,6 +608,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
         final Emulator e = new Emulator();
         e.setMemoryProvider( provider );
 
+        final BreakpointsController ctrl = new BreakpointsController(e.getCPU() , e.getMemory() );
         CountDownLatch stopped = new CountDownLatch(1);
 
         final EmulatorDriver driver = new EmulatorDriver( e ) {
@@ -624,13 +625,18 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
             @Override
             protected void tick() {
             }
+
+            @Override
+            protected BreakpointsController getBreakPointsController() {
+                return ctrl;
+            }
         };
 
         e.reset();
         e.getCPU().pc( origin );
 
         driver.start();
-        driver.addBreakpoint( new Breakpoint( (short) 0x103e , false , true ) );
+        ctrl.addBreakpoint( new Breakpoint( (short) 0x103e , false , true ) );
         driver.setMode( Mode.CONTINOUS );
 
         if ( ! stopped.await( 5 , TimeUnit.SECONDS ) )
@@ -678,6 +684,7 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
 
         CountDownLatch stopped = new CountDownLatch(1);
 
+        final BreakpointsController ctrl = new BreakpointsController(e.getCPU() , e.getMemory() );
         final EmulatorDriver driver = new EmulatorDriver( e ) {
 
             @Override
@@ -692,13 +699,18 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
             @Override
             protected void tick() {
             }
+
+            @Override
+            protected BreakpointsController getBreakPointsController() {
+                return ctrl;
+            }
         };
 
         e.reset();
         e.getCPU().pc( origin );
 
         driver.start();
-        driver.addBreakpoint( new Breakpoint( (short) 0x45c0 , false , true ) );
+        ctrl.addBreakpoint( new Breakpoint( (short) 0x45c0 , false , true ) );
         driver.setMode( Mode.CONTINOUS );
 
         if ( ! stopped.await( 5 , TimeUnit.SECONDS ) )

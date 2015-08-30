@@ -1,7 +1,5 @@
 package de.codesourcery.j6502.emulator;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -27,19 +25,8 @@ public abstract class EmulatorDriver extends Thread
 	public volatile SourceMap sourceMap = null;
 	public volatile SourceHelper sourceHelper = null;
 
-	// @GuardedBy( emulator )
-	private Breakpoint oneShotBreakpoint = null;
-
-	// @GuardedBy( emulator )
-	private final Breakpoint[] breakpoints = new Breakpoint[65536];
-
-	// @GuardedBy( emulator )
-	private int breakpointsCount=0;
-
 	protected final ArrayBlockingQueue<Cmd> requestQueue = new ArrayBlockingQueue<>(10);
 	protected final ArrayBlockingQueue<Cmd> ackQueue = new ArrayBlockingQueue<>(10);
-
-	private final List<IBreakpointLister> breakpointListeners = new ArrayList<>();
 
 	protected Cmd startCommand(boolean ackRequired) {
 		return new Cmd(CmdType.START,ackRequired);
@@ -50,13 +37,6 @@ public abstract class EmulatorDriver extends Thread
 	}
 
 	protected static enum CmdType { START , STOP }
-
-	public interface IBreakpointLister
-	{
-		public void breakpointAdded(Breakpoint bp);
-		public void breakpointRemoved(Breakpoint bp);
-		public void breakpointReplaced(Breakpoint old,Breakpoint newBp);
-	}
 
 	protected final class StopCmd extends Cmd
 	{
@@ -190,8 +170,6 @@ public abstract class EmulatorDriver extends Thread
 	@Override
 	public void run()
 	{
-		final CPU cpu = emulator.getCPU();
-
 		boolean justStarted = true;
 		boolean isRunnable = false;
 
@@ -206,6 +184,7 @@ public abstract class EmulatorDriver extends Thread
 		Cmd cmd = null;
 		while( true )
 		{
+		    final CPU cpu = emulator.getCPU();
 			if ( isRunnable )
 			{
 				cmd = requestQueue.poll();
@@ -265,21 +244,11 @@ public abstract class EmulatorDriver extends Thread
 
 					cyclesUntilNextTick--;
 
-					if ( breakpointsCount > 0 )
+					if ( getBreakPointsController().isAtBreakpoint() )
 					{
-						Breakpoint bp = breakpoints[ cpu.pc() ];
-						if ( bp == null && ( oneShotBreakpoint != null && oneShotBreakpoint.address == cpu.pc() ) ) {
-							bp = oneShotBreakpoint;
-						}
-						if ( bp != null && bp.isTriggered( cpu ) )
-						{
-							isRunnable = false;
-							if ( bp.isOneshot ) {
-								oneShotBreakpoint = null;
-							}
-							cmd = stopCommand( false , true ); // assign to cmd so that next loop iteration will know why we stopped execution
-							sendCmd( cmd );
-						}
+						isRunnable = false;
+						cmd = stopCommand( false , true ); // assign to cmd so that next loop iteration will know why we stopped execution
+						sendCmd( cmd );
 					}
 				}
 				catch(final Throwable e)
@@ -335,142 +304,5 @@ public abstract class EmulatorDriver extends Thread
 		return lastException;
 	}
 
-	public void stepReturn()
-	{
-		boolean breakpointAdded = false;
-		synchronized( emulator )
-		{
-			if ( canStepOver() ) // check whether PC is at a JSR $xxxx instruction
-			{
-				addBreakpoint( new Breakpoint( emulator.getCPU().pc()+3 , true , true ) ); // JSR $xxxx occupies 3 bytes
-				breakpointAdded = true;
-			}
-		}
-		if ( breakpointAdded ) {
-			setMode(Mode.CONTINOUS);
-		}
-	}
-
-	public boolean canStepOver()
-	{
-		if ( getMode() == Mode.SINGLE_STEP )
-		{
-			synchronized( emulator )
-			{
-				final int op = emulator.getMemory().readByte( emulator.getCPU().pc() );
-				return op == 0x20; // JSR $xxxx
-			}
-		}
-		return false;
-	}
-
-	public void addBreakpoint(Breakpoint bp)
-	{
-		synchronized(emulator)
-		{
-			if (bp.isOneshot)
-			{
-				if ( this.oneShotBreakpoint == null ) {
-					breakpointsCount++;
-				}
-				this.oneShotBreakpoint = bp;
-			}
-			else
-			{
-				Breakpoint old = this.breakpoints[ bp.address & 0xffff ];
-				this.breakpoints[ bp.address & 0xffff ] = bp;
-				if ( old == null )
-				{
-					breakpointsCount++;
-					breakpointListeners.forEach( l -> l.breakpointAdded( bp ) );
-				}
-				else
-				{
-					breakpointListeners.forEach( l -> l.breakpointReplaced( old , bp ) );
-				}
-			}
-		}
-	}
-
-	public Breakpoint getBreakpoint(short address)
-	{
-		synchronized(emulator) {
-			return breakpoints[ address & 0xffff ];
-		}
-	}
-
-	public List<Breakpoint> getBreakpoints()
-	{
-		List<Breakpoint> result = new ArrayList<>();
-		synchronized(emulator) {
-			for ( int i = 0 , len = breakpoints.length ; i < len ; i++ ) {
-				Breakpoint breakpoint = breakpoints[i];
-				if ( breakpoint != null && ! breakpoint.isOneshot ) {
-					result.add( breakpoint );
-				}
-			}
-		}
-		return result;
-	}
-
-	public void removeBreakpoint(Breakpoint breakpoint)
-	{
-		synchronized(emulator)
-		{
-			if ( breakpoint.isOneshot )
-			{
-				if ( oneShotBreakpoint != null && oneShotBreakpoint.address == breakpoint.address ) {
-					oneShotBreakpoint = null;
-					breakpointsCount--;
-				}
-			}
-			else
-			{
-				Breakpoint existing = this.breakpoints[ breakpoint.address & 0xffff ];
-				if ( existing != null )
-				{
-					this.breakpoints[ breakpoint.address & 0xffff ] = null;
-					breakpointsCount--;
-					breakpointListeners.forEach( l -> l.breakpointRemoved( existing ) );
-				}
-			}
-		}
-	}
-
-	public void removeAllBreakpoints()
-	{
-		synchronized(emulator)
-		{
-			for ( int i = 0 ; i < breakpoints.length ; i++ )
-			{
-				Breakpoint bp = breakpoints[i];
-				if ( bp != null ) {
-					breakpoints[i] = null;
-					breakpointListeners.forEach( l -> l.breakpointRemoved(bp) );
-				}
-			}
-			oneShotBreakpoint = null;
-			breakpointsCount = 0;
-		}
-	}
-
-	public void addBreakpointListener(IBreakpointLister l)
-	{
-		if (l == null) {
-			throw new IllegalArgumentException("l must not be NULL");
-		}
-		synchronized(emulator) {
-			this.breakpointListeners.add(l);
-		}
-	}
-
-	public void removeBreakpointListener(IBreakpointLister l)
-	{
-		if (l == null) {
-			throw new IllegalArgumentException("l must not be NULL");
-		}
-		synchronized(emulator) {
-			this.breakpointListeners.remove(l);
-		}
-	}
+	protected abstract BreakpointsController getBreakPointsController();
 }
