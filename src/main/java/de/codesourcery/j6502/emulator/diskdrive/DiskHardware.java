@@ -12,9 +12,12 @@ import de.codesourcery.j6502.emulator.diskdrive.VIA.Port;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.PortName;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.VIAChangeListener;
 import de.codesourcery.j6502.utils.BitStream;
+import de.codesourcery.j6502.utils.HexDump;
 
 public class DiskHardware implements SerialDevice
 {
+    public static final boolean DEBUG = true;
+
     protected static final int SPEED00_CYCLES_PER_BYTE = 32;
     protected static final int SPEED01_CYCLES_PER_BYTE = 30;
     protected static final int SPEED10_CYCLES_PER_BYTE = 28;
@@ -22,7 +25,7 @@ public class DiskHardware implements SerialDevice
 
     protected abstract class DriveMode
     {
-        private long cycles = 0;
+        private long cycles = SPEED10_CYCLES_PER_BYTE;
 
         public final void tick()
         {
@@ -50,37 +53,41 @@ public class DiskHardware implements SerialDevice
         @Override
         public void processByte()
         {
-            if ( motorsRunning )
+            if ( ! motorsRunning )
             {
-                int value = 0;
-                boolean syncFound = false;
-                for ( int i = 7 ; i >= 0 ; i-- )
-                {
-                    value = value << 1;
-                    final int bit = bitStream.readBit();
-                    value |= bit;
-                    if ( bit == 0 )
-                    {
-                        if ( syncFound )
-                        {
-                            bitStream.rewind(1); /* align bitstream */
-                            value = bitStream.readByte();
-                            break; /* break */
-                        }
-                        oneBits = 0;
-                    } else {
-                        oneBits++;
-                        if ( oneBits >= 10 )
-                        {
-                            syncFound = true;
-                        }
-                    }
-                }
-
-                via2.getPortB().setInputPin(7, syncFound );
-                // TODO: Find out whether sync bits are visible to the CPU or not ...
-                via2.getPortA().setInputPins( value );
+                return;
             }
+            int value = 0;
+            boolean syncFound = false;
+            for ( int i = 0 ; i < 7 ; i++ )
+            {
+                value = value << 1;
+                final int bit = bitStream.readBit();
+                value |= bit;
+                if ( bit == 0 )
+                {
+                    if ( oneBits >= 10 )
+                    {
+                        syncFound = true;
+                        oneBits = 0;
+                        bitStream.rewind(1); /* align bitstream */
+                        value = bitStream.readByte();
+                        break;
+                    }
+                    oneBits = 0;
+                } else {
+                    oneBits++;
+                }
+            }
+
+//            if ( DEBUG ) {
+//                System.out.println("Got byte , wrapped: "+bitStream.hasWrapped()+" : "+HexDump.toBinaryString((byte) value)+" [sync: "+syncFound+"]");
+//            }
+            
+            via2.getPortB().setInputPinForced(7, syncFound ); // PB7 expects INVERTED signal !!
+            
+            // TODO: Find out whether sync bits are visible to the CPU or not ...
+            via2.getPortA().setInputPins( value );
             /* Das Byte Ready Signal kann nur mit SOE abgestellt werden,ansonsten kommt es regelmässig nach 8 Bits.
              * Das ist unabhängig davon ob sich das Laufwerk dreht oder nicht. Das ist ein Zähler auf der Platine der vom SYNC Signal
              * mit 0 geladen wird und immer wenn die Zeit für ein Bit abgelaufen ist eins hoch zählt.
@@ -88,10 +95,17 @@ public class DiskHardware implements SerialDevice
              */
             if ( via2.getPortA().getControlLine2() ) // Trigger byte read signal ?
             {
+                if ( DEBUG ) {
+                    System.out.println(">> Byte ready <<");
+                }
                 via2.getPortB().setControlLine1( true , false ); // signal byte ready
+            } else {
+                if ( DEBUG ) {
+                    System.out.println(">> Byte sync not enabled <<");
+                }
             }
         }
-
+        
         @Override
         public void onEnterHook()
         {
@@ -444,10 +458,6 @@ public class DiskHardware implements SerialDevice
 
         @Override
         public void controlLine1Changed(VIA via, Port port) {
-            if ( port.getPortName() == PortName.A )
-            {
-
-            }
         }
 
         @Override
@@ -475,7 +485,7 @@ public class DiskHardware implements SerialDevice
     }
 
     @Override
-	public void reset()
+    public void reset()
     {
         diskDrive.reset();
 
@@ -533,6 +543,9 @@ public class DiskHardware implements SerialDevice
 
     public void setDriveMode(DriveMode mode)
     {
+        if ( DEBUG ) {
+            System.out.println("Changing drive mode: "+this.driveMode+" -> "+mode);
+        }
         if ( mode != this.driveMode )
         {
             this.driveMode = mode;
@@ -560,13 +573,17 @@ public class DiskHardware implements SerialDevice
         if ( currentTrackData.isPresent() )
         {
             final byte[] data = currentTrackData.get().getRawBytes();
+            System.out.println("Track "+track+" has "+data.length+" raw bytes");
             bitStream = new BitStream( data , data.length*8 );
         } else {
+            System.out.println("Track "+track+" is missing");
             bitStream = new BitStream(new byte[0x55] , 8 ); // fake bitstream
         }
     }
 
-    public void loadDisk(G64File disk) {
+    public void loadDisk(G64File disk) 
+    {
+        System.out.println("Loaded disk "+(disk==null?"<no disk>" : disk.getSource() ) );
         this.disk = disk;
         setTrack( 18 );
     }

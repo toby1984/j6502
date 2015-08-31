@@ -403,20 +403,18 @@ public class VIA extends Memory
                 HexDump.toBinaryString( (byte) newValue ), newValue );
                 }
             }
+            final boolean valueChanged = this.or != value;
             this.or = value;
             this.pins = newValue;
+            if ( valueChanged ) {
+                changeListener.portChanged( VIA.this , this );
+            }
         }
         
         public final void setInputPins(int value)
         {
-            // DDR: 0 = input, 1 = output
-            int newValue = pins & ~ddr;
-            newValue = newValue | (value & ~ddr);
-            this.pins = newValue & 0xff;
-            if ( DEBUG )
-            {
-                debugPrint( portName , "setInputPins" , newValue );
-            }
+            this.ir = value & 0xff;
+            this.pins = value & 0xff;
         }
         
         public final boolean getPin(int bit) 
@@ -433,8 +431,20 @@ public class VIA extends Memory
             } else {
                 newValue = this.pins & ~mask;
             }
-            if ( DEBUG && this.pins != newValue) {
-                debugPrint( portName , set ? "setInputBit" : "clearInputBit" , newValue , bit );
+//            if ( DEBUG && this.pins != newValue) {
+//                debugPrint( portName , set ? "setInputBit" : "clearInputBit" , newValue , bit );
+//            }
+            this.pins = newValue;
+        }
+        
+        public final void setInputPinForced(int bit, boolean set)
+        {
+            final int mask = (1<<bit);
+            int newValue;
+            if ( set ) {
+                newValue = this.pins | mask;
+            } else {
+                newValue = this.pins & ~mask;
             }
             this.pins = newValue;
         }
