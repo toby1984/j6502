@@ -13,11 +13,11 @@ public class CPU
 	public static final int BRK_VECTOR_LOCATION = 0xfffe; // same as IRQ_VECTOR_LOCATION
 	public static final int IRQ_VECTOR_LOCATION = 0xfffe; // same as BRK_VECTOR_LOCATION
 	public static final int NMI_VECTOR_LOCATION = 0xfffa;
-	
+
 	private final IMemoryRegion memory;
 
 	public static enum IRQType { REGULAR , NMI , BRK , NONE };
-	
+
 	private IRQType interruptQueued = IRQType.NONE;
 
 	public long cycles = 0;
@@ -82,8 +82,8 @@ public class CPU
 	    this.sp = other.sp;
 	    this.flags = other.flags;
 	}
-	
-	public boolean matches(CPU other) 
+
+	public boolean matches(CPU other)
 	{
 	    boolean result= this.interruptQueued == other.interruptQueued
         && this.previousPC == other.previousPC
@@ -93,13 +93,13 @@ public class CPU
         && this.y == other.y
         && this.sp == other.sp
         && this.flags == other.flags;
-	    
+
 	    if ( result && this.cycles != other.cycles ) {
 	        System.err.println("WARNING: Cycle count mismatch , this: "+this.cycles+" <-> other: "+other.cycles);
 	    }
 	    return result;
 	}
-	
+
 	public byte getFlagBits() {
 		return flags;
 	}
@@ -133,8 +133,8 @@ public class CPU
 	{
         pushByte( (byte) ( ( pc & 0xff00) >>8 ) ,  memory ); // push pc hi
         pushByte( (byte) ( pc & 0xff ) , memory ); // push pc lo
-        
-	    switch( interruptQueued ) 
+
+	    switch( interruptQueued )
 	    {
             case BRK:
                 pushByte( CPU.Flag.BREAK.set( flags ) , memory ); // push processor flags
@@ -204,7 +204,7 @@ public class CPU
 		cycles = 0;
 		pc = memory.readWord( RESET_VECTOR_LOCATION );
 		System.out.println("RESET: PC of CPU "+this.memory+" now points to "+HexDump.toAdr( pc ) );
-		
+
 		previousPC = (short) pc;
 		setAccumulator(0);
 		setX(0);
@@ -244,7 +244,7 @@ public class CPU
 		final String accuBinary = HexDump.toBinaryString( (byte) accumulator );
 		buffer
         .append( "Cyles: ").append( cycles )
-        .append("    ")		
+        .append("    ")
 		.append( "PC: ").append( HexDump.toHexBigEndian( pc ) )
 		.append("    ")
 		.append( flagBuffer )
@@ -290,10 +290,10 @@ public class CPU
 	public Set<Flag> getFlags() {
 		return Arrays.stream( Flag.values() ).filter( f -> f.isSet( this.flags ) ).collect(Collectors.toSet());
 	}
-	
-    public void handleInterrupt() 
+
+    public void handleInterrupt()
 	{
-	    switch( interruptQueued ) 
+	    switch( interruptQueued )
 	    {
 	        case NMI:
 	            performInterrupt();

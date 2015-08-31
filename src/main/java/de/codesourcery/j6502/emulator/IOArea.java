@@ -18,21 +18,21 @@ public class IOArea extends SlowMemory
 	public final VIC vic;
 	public final IECBus iecBus;
 
-	public static enum JoyDirection 
+	public static enum JoyDirection
 	{
 		N, NE, E, SE, S, SW, W , NW, CENTER;
 	}
 
 	/* Joystick masks:
-	 * 
+	 *
 	 * Bit 0 => left (low-active , 0 = on)
 	 * Bit 1 => right (low-active!)
 	 * Bit 2 => up (low-active!)
 	 * Bit 3 => down (low-active!)
 	 * Bit 4 => fire (low-active!)
-	 */	
-	protected int joy1Mask = 0xff; 
-	protected int joy2Mask = 0xff; 
+	 */
+	protected int joy1Mask = 0xff;
+	protected int joy2Mask = 0xff;
 
 	public final CIA cia1 = new CIA("CIA #1" , AddressRange.range( 0xdc00, 0xdd00 ) ) {
 
@@ -54,14 +54,14 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
         Read/Write: Bit 0..7 keyboard matrix rows
         Read: Joystick Port 1: Bit 0: up, Bit 1: down, Bit 2: left, Bit 3: right, Bit 4: fire ( all bits 0 = active )
         Read: Bit 6: Timer A: Toggle/Impulse output (see register 14 bit 2)
-        Read: Bit 7: Timer B: Toggle/Impulse output (see register 15 bit 2)			 
+        Read: Bit 7: Timer B: Toggle/Impulse output (see register 15 bit 2)
 			 */
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
-			if ( offset == CIA1_PRA ) 
+			if ( offset == CIA1_PRA )
 			{
 				final int pra = super.readByte( CIA1_PRA );
 				return pra & joy2Mask;
-			} 
+			}
 			if ( offset == CIA1_PRB )
 			{
 				// rowBit / PRB , columnBit / PRA )
@@ -83,30 +83,30 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		}
 	};
 
-	public void setJoystick1(JoyDirection direction,boolean fire) 
+	public void setJoystick1(JoyDirection direction,boolean fire)
 	{
-//		System.out.println("Joystick #2: "+direction+",fire: "+fire);		
+//		System.out.println("Joystick #2: "+direction+",fire: "+fire);
 		joy1Mask = calcJoystickMask(direction,fire);
 	}
-	
-	public void setJoystick2(JoyDirection direction,boolean fire) 
+
+	public void setJoystick2(JoyDirection direction,boolean fire)
 	{
 //		System.out.println("Joystick #2: "+direction+",fire: "+fire);
 		joy2Mask = calcJoystickMask(direction,fire);
 	}
-	
-	private int calcJoystickMask(JoyDirection direction,boolean fire) 
+
+	private int calcJoystickMask(JoyDirection direction,boolean fire)
 	{
 		/* All bits: 0 = active, 1 = inactive
          * Bit 0: up,
          * Bit 1: down,
          * Bit 2: left,
          * Bit 3: right,
-         * Bit 4: fire 
+         * Bit 4: fire
 		 */
 
 		int mask = 0xff;
-		switch( direction ) 
+		switch( direction )
 		{
 			case CENTER:
 				break;
@@ -133,7 +133,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 				break;
 			case SW:
 				mask &= ~(1<<1); // down
-				mask &= ~(1<<2); // left				
+				mask &= ~(1<<2); // left
 				break;
 			case W:
 				mask &= ~(1<<2); // left
@@ -179,16 +179,16 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 				final int oldValue = super.readByte( adr );
 				super.writeByte( adr , value);
 
-				if ( (oldValue & 0b11) != (value & 0b11 ) ) // VIC bank was changed, recalculate RAM offsets 
+				if ( (oldValue & 0b11) != (value & 0b11 ) ) // VIC bank was changed, recalculate RAM offsets
 				{
 					vic.setCurrentBankNo( value & 0b11 );
 				}
 
-				if ( IECBus.DEBUG_WIRE_LEVEL ) 
+				if ( IECBus.DEBUG_WIRE_LEVEL )
 				{
 					final boolean atn = (value     & 0b0000_1000) == 0;
 					final boolean clkOut = (value  & 0b0001_0000) == 0;
-					final boolean dataOut = (value & 0b0010_0000) == 0;					
+					final boolean dataOut = (value & 0b0010_0000) == 0;
 					System.out.println("Write to $DD00: to_write: "+toBinaryString( value)+toLogical(", ATN: ",atn)+toLogical(" , clkOut: ",clkOut)+toLogical(", dataOut: ",dataOut));
 				}
 			}
@@ -254,7 +254,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 	private final SerialDevice cpuDevice;
 
 	/**
-	 * 
+	 *
 	 * @param identifier
 	 * @param range
 	 * @param mainMemory
@@ -270,13 +270,14 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		cpuDevice = new SerialDevice() {
 
 			@Override
-			public void tick(IECBus bus,boolean atnLowered) {
+			public void tick(IECBus bus) {
 			}
 
 			@Override
 			public void reset() {
 			}
-			
+
+			@Override
 			public boolean isDataTransferActive() {
 				return false;
 			}
@@ -307,21 +308,18 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 			@Override
 			public boolean getData()
 			{
-				// !!! Implementation HAS to match what's used in readByte(int) method !!!
 				final int value = cia2.readByte( CIA.CIA2_PRA );
 				return ( value & 0b0010_0000) == 0;
 			}
 
 			@Override
 			public boolean getClock() {
-				// !!! Implementation HAS to match what's used in readByte(int) method !!!
 				final int value = cia2.readByte( CIA.CIA2_PRA );
 				return ( value & 0b0001_0000) == 0;
 			}
 
 			@Override
 			public boolean getATN() {
-				// !!! Implementation HAS to match what's used in readByte(int) method !!!
 				final int value = cia2.readByte( CIA.CIA2_PRA );
 				return ( value & 0b0000_1000) == 0;
 			}
@@ -340,7 +338,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 			handleKeyRelease(Key.KEY_RIGHT_SHIFT);
 		} else if ( key.fakeLeftShift() ) {
 			handleKeyPress(Key.KEY_LEFT_SHIFT);
-		} 
+		}
 	}
 
 	protected void handleKeyRelease(Key key)
@@ -348,7 +346,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		keyboardColumns[ key.colBitNo ] |= (1 << key.rowBitNo);	 // bits are low-active so set bit if key is released
 		if ( key.fakeLeftShift() ) {
 			handleKeyRelease(Key.KEY_LEFT_SHIFT);
-		} 
+		}
 	}
 
 	@Override
@@ -363,8 +361,8 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		// I/O area starts at 0xd000
 		// but input to writeByte is already translated by -d000
 
-		if ( offset >= 0x800 && offset < 0x800+1024) { 
-			colorRAMBank.writeByte( offset, value ); 
+		if ( offset >= 0x800 && offset < 0x800+1024) {
+			colorRAMBank.writeByte( offset, value );
 			return;
 		}
 		if ( offset >= 0xc00 && offset <= 0xcff) { // $DC00-$DCFF
@@ -390,7 +388,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		// but input to writeByte is already translated by -d000
 		final int offset = adr & 0xffff;
 
-		if ( offset >= 0x800 && offset < 0x800+1024) { 
+		if ( offset >= 0x800 && offset < 0x800+1024) {
 			return colorRAMBank.readByte( adr );
 		}
 		if ( offset >= 0xc00 && offset <= 0xcff) { // CIA #1 $DC00-$DCFF
@@ -406,7 +404,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 	}
 
 	@Override
-	public void reset() 
+	public void reset()
 	{
 		super.reset();
 
@@ -429,12 +427,12 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		if ( clockHigh ) {
 			keyboardBuffer.tick( this );
 	        cia1.tick( cpu );
-	        cia2.tick(cpu );			
-	        iecBus.tick(); 
+	        cia2.tick(cpu );
+	        iecBus.tick();
 		}
-		
+
 		vic.tick( cpu , clockHigh );
-		
+
 	}
 
 	protected static String toBinaryString(int value)
@@ -443,7 +441,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		final String result = "%"+StringUtils.repeat("0" , 8-string.length())+string;
 		return result.substring(0,5)+"_"+result.substring(5);
 	}
-	
+
 	@Override
 	public boolean isReadsReturnWrites(int offset) {
 	    return false;

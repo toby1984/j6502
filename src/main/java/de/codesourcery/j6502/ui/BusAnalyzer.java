@@ -9,11 +9,15 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.Stroke;
-import java.util.Arrays;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Random;
-
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import javax.swing.Timer;
 
 import de.codesourcery.j6502.emulator.Bus;
 import de.codesourcery.j6502.emulator.Emulator;
@@ -21,7 +25,9 @@ import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 
 public class BusAnalyzer extends JPanel implements IDebuggerView
 {
-    protected static final int STATES = 256;
+    protected static final int MAX_STATES = 256;
+
+    protected static final int KEY_REPEAT_DELAY = 100;
 
     private final Object LOCK = new Object();
 
@@ -35,36 +41,16 @@ public class BusAnalyzer extends JPanel implements IDebuggerView
             new float[] {STROKE_LINE_WIDTH,STROKE_GAP_WIDTH}, // Dash pattern
             0.0f);                     // Dash phase
 
-    private Bus bus;
+    // @GuardedBy( LOCK )
+    private BusStateContainer busStateContainer;
 
-    private long cycles = 0;
-    private int oldestStatePtr;
-    private int latestStatePtr;
-
-    private final long[] timestamps = new long[ STATES ];
-    private final int[] wireStates = new int[ STATES ];
-
-    private int[] wireNamesWidthPixels;
     private int maxWireNameWidthPixels;
-    private String[] wireNames;
-
-    private int stateCount;
 
     private int windowOffset = 0; // offset relative to oldestStatePtr
-    private int windowSize; // number of states to render
+    private int windowSize = MAX_STATES; // number of states to render
 
-    public static void main(String[] args) 
+    public static void main(String[] args)
     {
-        final JFrame frame = new JFrame("test");
-        frame.setDefaultCloseOperation( JFrame.EXIT_ON_CLOSE );
-
-        final BusAnalyzer analyzer = new BusAnalyzer();
-        frame.getContentPane().add( analyzer );
-
-        frame.pack();
-        frame.setLocationRelativeTo( null );
-        frame.setVisible(true);
-
         final int[] value = {0};
         final Bus bus = new Bus() {
 
@@ -84,132 +70,215 @@ public class BusAnalyzer extends JPanel implements IDebuggerView
                 return value[0];
             }
         };
-        analyzer.setBus( bus );
+        final BusStateContainer container = new BusStateContainer( bus );
+
+        final JFrame frame = new JFrame("test");
+        frame.setDefaultCloseOperation( JFrame.EXIT_ON_CLOSE );
+
+        final BusAnalyzer analyzer = new BusAnalyzer();
+        frame.getContentPane().add( analyzer );
+
+        frame.pack();
+        frame.setLocationRelativeTo( null );
+        frame.setVisible(true);
+
+        analyzer.setBusStateContainer( container );
 
         final Random rnd = new Random(0xdeadbeef);
-        for ( int i = 0 ; i < 10 ; i++ ) 
+        for ( int i = 0 ; i < 10 ; i++ )
         {
             int state = 0;
-            for ( int j = 0 ; j < bus.getWidth() ; j++ ) 
+            for ( int j = 0 ; j < bus.getWidth() ; j++ )
             {
                 if ( rnd.nextBoolean() ) {
                     state |= (1<<j);
                 }
             }
             value[0] = state;
-            for ( int delay = 0 , len = 1 + rnd.nextInt( 1500 ) ; delay < len ; delay++) 
+            for ( int delay = 0 , len = 1 + rnd.nextInt( 1500 ) ; delay < len ; delay++)
             {
-                analyzer.tick();
+                container.sampleBus();
             }
         }
+        analyzer.repaint();
     }
 
-    public BusAnalyzer() 
+    private final KeyAdapter keyAdapter = new MyKeyAdapter();
+
+    protected final class MyKeyAdapter extends KeyAdapter
+    {
+    	private final Map<Integer,Long> pressedKeys = new HashMap<>();
+
+    	private final Timer timer;
+
+    	public MyKeyAdapter()
+    	{
+    		timer = new Timer( 20  , event ->
+    		{
+    			final long now = event.getWhen();
+    			final Long nowL = now;
+    			for ( Entry<Integer, Long> entry : pressedKeys.entrySet() )
+    			{
+    				if ( (now - entry.getValue() ) > KEY_REPEAT_DELAY )
+    				{
+    					entry.setValue( nowL );
+    					typed( entry.getKey() );
+    				}
+    			}
+    		});
+    		timer.start();
+    		Runtime.getRuntime().addShutdownHook( new Thread( timer::stop ) );
+    	}
+
+    	@Override
+    	public void keyPressed(KeyEvent e)
+    	{
+    		if ( ! pressedKeys.containsKey( e.getKeyCode() ) ) {
+    			pressedKeys.put( e.getKeyCode() , e.getWhen() );
+    		}
+    	}
+
+    	@Override
+    	public void keyReleased(KeyEvent e)
+    	{
+    		pressedKeys.remove( e.getKeyCode() );
+    		typed( e.getKeyCode() );
+    	}
+
+    	private void typed(int vkKeyCode)
+    	{
+    		final int stateCount = busStateContainer.sampleCount();
+    		boolean repaint = false;
+    		switch( vkKeyCode )
+    		{
+    			case KeyEvent.VK_LEFT:
+    				repaint = when( windowOffset > 0 ).then( () -> windowOffset-- );
+    				break;
+    			case KeyEvent.VK_RIGHT:
+    				repaint = when( (windowOffset + windowSize) < stateCount ).then( () -> windowOffset++ );
+    				break;
+    			case KeyEvent.VK_PLUS:
+    				repaint = when( windowSize > 3 ).then( () -> {
+    					if ( windowSize > stateCount ) {
+    						windowSize = stateCount-1;
+    					} else {
+    						windowSize--;
+    					}
+    				});
+    				break;
+    			case KeyEvent.VK_MINUS:
+    				repaint = when( windowSize < stateCount ).then( () -> windowSize++ );
+    				break;
+    			case KeyEvent.VK_END:
+    				repaint = when( (windowOffset+windowSize) < stateCount ).then( () -> windowOffset = stateCount - windowSize);
+    				break;
+    			case KeyEvent.VK_HOME:
+    				repaint = when( (windowOffset+windowSize) < stateCount ).then( () -> windowOffset = stateCount - windowSize);
+    				break;
+    		}
+
+    		if ( repaint ) {
+    			BusAnalyzer.this.repaint();
+    		}
+    	}
+
+    	private ConditionBuilder when(boolean test)
+    	{
+    		return new ConditionBuilder( test );
+    	}
+    }
+
+    protected static final class ConditionBuilder
+    {
+    	private final boolean result;
+    	public ConditionBuilder(boolean result) { this.result = result; }
+    	public boolean then(Runnable r) { if ( result ) { r.run(); } return result; }
+    }
+
+    public BusAnalyzer()
     {
         setBackground( Color.BLACK );
         setForeground( Color.GREEN );
-        setPreferredSize( new Dimension(400,200 ) );
+//        setPreferredSize( new Dimension(400,200 ) );
+        setPreferredSize( new Dimension(10 , 10 ) );
+        setFocusable(true);
+        setRequestFocusEnabled( true );
+
+        addKeyListener( keyAdapter );
     }
 
-    public void setBus(Bus bus) 
+    public void setBusStateContainer(BusStateContainer busStateContainer)
     {
-        synchronized( LOCK ) 
-        {
-            this.bus = bus;
-            reset();
-            if ( bus != null ) 
-            {
-                final Graphics2D g = (Graphics2D) getGraphics();
-                final FontMetrics fm = g.getFontMetrics();
-                wireNames = bus.getWireNames();
-                int maxWidth = 0;
-                wireNamesWidthPixels = new int[ bus.getWidth() ];
-                for ( int i = 0 ; i < bus.getWidth() ; i++ ) 
-                {
-                    wireNamesWidthPixels[i] = fm.stringWidth( wireNames[i] );
-                    maxWidth = Math.max( maxWidth ,  wireNamesWidthPixels[i]  );
-                }
-                this.maxWireNameWidthPixels = maxWidth;
-            }
-        }
-    }
+    	synchronized ( LOCK)
+    	{
+    		this.busStateContainer = busStateContainer;
+    	}
+    	repaint();
+	}
 
-    public void reset() 
+    public void reset()
     {
-        synchronized( LOCK ) 
-        {
-            windowOffset = 0;
-            windowSize = STATES;
-            stateCount = 0;
-            oldestStatePtr = 0;
-            latestStatePtr = 0;
-            cycles = 0;
-            Arrays.fill( timestamps,0);
-            Arrays.fill( wireStates,0);
-        }
-    }
-
-    public void tick() 
-    {
-        synchronized( LOCK )
-        {
-            if ( bus != null ) 
-            {
-                final int newValue = bus.read();
-
-                if ( stateCount != 0 && wireStates[ (latestStatePtr-1) % STATES ] == newValue ) 
-                {
-                    return; // wire state did not change
-                } 
-
-                timestamps[latestStatePtr] = cycles;
-                wireStates[latestStatePtr] = newValue;
-
-                latestStatePtr = (latestStatePtr+1) % STATES;
-                if ( stateCount < STATES ) 
-                {
-                    stateCount++;
-                } else {
-                    oldestStatePtr = (oldestStatePtr+1) % STATES;
-                }
-            }
-            cycles++;
-        }
+        windowOffset = 0;
+        windowSize = BusStateContainer.MAX_STATES;
+        busStateContainer.reset();
     }
 
     @Override
-    protected void paintComponent(Graphics g) 
+    protected void paintComponent(Graphics graphics)
     {
+    	final Graphics2D g = (Graphics2D) graphics;
+
         super.paintComponent(g);
 
-        synchronized( LOCK ) 
+        if ( busStateContainer != null )
         {
-            if ( bus == null ) {
-                return;
-            }
+        	synchronized( busStateContainer )
+        	{
 
-            final Graphics2D graphics = (Graphics2D) g;
-            final int wireCount = bus.getWidth();
-            final int heightPerWire = getHeight() / wireCount;
+        		final FontMetrics fm = getGraphics().getFontMetrics();
+        		final String[] wireNames = busStateContainer.getBus().getWireNames();
+        		int maxWidth = 0;
+        		final int busWidth = busStateContainer.getBus().getWidth();
+        		for ( int i = 0 ; i < busWidth; i++ )
+        		{
+        		    int thisWidth = fm.stringWidth( wireNames[i] );
+        		    maxWidth = Math.max( maxWidth , thisWidth  );
+        		}
+        		this.maxWireNameWidthPixels = maxWidth;
 
-            final Rectangle r = new Rectangle();
-            r.width = getWidth();
-            r.height = heightPerWire;
-            for ( int i = 0 ; i < wireCount ; i++ ) 
-            {
-                renderWire(i,r, graphics);
-                r.y += heightPerWire;
-            }        
+        		final int wireCount = busStateContainer.getBus().getWidth();
+        		final int heightPerWire = getHeight() / wireCount;
+
+        		final Rectangle r = new Rectangle();
+        		r.width = getWidth();
+        		r.height = heightPerWire;
+        		for ( int i = 0 ; i < wireCount ; i++ )
+        		{
+        			renderWire(i,r, g);
+        			r.y += heightPerWire;
+        		}
+
+        		final String msg = "Displaying events "+windowOffset+" - "+(windowOffset+windowSize)+" from "+busStateContainer.sampleCount()+" total";
+        		final int width = fm.stringWidth( msg );
+        		final int x = Math.max(0 , getWidth()/2 - width/2 );
+        		final Rectangle box = new Rectangle( x , 0 , width , 20 );
+   				g.setColor( Color.WHITE );
+        		g.fill(box);
+
+        		g.setColor( Color.BLACK);
+        		g.draw(box);
+        		drawCentered( msg , box , g );
+        	}
         }
     }
 
-    private void renderWire(int wireIndex,Rectangle r,Graphics2D graphics) 
+    private void renderWire(int wireIndex,Rectangle r,Graphics2D graphics)
     {
         /*
          *                |
-         *             1 -+- . . . . . . . . 
+         *             1 -+- . . . . . . . .
          *   Wirename     |
-         *             0 -+- . . . . . . . . 
+         *             0 -+- . . . . . . . .
          *                |
          *                +-----------------
          */
@@ -222,7 +291,7 @@ public class BusAnalyzer extends JPanel implements IDebuggerView
         // render wire label
         graphics.setColor(Color.GREEN);
         final Rectangle tmp = new Rectangle( r.x , r.y + yMargin , maxWireNameWidthPixels , yAxisHeight );
-        drawCentered( wireNames[ wireIndex ] , tmp , graphics );
+        drawCentered( busStateContainer.getBus().getWireNames()[ wireIndex ] , tmp , graphics );
 
         // render X axis
         final int originX = r.x + maxWireNameWidthPixels + yAxisWidth;
@@ -255,38 +324,43 @@ public class BusAnalyzer extends JPanel implements IDebuggerView
         graphics.setStroke(oldStroke);
 
         // render signal levels
-        if ( stateCount > 0 ) {
+        final BusStateContainer container = busStateContainer;
+        final int stateCount = container.sampleCount();
+        if ( stateCount > 1 )
+        {
+        	final int oldestStatePtr = container.firstPtr();
+
             graphics.setColor(Color.BLUE);
 
             final int mask = 1 << wireIndex;
-            int previousState = wireStates[ (oldestStatePtr + windowOffset) % STATES ] & mask;
-            long previousTimestamp = timestamps[ (oldestStatePtr + windowOffset) % STATES ];
+            int previousState = container.state( (oldestStatePtr + windowOffset) % MAX_STATES ) & mask;
+            long previousTimestamp = container.timestamp( (oldestStatePtr + windowOffset) % MAX_STATES );
             int previousY = previousState == 0 ? yLow : yHigh;
             double previousX = originX;
 
             final int len = windowSize >= stateCount ? stateCount : windowSize;
-            final long totalCycles = Math.abs( timestamps[ (oldestStatePtr + windowOffset + len -1 ) % STATES ] - previousTimestamp );
+            final long totalCycles = Math.abs( container.timestamp( (oldestStatePtr + windowOffset + len - 1 ) % MAX_STATES ) - previousTimestamp );
 
             double xIncrement = xAxisWidth / (double) totalCycles;
 
-            for ( int i = 1 , ptr = (oldestStatePtr + windowOffset+1) % STATES ; i < len ; i++ , ptr = (ptr+1) % STATES ) 
+            for ( int i = 1 , ptr = (oldestStatePtr + windowOffset+1) % MAX_STATES ; i < len ; i++ , ptr = (ptr+1) % MAX_STATES )
             {
-                final int currentState = wireStates[ ptr ] & mask;
-                final long currentTimestamp = timestamps[ptr];
-                final long cycleDelta = Math.abs( currentTimestamp - previousTimestamp );            
+                final int currentState = container.state( ptr ) & mask;
+                final long currentTimestamp = container.timestamp( ptr );
+                final long cycleDelta = Math.abs( currentTimestamp - previousTimestamp );
                 final double currentX = previousX + (cycleDelta*xIncrement);
 
                 graphics.drawLine( (int) previousX , previousY , (int) currentX , previousY );
 
                 final int currentY;
-                if ( currentState == previousState ) 
+                if ( currentState == previousState )
                 {
                     currentY = previousY;
 
-                } else 
+                } else
                 {
                     currentY = ( currentState == 0 ) ? yLow : yHigh;
-                    graphics.drawLine( (int) currentX, previousY , (int) currentX , currentY ); 
+                    graphics.drawLine( (int) currentX, previousY , (int) currentX , currentY );
                 }
                 previousState = currentState;
                 previousTimestamp = currentTimestamp;
@@ -328,7 +402,7 @@ public class BusAnalyzer extends JPanel implements IDebuggerView
     }
 
     @Override
-    public void refresh(Emulator emulator) 
+    public void refresh(Emulator emulator)
     {
         repaint();
     }
@@ -336,5 +410,5 @@ public class BusAnalyzer extends JPanel implements IDebuggerView
     @Override
     public boolean isRefreshAfterTick() {
         return isDisplayed;
-    }    
+    }
 }

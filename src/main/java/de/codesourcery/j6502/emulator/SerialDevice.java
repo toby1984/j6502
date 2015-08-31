@@ -3,7 +3,7 @@ package de.codesourcery.j6502.emulator;
 
 public interface SerialDevice
 {
-	public void tick(IECBus bus,boolean atnLowered);
+	public void tick(IECBus bus);
 	
 	/**
 	 * Returns the LOGICAL value of the clock line (true = HIGH , false = LOW).

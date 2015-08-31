@@ -77,7 +77,6 @@ import de.codesourcery.j6502.emulator.EmulatorDriver;
 import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
 import de.codesourcery.j6502.emulator.EmulatorTest;
 import de.codesourcery.j6502.emulator.G64File;
-import de.codesourcery.j6502.emulator.IECBus.StateSnapshot;
 import de.codesourcery.j6502.emulator.IMemoryProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.emulator.SerialDevice;
@@ -106,7 +105,7 @@ public class Debugger
 	    COMPUTER,
 	    FLOPPY_8;
 	}
-	
+
 	protected final WindowLocationHelper locationHelper = new WindowLocationHelper();
 
 	protected final EmulatorDriver driver = new EmulatorDriver( emulator ) {
@@ -153,14 +152,14 @@ public class Debugger
             return Debugger.this.getBreakPointsController();
         }
 	};
-	
+
 	private final BreakpointsController c64BreakpointsController = new BreakpointsController( emulator.getCPU() , emulator.getMemory() );
 	private BreakpointsController floppyBreakpointsController;
 	private volatile CPU debugCPU = emulator.getCPU();
 	private volatile IMemoryRegion debugMemory = emulator.getMemory();
 	private volatile BreakpointsController breakpointsController = c64BreakpointsController;
 	private DebugTarget debugTarget = DebugTarget.COMPUTER;
-	
+
 	private final JDesktopPane desktop = new JDesktopPane();
 
 	private final KeyboardInputListener keyboardListener = new KeyboardInputListener(emulator);
@@ -176,24 +175,25 @@ public class Debugger
             return Debugger.this.getBreakPointsController();
         }
 	};
-	
+
 	private final HexDumpPanel hexPanel = new HexDumpPanel();
-	
-	private final CPUStatusPanel cpuPanel = new CPUStatusPanel() 
+
+	private final CPUStatusPanel cpuPanel = new CPUStatusPanel()
 	{
-	    protected CPU getCPU() 
+	    @Override
+		protected CPU getCPU()
 	    {
 	        return Debugger.this.getCPU();
 	    }
 	};
-	
+
 	private final BreakpointsWindow breakpointsWindow = new BreakpointsWindow();
 	private final ScreenPanel screenPanel = new ScreenPanel();
 	private final BlockAllocationPanel bamPanel = new BlockAllocationPanel();
 	private final CalculatorPanel calculatorPanel = new CalculatorPanel();
 	private final SpriteViewer spriteView = new SpriteViewer(emulator);
 
-	private final AsmPanel asmPanel = new AsmPanel(desktop) 
+	private final AsmPanel asmPanel = new AsmPanel(desktop)
 	{
 		@Override
 		protected void binaryUploadedToEmulator()
@@ -206,7 +206,7 @@ public class Debugger
 		}
 	};
 
-	private BusPanel busPanel;
+	private BusAnalyzer busPanel;
 
 	private final List<IDebuggerView> panels = new ArrayList<>();
 
@@ -254,16 +254,8 @@ public class Debugger
 		asmPanel.setEmulator( emulator );
 		desktop.add( asmPanelFrame  );
 
-		busPanel = new BusPanel("IEC") {
-
-			@Override
-			protected List<StateSnapshot> getBusSnapshots()
-			{
-				synchronized( emulator ) {
-					return emulator.getBus().getSnapshots();
-				}
-			}
-		};
+		busPanel = new BusAnalyzer();
+		busPanel.setBusStateContainer( emulator.getBus().getBusStateContainer() );
 		final JInternalFrame busPanelFrame = wrap( "IEC" , busPanel );
 		desktop.add( busPanelFrame  );
 
@@ -349,7 +341,7 @@ public class Debugger
 		updateWindows(false);
 
 		final Optional<G64File> current = doWithFloppyAndReturn( floppy -> floppy.getDisk() );
-		if ( current.isPresent() ) 
+		if ( current.isPresent() )
 		{
 		    ByteArrayOutputStream out = new ByteArrayOutputStream();
 		    try {
@@ -381,16 +373,16 @@ public class Debugger
 		// add 'Views' menu
 		final JMenu views = new JMenu("Views");
 		menuBar.add( views );
-		
+
 		setDebugTarget( DebugTarget.COMPUTER );
-		
+
 		JCheckBoxMenuItem debugTargetSelector = new JCheckBoxMenuItem("Debug Floppy #8" , false );
 		debugTargetSelector.setSelected( debugTarget == DebugTarget.FLOPPY_8 );
-		debugTargetSelector.addActionListener( ev -> 
+		debugTargetSelector.addActionListener( ev ->
 		{
 		    setDebugTarget( debugTargetSelector.isSelected() ? DebugTarget.FLOPPY_8 : DebugTarget.COMPUTER );
 		});
-		
+
 		views.add( debugTargetSelector );
 
 		panels.sort( (a,b) ->
@@ -440,19 +432,19 @@ public class Debugger
 		});
 		return menuBar;
 	}
-	
-	private void setDebugTarget(DebugTarget target) 
+
+	private void setDebugTarget(DebugTarget target)
 	{
 	    this.debugTarget = target;
-	    
+
         final boolean debugC64;
         DiskHardware floppy = null;
-        
-        switch( target ) 
+
+        switch( target )
         {
             case FLOPPY_8:
                 final SerialDevice device = emulator.getBus().getDevice( 8 );
-                if ( device instanceof DiskHardware ) 
+                if ( device instanceof DiskHardware )
                 {
                     floppy = (DiskHardware) device;
                     debugC64 = false;
@@ -466,17 +458,17 @@ public class Debugger
             default:
                 throw new RuntimeException("Unhandled switch/case: "+debugTarget);
         }
-        
+
         c64BreakpointsController.removeBreakpointListener( disassembly );
         c64BreakpointsController.removeBreakpointListener( bpModel );
-        
-        if ( floppyBreakpointsController != null ) 
+
+        if ( floppyBreakpointsController != null )
         {
             floppyBreakpointsController.removeBreakpointListener( disassembly );
             floppyBreakpointsController.removeBreakpointListener( bpModel );
         }
-        
-        if ( debugC64 || floppy == null ) 
+
+        if ( debugC64 || floppy == null )
         {
             debugCPU = emulator.getCPU();
             debugMemory =  emulator.getMemory();
@@ -484,13 +476,13 @@ public class Debugger
         } else {
             debugCPU = floppy.getCPU();
             debugMemory = floppy.getMemory();
-            
+
             if ( floppyBreakpointsController == null ) {
                 floppyBreakpointsController = new BreakpointsController( debugCPU , debugMemory );
             }
             breakpointsController = floppyBreakpointsController;
         }
-        
+
         breakpointsController.addBreakpointListener( disassembly );
         breakpointsController.addBreakpointListener( bpModel );
         disassembly.allBreakpointsChanged();
@@ -540,8 +532,8 @@ public class Debugger
 		} else {
 			chooser = new JFileChooser( new File("/home/tobi/mars_workspace/j6502/src/main/resources/disks"));
 		}
-		
-		chooser.setFileFilter( new FileFilter() 
+
+		chooser.setFileFilter( new FileFilter()
 		{
             @Override
             public boolean accept(File f) {
@@ -553,16 +545,16 @@ public class Debugger
                 return ".g64 / .d64";
             }
 		});
-		
+
 		if ( chooser.showOpenDialog( null ) != JFileChooser.APPROVE_OPTION )
 		{
 			return;
 		}
 		final File file = chooser.getSelectedFile();
-		
+
 	      // TODO: Implement file-type (.d64 / .g64) detection based on file content and not just the suffix...
 		final boolean isD64File = file.getName().toLowerCase().endsWith(".d64");
-		
+
 		loc.getConfigProperties().put( "last_d64_file" , file.getAbsolutePath() );
 
 		try
@@ -571,30 +563,30 @@ public class Debugger
 			{
 				final G64File g64File;
 				final D64File d64File;
-				try 
+				try
 				{
                     final ByteArrayOutputStream out = new ByteArrayOutputStream();
-    				if ( isD64File ) 
+    				if ( isD64File )
     				{
     					d64File = new D64File( file );
     				    G64File.toG64( d64File , out );
     				    g64File = new G64File( new ByteArrayInputStream( out.toByteArray() ) , file.getAbsolutePath() );
-    				} 
-    				else 
+    				}
+    				else
     				{
                         g64File = new G64File( new FileInputStream( file ) , file.getAbsolutePath() );
                         g64File.toD64( out );
                         d64File = new D64File( new ByteArrayInputStream( out.toByteArray() ) , file.getAbsolutePath() );
     				}
-                } 
-                catch(Exception e) 
+                }
+                catch(Exception e)
                 {
                     if ( e instanceof RuntimeException) {
                         throw (RuntimeException) e;
                     }
                     throw new RuntimeException(e);
                 }
-				
+
 				floppy.loadDisk( g64File );
 				bamPanel.setDisk( d64File );
 			});
@@ -746,7 +738,7 @@ public class Debugger
 				emulator.setMemoryProvider( provider );
 				emulator.getCPU().pc( origin );
 			}
-			
+
 			final BreakpointsController bpController = getBreakPointsController();
             bpController.removeAllBreakpoints();
 			bpController.addBreakpoint( new Breakpoint( (short) 0x45bf , false , true ) );
@@ -1145,7 +1137,7 @@ public class Debugger
 		public void refresh(Emulator emulator)
 		{
 			final Graphics2D g = getBackBufferGraphics();
-			try 
+			try
 			{
 			    final IMemoryRegion memory = getBreakPointsController().getMemory();
 				final String[] lines = hexdump.dump( startAddress , memory , startAddress , bytesToDisplay).split("\n");
@@ -1344,9 +1336,9 @@ public class Debugger
 		public int getColumnCount() {
 			return 3;
 		}
-		
+
 		@Override
-		public Class<?> getColumnClass(int columnIndex) 
+		public Class<?> getColumnClass(int columnIndex)
 		{
 		    switch(columnIndex) {
 		        case 1:
@@ -1370,11 +1362,11 @@ public class Debugger
 		{
 	        final Breakpoint currentBP = getBreakpoints().get(rowIndex);
 	        final Breakpoint newBP;
-	        if ( columnIndex == 1 ) 
+	        if ( columnIndex == 1 )
 	        {
 	            newBP = currentBP.withEnabled( (Boolean) aValue );
-	        } 
-	        else 
+	        }
+	        else
 	        {
 	            if ( !(aValue instanceof String) ) {
 	                throw new IllegalArgumentException("No valid processor flags: "+aValue);
@@ -1412,7 +1404,7 @@ public class Debugger
 					throw new RuntimeException("Unreachable code reached");
 			}
 		}
-		
+
 		@Override
 		public void allBreakpointsChanged() {
 	          breakpointsChanged = true;
@@ -1437,18 +1429,18 @@ public class Debugger
 			fireTableDataChanged();
 		}
 	};
-	
-    protected final CPU getCPU() 
+
+    protected final CPU getCPU()
     {
         return debugCPU;
     }
-    
-    protected final IMemoryRegion getMemory() 
+
+    protected final IMemoryRegion getMemory()
     {
         return debugMemory;
     }
-    
-    protected final BreakpointsController getBreakPointsController() 
+
+    protected final BreakpointsController getBreakPointsController()
     {
         return breakpointsController;
     }

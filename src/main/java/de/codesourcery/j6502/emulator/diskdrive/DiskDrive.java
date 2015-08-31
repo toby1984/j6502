@@ -199,7 +199,7 @@ public class DiskDrive extends IMemoryRegion
         cpu.reset();
     }
 
-    public void tick()
+    public void executeOneCPUCycle()
     {
         if ( cpu.cycles > 0 ) // wait until current command has 'finished' executing
         {
