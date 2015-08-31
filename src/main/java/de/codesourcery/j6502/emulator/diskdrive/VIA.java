@@ -279,7 +279,7 @@ public class VIA extends Memory
         public final int getPins() {
             return pins;
         }
-
+        
         public final int readRegister()
         {
             return latchingEnabled ? readRegisterLatchingEnabled() : readRegisterLatchingDisabled();
@@ -406,7 +406,7 @@ public class VIA extends Memory
             this.or = value;
             this.pins = newValue;
         }
-
+        
         public final void setInputPins(int value)
         {
             // DDR: 0 = input, 1 = output
@@ -417,6 +417,11 @@ public class VIA extends Memory
             {
                 debugPrint( portName , "setInputPins" , newValue );
             }
+        }
+        
+        public final boolean getPin(int bit) 
+        {
+            return (pins & 1<<bit) != 0;
         }
 
         public final void setInputPin(int bit, boolean set)

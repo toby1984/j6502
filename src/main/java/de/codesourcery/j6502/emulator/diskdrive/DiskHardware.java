@@ -598,8 +598,8 @@ public class DiskHardware implements SerialDevice
          */
         final Port portB = via1.getPortB();
 
-        final boolean newData = bus.getData();
-        final boolean newClk = bus.getClk();
+        final boolean newData = ! bus.getData();
+        final boolean newClk = ! bus.getClk();
         final boolean newATN = ! bus.getATN();
 
         portB.setInputPin( 0 , newData );
@@ -618,15 +618,14 @@ public class DiskHardware implements SerialDevice
     @Override
     public boolean getData()
     {
-        boolean bit0  = ( via1.getPortB().getPins() & 1<< 1 ) != 0;
-        boolean bit1  = ( via1.getPortB().getPins() & 1<< 4 ) != 0;
-        return (bit0 ^ bit1);
+        final boolean atn = via1.getPortB().getPin(7) ^ via1.getPortB().getPin(4);
+        return (! via1.getPortB().getPin(1) | atn );
     }
 
     @Override
     public boolean getClock()
     {
-        return ( via1.getPortB().getPins() & 1<< 3 ) == 0;
+        return ( ! via1.getPortB().getPin(3) ) | via1.getPortB().getPin( 2 );
     }
 
     @Override

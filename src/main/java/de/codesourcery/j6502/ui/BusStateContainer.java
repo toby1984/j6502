@@ -71,9 +71,9 @@ public class BusStateContainer
 	{
 		final int newValue = bus.read();
 
-		if ( stateCount != 0 && wireStates[ (latestStatePtr-1) % MAX_STATES ] == newValue )
-		{
-			return; // wire state did not change
+		if ( stateCount != 0 && wireStates[ (oldestStatePtr+stateCount) % MAX_STATES ] == newValue ) 
+		{ 
+	        return; // wire state did not change
 		}
 
 		timestamps[latestStatePtr] = cycles;
