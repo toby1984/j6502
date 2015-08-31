@@ -12,15 +12,15 @@ import de.codesourcery.j6502.utils.HexDump;
  * Datasheet: http://www.princeton.edu/~mae412/HANDOUTS/Datasheets/6522.pdf
  * @author tobias.gierke@code-sourcery.de
  */
-public class VIA extends Memory 
+public class VIA extends Memory
 {
     private static final boolean DEBUG = true;
     private static final boolean DEBUG_CONTROL_LINE2_OUTPUT = false;
-    
+
     private static final boolean DEBUG_SET_IRQ = false;
     private static final boolean DEBUG_CLEAR_IRQ= false;
     private static final boolean DEBUG_START_TIMER1 = false;
-    
+
     private static final boolean DEBUG_WRITE_PORT_B = true;
 
     /*
@@ -30,7 +30,7 @@ public class VIA extends Memory
      * bit 3 - CB2
      * bit 2 - Shift register
      * bit 1 - CA1
-     * bit 0 - CA2     
+     * bit 0 - CA2
      */
     protected static final int IRQBIT_IRQ_OCCURRED = 1<<7;
     protected static final int IRQBIT_TIMER1_TIMEOUT = 1<<6;
@@ -50,7 +50,7 @@ public class VIA extends Memory
          * |1|0|0| Shift-out free-running at T2 rate
          * |1|0|1| Shift-out under control of T2
          * |1|1|0| Shift-out under control of phi2
-         * |1|1|1| Shift-out under control of ext. clock         
+         * |1|1|1| Shift-out under control of ext. clock
          */
         DISABLED,
         SHIFT_IN_T2,
@@ -69,7 +69,7 @@ public class VIA extends Memory
          * |0|0| Timed interrupt each time T1 is loaded.
          * |0|1| Continuous interrupts
          * |1|0| Timed interrupt each time T1 is loaded. (PB7: one-shot output)
-         * |1|1| Continuous interrupts (PB7: square wave output)		 
+         * |1|1| Continuous interrupts (PB7: square wave output)
          */
         IRQ_ON_LOAD,
         CONTINUOUS_IRQ,
@@ -84,7 +84,7 @@ public class VIA extends Memory
     }
     public static enum PortName { A,B };
 
-    public interface VIAChangeListener 
+    public interface VIAChangeListener
     {
         public void portChanged(VIA via,VIA.Port port);
         public void controlLine1Changed(VIA via,VIA.Port port);
@@ -92,7 +92,7 @@ public class VIA extends Memory
     }
 
     private long cycles;
-    
+
     private ShiftRegisterMode shiftRegisterMode = ShiftRegisterMode.DISABLED;
 
     private Timer1Mode timer1Mode=Timer1Mode.IRQ_ON_LOAD;
@@ -152,7 +152,7 @@ public class VIA extends Memory
 
     private final Port portA = new Port(PortName.A,IRQBIT_CA1_ACTIVE_EDGE, IRQBIT_CA2_ACTIVE_EDGE);
 
-    private final Port portB = new Port(PortName.B,IRQBIT_CB1_ACTIVE_EDGE, IRQBIT_CB2_ACTIVE_EDGE) 
+    private final Port portB = new Port(PortName.B,IRQBIT_CB1_ACTIVE_EDGE, IRQBIT_CB2_ACTIVE_EDGE)
     {
         @Override
         protected int readRegisterLatchingDisabled()
@@ -194,7 +194,7 @@ public class VIA extends Memory
         protected int or;
 
         protected ControlLine2Mode line2Mode = ControlLine2Mode.INPUT_NEG_ACTIVE_EDGE; // Control line #2 mode
-        protected ControlLine1Mode line1Mode; // Control line #1 IRQ trigger 
+        protected ControlLine1Mode line1Mode; // Control line #1 IRQ trigger
 
         protected int pins;
         protected boolean controlLine1In;
@@ -211,13 +211,13 @@ public class VIA extends Memory
             this.irqMaskBitsControlLine2 = irqMaskBitsControlLine2;
         }
 
-        public final void reset() 
+        public final void reset()
         {
             ddr = 0;
             ir = 0;
             or = 0;
             pins = 0;
-            
+
             line2Mode = ControlLine2Mode.INPUT_NEG_ACTIVE_EDGE;
             line1Mode = ControlLine1Mode.IRQ_NEG_ACTIVE_EDGE;
 
@@ -233,34 +233,34 @@ public class VIA extends Memory
             return ! line2Mode.isInput;
         }
 
-        public final void setControlLine2Mode(ControlLine2Mode mode) 
+        public final void setControlLine2Mode(ControlLine2Mode mode)
         {
-            if ( DEBUG & this.line2Mode != mode ) 
+            if ( DEBUG & this.line2Mode != mode )
             {
                 if ( DEBUG_CONTROL_LINE2_OUTPUT || mode.isInput != this.line2Mode.isInput )
                 logDebug( "port "+portName+" control line #2 mode: "+this.line2Mode+" -> "+mode);
             }
 
-            if ( line2Mode.isInput & mode.isInput ) 
+            if ( line2Mode.isInput & mode.isInput )
             {
                 this.line2Mode = mode;
-            } 
-            else 
+            }
+            else
             {
                 final boolean oldValue = getControlLine2();
                 this.line2Mode = mode;
-                if ( getControlLine2() != oldValue ) 
+                if ( getControlLine2() != oldValue )
                 {
                     changeListener.controlLine2Changed( VIA.this , this );
                 }
-            } 
+            }
         }
 
         public final ControlLine2Mode getControlLine2Mode() {
             return line2Mode;
         }
 
-        public final void setControlLine1Mode(ControlLine1Mode mode) 
+        public final void setControlLine1Mode(ControlLine1Mode mode)
         {
             if ( DEBUG & this.line1Mode != mode ) {
                 logDebug( "port "+portName+" control line #1 mode: "+this.line1Mode+" -> "+mode);
@@ -276,7 +276,7 @@ public class VIA extends Memory
             return portName;
         }
 
-        public final int getPinsOut() {
+        public final int getPins() {
             return pins;
         }
 
@@ -289,11 +289,11 @@ public class VIA extends Memory
         {
             int result = pins;
             int oldValue = result;
-            int value = or & ddr; // retain only bits for output
+            int value = or & ddr; // retain only bits for output ( 0 = input / 1 = output )
             result &= ~ddr; // clear all output bits
             result |= value;
             pins = result;
-            if ( oldValue != result ) 
+            if ( oldValue != result )
             {
                 changeListener.portChanged( VIA.this , this );
             }
@@ -303,17 +303,17 @@ public class VIA extends Memory
             return ddr;
         }
 
-        public final boolean getControlLine1() 
+        public final boolean getControlLine1()
         {
             return controlLine1In;
         }
 
-        public final  boolean getControlLine2() 
+        public final  boolean getControlLine2()
         {
             if ( line2Mode.isInput ) {
                 return controlLine2In;
             }
-            switch ( line2Mode ) 
+            switch ( line2Mode )
             {
                 case HIGH_OUTPUT:
                     return true;
@@ -324,17 +324,17 @@ public class VIA extends Memory
             }
         }
 
-        public final void setControlLine1(boolean newValue,boolean notifyListeners) 
+        public final void setControlLine1(boolean newValue,boolean notifyListeners)
         {
             final boolean oldValue = this.controlLine1In;
-            if ( oldValue != newValue ) 
+            if ( oldValue != newValue )
             {
                 if ( DEBUG ) {
                     logDebug("control line #1 input transition: "+this.controlLine1In+" -> "+newValue);
                 }
                 this.controlLine1In = newValue;
                 if ( oldValue ) { // true -> false transition
-                    if ( line1Mode == ControlLine1Mode.IRQ_NEG_ACTIVE_EDGE ) 
+                    if ( line1Mode == ControlLine1Mode.IRQ_NEG_ACTIVE_EDGE )
                     {
                         if ( DEBUG ) {
                             logDebug( "Port "+portName+" control line #1 triggers IRQ because of negative edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
@@ -342,7 +342,7 @@ public class VIA extends Memory
                         setInterrupt( irqMaskBitsControlLine1 );
                     }
                 } else { // false -> true transition
-                    if ( line1Mode == ControlLine1Mode.IRQ_POS_ACTIVE_EDGE ) 
+                    if ( line1Mode == ControlLine1Mode.IRQ_POS_ACTIVE_EDGE )
                     {
                         if ( DEBUG ) {
                             logDebug("Port "+portName+" control line #1 triggers IRQ because of positive edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
@@ -353,22 +353,22 @@ public class VIA extends Memory
                 if ( notifyListeners ) {
                     changeListener.controlLine1Changed( VIA.this , this );
                 }
-            } 
+            }
         }
 
-        public final void setControlLine2(boolean newValue,boolean notifyListeners) 
+        public final void setControlLine2(boolean newValue,boolean notifyListeners)
         {
             final boolean oldValue = getControlLine2();
-            if ( oldValue != newValue && isControlLine2Input() ) 
+            if ( oldValue != newValue && isControlLine2Input() )
             {
                 this.controlLine2In = newValue;
                 if ( oldValue ) { // true -> false transition
-                    if ( line2Mode == ControlLine2Mode.INPUT_NEG_ACTIVE_EDGE ) 
+                    if ( line2Mode == ControlLine2Mode.INPUT_NEG_ACTIVE_EDGE )
                     {
                         setInterrupt( irqMaskBitsControlLine2 );
                     }
                 } else { // false -> true transition
-                    if ( line2Mode == ControlLine2Mode.INPUT_POS_ACTIVE_EDGE ) 
+                    if ( line2Mode == ControlLine2Mode.INPUT_POS_ACTIVE_EDGE )
                     {
                         setInterrupt( irqMaskBitsControlLine2 );
                     }
@@ -376,13 +376,13 @@ public class VIA extends Memory
                 if ( notifyListeners ) {
                     changeListener.controlLine1Changed( VIA.this , this );
                 }
-            } 		
+            }
         }
 
-        public final void setDDR(int ddr) 
+        public final void setDDR(int ddr)
         {
             this.ddr = ddr & 0xff;
-            if ( DEBUG ) 
+            if ( DEBUG )
             {
                 debugPrint( portName , "setDDR" , ddr , "OUT" , "IN");
             }
@@ -391,36 +391,37 @@ public class VIA extends Memory
         public final void writeRegister(int value)
         {
             // ddr = 1 => output
+        	value = value & 0xff;
             int newValue = this.pins & ~ddr;
-            newValue = newValue | ( (value & 0xff) & ddr );
-            if ( DEBUG && ( DEBUG_WRITE_PORT_B || portName != PortName.B) ) 
+            newValue |= ( value & ddr );
+            if ( DEBUG && ( DEBUG_WRITE_PORT_B || portName != PortName.B) )
             {
-                if ( newValue != pins ) 
+                if ( newValue != pins )
                 {
                     debugPrint( portName , "writeRegister: current "+HexDump.toBinaryString( (byte) pins )+" , DDR: "
                 +HexDump.toBinaryString( (byte) ddr )+" , value:"+HexDump.toBinaryString( (byte) value )+" => "+
                 HexDump.toBinaryString( (byte) newValue ), newValue );
                 }
-            } 
-            this.or = value & 0xff;
+            }
+            this.or = value;
             this.pins = newValue;
         }
-        
-        public final void setInputPins(int value) 
+
+        public final void setInputPins(int value)
         {
             // DDR: 0 = input, 1 = output
-            int newValue = pins & ddr;
+            int newValue = pins & ~ddr;
             newValue = newValue | (value & ~ddr);
             this.pins = newValue & 0xff;
-            if ( DEBUG ) 
+            if ( DEBUG )
             {
                 debugPrint( portName , "setInputPins" , newValue );
             }
-        }        
+        }
 
-        public final void setInputPin(int bit, boolean set) 
+        public final void setInputPin(int bit, boolean set)
         {
-            final int mask = 1<<bit & ~ddr;
+            final int mask = (1<<bit) & ~ddr;
             int newValue;
             if ( set ) {
                 newValue = this.pins | mask;
@@ -431,10 +432,6 @@ public class VIA extends Memory
                 debugPrint( portName , set ? "setInputBit" : "clearInputBit" , newValue , bit );
             }
             this.pins = newValue;
-        }        
-
-        public final int getPinsIn() {
-            return pins & ~ddr;
         }
 
         public final boolean isInput(int bit) {
@@ -446,7 +443,7 @@ public class VIA extends Memory
         }
 
         protected int readRegisterLatchingDisabled() {
-            return pins & ~ddr;
+            return pins;
         }
 
         protected int readRegisterLatchingEnabled() {
@@ -526,7 +523,7 @@ public class VIA extends Memory
      * bit 6 - CB2 control bits (see below)
      * bit 5 - CB2 control bits (see below)
      * bit 4 - CB1 interrupt control (0=negative active edge,1=positive active edge)
-     * 
+     *
      * bit 3 - CA2 control bits (see below)
      * bit 2 - CA2 control bits (see below)
      * bit 1 - CA2 control bits (see below)
@@ -589,13 +586,13 @@ public class VIA extends Memory
      */
     protected static final int PORTA_NOHANDSHAKE  = 0x000F;
 
-    protected static enum ControlLine1Mode 
+    protected static enum ControlLine1Mode
     {
         IRQ_NEG_ACTIVE_EDGE,
         IRQ_POS_ACTIVE_EDGE,
     }
 
-    protected static enum ControlLine2Mode 
+    protected static enum ControlLine2Mode
     {
         /*
          * |3|2|1| *** CA2/CB2 control bits ***
@@ -606,11 +603,11 @@ public class VIA extends Memory
          * |1|0|0| Handshake output
          * |1|0|1| Pulse output
          * |1|1|0| Low output
-         * |1|1|1| High output         
-         * 
+         * |1|1|1| High output
+         *
          *  (*) if CA2/CB2 is set to "independent interrupt input" than
          *  writing to/reading from PORTA/PORTB will NOT clear the IRQ flag
-         *  bit, instead the bit must be cleared by writing into the IFR.         
+         *  bit, instead the bit must be cleared by writing into the IFR.
          */
         INPUT_NEG_ACTIVE_EDGE(true),
         INDEPENDENT_IRQ_INPUT_NEG_EDGE(true),
@@ -628,14 +625,14 @@ public class VIA extends Memory
         }
     }
 
-    protected final class ControlLines 
+    protected final class ControlLines
     {
         private boolean line1;
         private boolean line2;
 
         private ControlLine2Mode mode = ControlLine2Mode.INPUT_NEG_ACTIVE_EDGE;
 
-        // If that bit is 0, CA1 is active-low; If that bit is 1, CA1 is active-high.          
+        // If that bit is 0, CA1 is active-low; If that bit is 1, CA1 is active-high.
         private boolean irqActiveHi;
 
         public void setLine1(boolean line1) {
@@ -702,7 +699,7 @@ public class VIA extends Memory
         /* Clear all internal registers
          * except t1/t2 counter, latches and SR
          */
-        
+
         cycles = 0;
 
         portA.reset();
@@ -847,14 +844,14 @@ public class VIA extends Memory
                 /*
                  * bit 1 - port B latching ( 0 = disable , 1 = enable)
                  * bit 0 - port A latching ( 0 = disable , 1 = enable)
-                 * 
+                 *
                  * |7|6| Timer #1 control bits
                  * |0|0| Timed interrupt each time T1 is loaded.
                  * |0|1| Continuous interrupts
                  * |1|0| Timed interrupt each time T1 is loaded. (PB7: one-shot output)
                  * |1|1| Continuous interrupts (PB7: square wave output)
                  */
-                
+
                 Timer1Mode newTimer1Mode;
                 switch( (value & 0b1100_0000) >> 8 ) {
                     case 0: newTimer1Mode = Timer1Mode.IRQ_ON_LOAD; break;
@@ -868,7 +865,7 @@ public class VIA extends Memory
                     logDebug("Timer #1 mode: "+timer1Mode+" -> "+newTimer1Mode);
                 }
                 timer1Mode = newTimer1Mode;
-                
+
                 final Timer2Mode newTimer2Mode;
                 if ( (value & 1<<5) == 0 ) {
                     // // bit 5 - Timer #2 control ( 0 = timed interrupt, 1 = count-down with pules on PB6)
@@ -877,13 +874,13 @@ public class VIA extends Memory
                     newTimer2Mode = Timer2Mode.CNT_DOWN_WITH_PB6_PULSE;
                     throw new RuntimeException("Unimplemented timer #2 mode: "+Timer2Mode.CNT_DOWN_WITH_PB6_PULSE);
                 }
-                
+
                 if ( DEBUG && newTimer2Mode != timer2Mode ) {
                     logDebug("Timer #2 mode: "+timer2Mode);
                 }
                 timer2Mode = newTimer2Mode;
-                
-                switch( (value & 0b0001_1100) >> 2) 
+
+                switch( (value & 0b0001_1100) >> 2)
                 {
                     /*
                      * |4|3|2| *** shift register control bits ***
@@ -894,30 +891,30 @@ public class VIA extends Memory
                      * |1|0|0| Shift-out free-running at T2 rate
                      * |1|0|1| Shift-out under control of T2
                      * |1|1|0| Shift-out under control of phi2
-                     * |1|1|1| Shift-out under control of ext. clock                     
+                     * |1|1|1| Shift-out under control of ext. clock
                      */
-                    case 0: 
-                        shiftRegisterMode = ShiftRegisterMode.DISABLED; 
+                    case 0:
+                        shiftRegisterMode = ShiftRegisterMode.DISABLED;
                         break;
-                    case 1: 
-                        shiftRegisterMode = ShiftRegisterMode.SHIFT_IN_T2; 
+                    case 1:
+                        shiftRegisterMode = ShiftRegisterMode.SHIFT_IN_T2;
                         throw new RuntimeException("Unsupported shift register mode: "+shiftRegisterMode);
-                    case 2: 
+                    case 2:
                         shiftRegisterMode = ShiftRegisterMode.SHIFT_IN_PHI2;
                         throw new RuntimeException("Unsupported shift register mode: "+shiftRegisterMode);
-                    case 3: 
-                        shiftRegisterMode = ShiftRegisterMode.SHIFT_IN_EXT_CLOCK; 
+                    case 3:
+                        shiftRegisterMode = ShiftRegisterMode.SHIFT_IN_EXT_CLOCK;
                         throw new RuntimeException("Unsupported shift register mode: "+shiftRegisterMode);
-                    case 4: 
+                    case 4:
                         shiftRegisterMode = ShiftRegisterMode.SHIFT_OUT_FREE_RUN_T2_RATE;
                         throw new RuntimeException("Unsupported shift register mode: "+shiftRegisterMode);
-                    case 5: 
-                        shiftRegisterMode = ShiftRegisterMode.SHIFT_OUT_T2; 
+                    case 5:
+                        shiftRegisterMode = ShiftRegisterMode.SHIFT_OUT_T2;
                         throw new RuntimeException("Unsupported shift register mode: "+shiftRegisterMode);
-                    case 6: 
+                    case 6:
                         shiftRegisterMode = ShiftRegisterMode.SHIFT_OUT_PHI2;
                         throw new RuntimeException("Unsupported shift register mode: "+shiftRegisterMode);
-                    case 7: 
+                    case 7:
                         shiftRegisterMode = ShiftRegisterMode.SHIFT_OUT_EXT_CLOCK;
                         throw new RuntimeException("Unsupported shift register mode: "+shiftRegisterMode);
                     default:
@@ -928,17 +925,17 @@ public class VIA extends Memory
                 break;
             case PCR:
                 /* PCR
-                 * 
+                 *
                  * bit 7 - CB2 control bits (see below)
                  * bit 6 - CB2 control bits (see below)
                  * bit 5 - CB2 control bits (see below)
                  * bit 4 - CB1 interrupt control (0=negative active edge,1=positive active edge)
-                 * 
+                 *
                  * bit 3 - CA2 control bits (see below)
                  * bit 2 - CA2 control bits (see below)
                  * bit 1 - CA2 control bits (see below)
                  * bit 0 - CA1 interrupt control (0=negative active edge,1=positive active edge)
-                 * 
+                 *
                  * |3|2|1| *** CA2/CB2 control bits ***
                  * |0|0|0| Input negative active edge
                  * |0|0|1| Independent interrupt input negative edge (*)
@@ -947,11 +944,11 @@ public class VIA extends Memory
                  * |1|0|0| Handshake output
                  * |1|0|1| Pulse output
                  * |1|1|0| Low output
-                 * |1|1|1| High output         
+                 * |1|1|1| High output
                  */
                 portA.setControlLine1Mode( ( value & 1) != 0 ? ControlLine1Mode.IRQ_POS_ACTIVE_EDGE : ControlLine1Mode.IRQ_NEG_ACTIVE_EDGE );
 
-                switch( ( value & 0b0000_1110) >> 1 ) 
+                switch( ( value & 0b0000_1110) >> 1 )
                 {
                     case 0: portA.setControlLine2Mode( ControlLine2Mode.INPUT_NEG_ACTIVE_EDGE); break;
                     case 1: portA.setControlLine2Mode( ControlLine2Mode.INDEPENDENT_IRQ_INPUT_NEG_EDGE); break;
@@ -965,7 +962,7 @@ public class VIA extends Memory
                         throw new RuntimeException("Unreachable code reached");
                 }
 
-                switch( ( value & 0b1110_0000) >> 5 ) 
+                switch( ( value & 0b1110_0000) >> 5 )
                 {
                     case 0: portB.setControlLine2Mode( ControlLine2Mode.INPUT_NEG_ACTIVE_EDGE); break;
                     case 1: portB.setControlLine2Mode( ControlLine2Mode.INDEPENDENT_IRQ_INPUT_NEG_EDGE); break;
@@ -977,7 +974,7 @@ public class VIA extends Memory
                     case 7: portB.setControlLine2Mode( ControlLine2Mode.HIGH_OUTPUT); break;
                     default:
                         throw new RuntimeException("Unreachable code reached");
-                }                
+                }
 
                 portB.setControlLine1Mode( ( value & 1<<4) != 0 ? ControlLine1Mode.IRQ_POS_ACTIVE_EDGE : ControlLine1Mode.IRQ_NEG_ACTIVE_EDGE );
 
@@ -994,7 +991,7 @@ public class VIA extends Memory
                 this.irqFlags = newIrqFlags;
                 break;
             case IER:
-                
+
                 int newIrqEnable;
                 if ( ( value & 0b1000_0000 ) == 0 ) { // clear bits
                     value &= 0b0111_1111;
@@ -1003,7 +1000,7 @@ public class VIA extends Memory
                     value &= 0b0111_1111;
                     newIrqEnable = this.irqEnable | value;
                 }
-                if ( DEBUG ) 
+                if ( DEBUG )
                 {
                     final int oldIrqEnable = this.irqEnable;
                     logDebug("CPU write IRQ enable: "+HexDump.toBinaryString( (byte) oldIrqEnable )+" -> "+HexDump.toBinaryString( (byte) newIrqEnable ) );
@@ -1024,10 +1021,10 @@ public class VIA extends Memory
     public void tick()
     {
         cycles++;
-        
-        if ( timer1Running && --timer1 == 0 ) 
+
+        if ( timer1Running && --timer1 == 0 )
         {
-            switch( timer1Mode ) 
+            switch( timer1Mode )
             {
                 case IRQ_ON_LOAD:
                 case CONTINUOUS_IRQ:
@@ -1040,25 +1037,25 @@ public class VIA extends Memory
                     throw new RuntimeException("Unimplemented timer #1 mode: "+timer1Mode);
             }
         }
-        if ( timer2Running && --timer2 == 0 ) 
+        if ( timer2Running && --timer2 == 0 )
         {
             setInterrupt( IRQBIT_TIMER2_TIMEOUT );
-            timer2 = t2latchhi << 8 | t2latchlo;	
+            timer2 = t2latchhi << 8 | t2latchlo;
         }
         portA.tick();
         portB.tick();
     }
 
-    private void setInterrupt(int bitMask) 
+    private void setInterrupt(int bitMask)
     {
-        if ( (irqEnable & bitMask) != 0 ) 
+        if ( (irqEnable & bitMask) != 0 )
         {
             final int currentFlags = irqFlags;
             irqFlags |= ( IRQBIT_IRQ_OCCURRED | bitMask );
-            if ( ( currentFlags & bitMask) == 0 ) 
+            if ( ( currentFlags & bitMask) == 0 )
             {
                 if ( DEBUG_SET_IRQ ) {
-                    logDebug(" SET INTERRUPT - IRQ flags : "+HexDump.toBinaryString( (byte) irqFlags ) ); 
+                    logDebug(" SET INTERRUPT - IRQ flags : "+HexDump.toBinaryString( (byte) irqFlags ) );
                 }
                 cpu.queueInterrupt( IRQType.REGULAR );
             }
@@ -1067,13 +1064,13 @@ public class VIA extends Memory
         }
     }
 
-    private void clearInterupt(int bitMask) 
+    private void clearInterupt(int bitMask)
     {
         irqFlags &= ~bitMask;
-        if ( ( irqFlags & 0b0111_1111) == 0 ) { // clear global irq flag bit if all IRQs are acknowledged 
+        if ( ( irqFlags & 0b0111_1111) == 0 ) { // clear global irq flag bit if all IRQs are acknowledged
             irqFlags &= 0b0111_1111;
             if ( DEBUG_CLEAR_IRQ) {
-                logDebug(" CLEAR INTERRUPT - IRQ flags : "+HexDump.toBinaryString( (byte) irqFlags ) ); 
+                logDebug(" CLEAR INTERRUPT - IRQ flags : "+HexDump.toBinaryString( (byte) irqFlags ) );
             }
         }
     }
@@ -1090,21 +1087,21 @@ public class VIA extends Memory
         this.changeListener = changeListener;
     }
 
-    protected void logDebug(String message) 
+    protected void logDebug(String message)
     {
         System.out.println( getIdentifier()+" - cycle "+cycles+" - "+message);
         System.out.flush();
     }
 
-    private void debugPrint(PortName portName,String msg , int value) 
+    private void debugPrint(PortName portName,String msg , int value)
     {
         debugPrint(portName,msg,value,"ON","off");
     }
 
-    private void debugPrint(PortName portName,String msg , int value,String bitSetMsg,String bitClearedMsg) 
+    private void debugPrint(PortName portName,String msg , int value,String bitSetMsg,String bitClearedMsg)
     {
         final StringBuilder buffer = new StringBuilder( msg+"( cycle "+cycles+" , port "+portName+"): \n");
-        for ( int i = 0 ; i < 7 ; i++ ) 
+        for ( int i = 0 ; i < 7 ; i++ )
         {
             boolean bitSet = (value & 1<<i) != 0;
             switch( portName ) {
@@ -1119,13 +1116,13 @@ public class VIA extends Memory
             }
         }
         logDebug( buffer.toString() );
-    }    
+    }
 
-    private void debugPrint(PortName portName,String msg , int value,int bitNum) 
+    private void debugPrint(PortName portName,String msg , int value,int bitNum)
     {
         final StringBuilder buffer = new StringBuilder( msg+"( cycle "+cycles+", port "+portName+"): \n");
         boolean bitSet = (value & 1<<bitNum) != 0;
-        switch( portName ) 
+        switch( portName )
         {
             case A:
                 buffer.append( getNamePortA( bitNum )).append("bit ").append( bitNum ).append(" - ").append( bitSet ? "ON" : "off" ).append("\n");
@@ -1137,7 +1134,7 @@ public class VIA extends Memory
                 throw new RuntimeException("Unhandled switch/case: "+portName);
         }
         logDebug( buffer.toString() );
-    } 
+    }
 
     protected String getNamePortA(int bit) {
         return "<unknown bit "+bit+">";
