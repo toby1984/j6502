@@ -159,13 +159,14 @@ public class Debugger
 	private volatile IMemoryRegion debugMemory = emulator.getMemory();
 	private volatile BreakpointsController breakpointsController = c64BreakpointsController;
 	private DebugTarget debugTarget = DebugTarget.COMPUTER;
-
+	
 	private final JDesktopPane desktop = new JDesktopPane();
 
 	private final KeyboardInputListener keyboardListener = new KeyboardInputListener(emulator);
 
 	private final List<IDebuggerView> views = new ArrayList<>();
 
+	private final FloppyInfoPanel floppyInfoPanel = new FloppyInfoPanel();
 	private final BreakpointModel bpModel = new BreakpointModel();
 	private final ButtonToolbar toolbar = new ButtonToolbar();
 	private final DisassemblyPanel disassembly = new DisassemblyPanel() {
@@ -228,7 +229,10 @@ public class Debugger
 
 		final JInternalFrame disassemblyFrame = wrap( "Disassembly" , disassembly );
 		desktop.add( disassemblyFrame  );
-
+		
+        final JInternalFrame floppyInfoFrame = wrap( "Floppy status" , floppyInfoPanel );
+        desktop.add( floppyInfoFrame  );
+        
 		final JInternalFrame cpuStatusFrame = wrap( "CPU" , cpuPanel );
 		desktop.add( cpuStatusFrame  );
 
