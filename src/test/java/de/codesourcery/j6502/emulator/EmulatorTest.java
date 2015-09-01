@@ -41,13 +41,13 @@ public class EmulatorTest  extends TestCase
     public static final int PRG_LOAD_ADDRESS = MemorySubsystem.Bank.BANK1.range.getStartAddress(); // = $1000
 
     public static final int PERFORMANCE_INSTRUCTIONS = 10000000;
-    
+
     public static final boolean TEST_PERFORMANCE = false;
 
     public void testCPUPerformance() throws IOException 
     {
         System.out.println("Performance 'Other CPU'");
-        
+
         final Memory memory = new Memory("test" , new AddressRange(0,65536));
 
         final Assembler asm = new Assembler();
@@ -66,7 +66,7 @@ public class EmulatorTest  extends TestCase
 
         benchmark( toTest , 200 , 100 );
     }
-    
+
     private CPU prepareTest(Assembler a, Memory memory) throws IOException 
     {
         String source = "";
@@ -75,7 +75,7 @@ public class EmulatorTest  extends TestCase
             java.util.Scanner s = new java.util.Scanner(in).useDelimiter("\\A");
             source = s.hasNext() ? s.next() : "";
         }
-        
+
         final byte[] executable = compile( a , source );
         System.out.println("Origin: "+a.getOrigin()+" , executable has "+executable.length+" bytes");
         final CPU cpu = new CPU(memory);
@@ -227,32 +227,70 @@ M7 	N7 	C6 	    C7 	S7 	V	Carry / Overflow	                    Hex	            U
 
     public void testADCDecimalMode()
     {
-        /* TAKEN FROM http://visual6502.org/wiki/index.php?title=6502DecimalMode
-         *
-         * 00 + 00 and C=0 gives 00 and N=0 V=0 Z=1 C=0 (simulate)
-         * 79 + 00 and C=1 gives 80 and N=1 V=1 Z=0 C=0 (simulate)
-         * 24 + 56 and C=0 gives 80 and N=1 V=1 Z=0 C=0 (simulate)
-         * 93 + 82 and C=0 gives 75 and N=0 V=1 Z=0 C=1 (simulate)
-         * 89 + 76 and C=0 gives 65 and N=0 V=0 Z=0 C=1 (simulate)
-         * 89 + 76 and C=1 gives 66 and N=0 V=0 Z=1 C=1 (simulate)
-         * 80 + f0 and C=0 gives d0 and N=0 V=1 Z=0 C=1 (simulate)
-         * 80 + fa and C=0 gives e0 and N=1 V=0 Z=0 C=1 (simulate)
-         * 2f + 4f and C=0 gives 74 and N=0 V=0 Z=0 C=0 (simulate)
-         * 6f + 00 and C=1 gives 76 and N=0 V=0 Z=0 C=0 (simulate)
+        /// TAKEN FROM http://www.6502.org/tutorials/decimal_mode.html
+
+        /*
+CLD      ; Binary mode (binary addition: 88 + 70 + 1 = 159)
+SEC      ; Note: carry is set, not clear!
+LDA #$58 ; 88
+ADC #$46 ; 70 (after this instruction, C = 0, A = $9F = 159)         
          */
+        execute("CLD\n SEC\n LDA #$58\n ADC #$46\n").assertA( 0x9f ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW);
 
-        // execute("SED\n CLC\n LDA #$0\n ADC #0\n").assertA( 0 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.DECIMAL_MODE);
-        execute("SED\n SEC\n LDA #$79\n ADC #0\n").assertA( 0x80 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW,CPU.Flag.DECIMAL_MODE);
+        /*
+SED      ; Decimal mode (BCD addition: 58 + 46 + 1 = 105)
+SEC      ; Note: carry is set, not clear!
+LDA #$58
+ADC #$46 ; After this instruction, C = 1, A = $05         
+         */
+        execute("SED\n SEC\n LDA #$58\n ADC #$46\n").assertA( 0x05 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.OVERFLOW,CPU.Flag.DECIMAL_MODE);
 
-        execute("SED\n CLC\n LDA #$24\n ADC #$56\n").assertA( 0x80 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW,CPU.Flag.DECIMAL_MODE);
-        execute("SED\n CLC\n LDA #$93\n ADC #$82\n").assertA( 0x75 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
-        execute("SED\n CLC\n LDA #$89\n ADC #$76\n").assertA( 0x65 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
-        execute("SED\n SEC\n LDA #$89\n ADC #$76\n").assertA( 0x66 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
-        execute("SED\n CLC\n LDA #$80\n ADC #$f0\n").assertA( 0xd0 ).assertFlags(CPU.Flag.OVERFLOW,CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
-        execute("SED\n CLC\n LDA #$80\n ADC #$fa\n").assertA( 0xe0 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
+        /*
+SED      ; Decimal mode (BCD addition: 12 + 34 = 46)
+CLC
+LDA #$12
+ADC #$34 ; After this instruction, C = 0, A = $46         
+         */
+        execute("SED\n CLC\n LDA #$12\n ADC #$34\n").assertA( 0x46 ).assertFlags(CPU.Flag.DECIMAL_MODE);
 
-        execute("SED\n CLC\n LDA #$2f\n ADC #$4f\n").assertA( 0x74 ).assertFlags();
-        execute("SED\n SEC\n LDA #$6f\n ADC #$00\n").assertA( 0x76 ).assertFlags();
+        /*
+SED      ; Decimal mode (BCD addition: 15 + 26 = 41)
+CLC
+LDA #$15
+ADC #$26 ; After this instruction, C = 0, A = $41         
+         */
+        execute("SED\n CLC\n LDA #$15\n ADC #$26\n").assertA( 0x41 ).assertFlags(CPU.Flag.DECIMAL_MODE);
+
+        /*
+SED      ; Decimal mode (BCD addition: 81 + 92 = 173)
+CLC
+LDA #$81
+ADC #$92 ; After this instruction, C = 1, A = $73         
+         */
+        execute("SED\n CLC\n LDA #$81\n ADC #$92\n").assertA( 0x73 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE,CPU.Flag.OVERFLOW);
+
+        /*
+SED      ; Decimal mode (BCD subtraction: 46 - 12 = 34)
+SEC
+LDA #$46
+SBC #$12 ; After this instruction, C = 1, A = $34)         
+         */
+        execute("SED\n CLC\n LDA #$46\n SBC #$12\n").assertA( 0x34 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE,CPU.Flag.OVERFLOW);
+
+        /*
+SED      ; Decimal mode (BCD subtraction: 40 - 13 = 27)
+SEC
+LDA #$40
+SBC #$13 ; After this instruction, C = 1, A = $27)         
+         */
+        
+        /*
+SED      ; Decimal mode (BCD subtraction: 32 - 2 - 1 = 29)
+CLC      ; Note: carry is clear, not set!
+LDA #$32
+SBC #$02 ; After this instruction, C = 1, A = $29)     
+         */
+        execute("SED\n CLC\n LDA #$32\n SBC #$02\n").assertA( 0x29 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE,CPU.Flag.OVERFLOW);
     }
 
     public void testADC() {

@@ -398,9 +398,9 @@ public class VIA extends Memory
             {
                 if ( newValue != pins )
                 {
-                    debugPrint( portName , "writeRegister: current "+HexDump.toBinaryString( (byte) pins )+" , DDR: "
+                    debugPrint2( portName , "writeRegister: current "+HexDump.toBinaryString( (byte) pins )+" , DDR: "
                 +HexDump.toBinaryString( (byte) ddr )+" , value:"+HexDump.toBinaryString( (byte) value )+" => "+
-                HexDump.toBinaryString( (byte) newValue ), newValue );
+                HexDump.toBinaryString( (byte) newValue ), this.pins , newValue );
                 }
             }
             final boolean valueChanged = this.or != value;
@@ -553,6 +553,11 @@ public class VIA extends Memory
      * |1|0|1| Pulse output
      * |1|1|0| Low output
      * |1|1|1| High output
+     * 
+     *      * |0|0|0| Input negative active edge
+     * |0|1|0| Input positive active edge
+     * |1|0|0| Handshake output
+     * |1|1|0| Low output
      *
      *  (*) if CA2/CB2 is set to "independent interrupt input" than
      *  writing to/reading from PORTA/PORTB will NOT clear the IRQ flag
@@ -800,15 +805,14 @@ public class VIA extends Memory
                 if ( DEBUG ) {
                     logDebug("CPU write timer #1 counter low: "+HexDump.toBinaryString( value ) );
                 }
-                timer1 = timer1 & ~0xff;
-                timer1 |= (value & 0xff);
+                t1latchlo = value & 0xff;
                 break;
             case T1CH:
                 if ( DEBUG_START_TIMER1 ) {
                     logDebug("CPU write timer #1 counter high: "+HexDump.toBinaryString( value ) );
                 }
-                timer1 = t1latchlo;
-                timer1 |= (value & 0xff) << 8;
+                t1latchhi = value & 0xff;
+                timer1 = ( (value & 0xff) << 8 ) | t1latchlo;
                 if ( DEBUG_START_TIMER1 && ! timer1Running ) {
                     logDebug("Starting timer #1, counting down from "+timer1);
                 }
@@ -1043,15 +1047,16 @@ public class VIA extends Memory
             {
                 case IRQ_ON_LOAD:
                 case CONTINUOUS_IRQ:
-                    setInterrupt(IRQBIT_TIMER1_TIMEOUT);
-                    timer1 = t1latchhi << 8 | t1latchlo;
                     break;
                 case CONTINUOUS_IRQ_PB7_SQUARE_WAVE:
                 case IRQ_ON_LOAD_PB7_ONESHOT:
                 default:
                     throw new RuntimeException("Unimplemented timer #1 mode: "+timer1Mode);
             }
+            setInterrupt(IRQBIT_TIMER1_TIMEOUT);
+            timer1 = t1latchhi << 8 | t1latchlo;            
         }
+        
         if ( timer2Running && --timer2 == 0 )
         {
             setInterrupt( IRQBIT_TIMER2_TIMEOUT );
@@ -1083,7 +1088,7 @@ public class VIA extends Memory
     {
         irqFlags &= ~bitMask;
         if ( ( irqFlags & 0b0111_1111) == 0 ) { // clear global irq flag bit if all IRQs are acknowledged
-            irqFlags &= 0b0111_1111;
+            irqFlags = 0;
             if ( DEBUG_CLEAR_IRQ) {
                 logDebug(" CLEAR INTERRUPT - IRQ flags : "+HexDump.toBinaryString( (byte) irqFlags ) );
             }
@@ -1112,7 +1117,36 @@ public class VIA extends Memory
     {
         debugPrint(portName,msg,value,"ON","off");
     }
+    
+    private void debugPrint2(PortName portName,String msg , int oldValue, int value)
+    {
+        debugPrint(portName,msg,oldValue , value,"ON","off");
+    }
 
+    private void debugPrint(PortName portName,String msg , int oldValue , int value,String bitSetMsg,String bitClearedMsg)
+    {
+        final StringBuilder buffer = new StringBuilder( msg+"( cycle "+cycles+" , port "+portName+"): \n");
+        for ( int i = 0 ; i < 7 ; i++ )
+        {
+            final boolean bitSet0 = (oldValue & 1<<i) != 0;
+            final boolean bitSet1 = (value & 1<<i) != 0;
+            if ( bitSet0 != bitSet1 ) 
+            {
+                switch( portName ) {
+                    case A:
+                        buffer.append( getNamePortA( i ) ).append("bit ").append( i ).append(" - ").append( bitSet1 ? bitSetMsg  : bitClearedMsg ).append("\n");
+                        break;
+                    case B:
+                        buffer.append( getNamePortB( i )).append("bit ").append( i ).append(" - ").append( bitSet1 ? bitSetMsg  : bitClearedMsg  ).append("\n");
+                        break;
+                    default:
+                        throw new RuntimeException("Unhandled switch/case: "+portName);
+                }
+            }
+        }
+        logDebug( buffer.toString() );
+    }
+    
     private void debugPrint(PortName portName,String msg , int value,String bitSetMsg,String bitClearedMsg)
     {
         final StringBuilder buffer = new StringBuilder( msg+"( cycle "+cycles+" , port "+portName+"): \n");

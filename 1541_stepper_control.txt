@@ -1,0 +1,178 @@
+
+ $4A/74:   Step counter for head transport
+
+   Values 0 - 127 move the head outside and values over 128 move towards the centre.
+
+ $FA05/64005:   Move head to next track
+
+FA05: A5 4A     LDA $4A   ;  Values 0 - 127 move the head outside (towards track 1) and values over 128 move towards the centre (towards track 35).
+FA07: 10 05     BPL $FA0E ; positive value => move towards track 1
+FA09: 49 FF     EOR #$FF  ; negative number, invert
+FA0B: 18        CLC
+FA0C: 69 01     ADC #$01  ; add +1 to get to one's complement
+
+
+FA0E: C5 64     CMP $64  ; compare against minimum number of steps for one full rotation ( 1.8° per step = 200 steps per full rotation ) => Accu - 200
+FA10: B0 0A     BCS $FA1C ; Accu >= 200 , move more than one full rotation (360°) , calculate number of head steps
+
+; move less than one full rotation (<360°)
+
+FA12: A9 3B     LDA #$3B  ; setup vector to routine for head movement ($FA3B) ==> Move stepper motor short distance
+FA14: 85 62     STA $62
+FA16: A9 FA     LDA #$FA 
+FA18: 85 63     STA $63
+
+FA1A: D0 12     BNE $FA2E ; start head movement
+
+
+; =========================
+ $FA1C/64028:   Calculate number of head steps when moving more than 360°
+; =========================
+
+FA1C: E5 5E     SBC $5E  ; Subtract number of steps for head motor accelerating [04 steps] 
+FA1E: E5 5E     SBC $5E  ; Subtract number of steps for head motor decelerating [04 steps]
+FA20: 85 61     STA $61  ; WRITE: Accelerating/decl. factor [04]
+
+FA22: A5 5E     LDA $5E  ; Number of steps for head motor accelerating/decl. [04]
+FA24: 85 60     STA $60  ; $60 = 4   WRITE: Accelerating/decl. factor [04]
+
+FA26: A9 7B     LDA #$7B ; setup vector to routine for head movement ($FA7B ==>  Prepare fast head movement)
+FA28: 85 62     STA $62
+FA2A: A9 FA     LDA #$FA 
+FA2C: 85 63     STA $63
+
+; ============================================
+; ***** Start of main head movement loop *****
+; ============================================
+
+FA2E: A5 4A     LDA $4A         ;  Values 0 - 127 move the head outside (towards track 1) and values over 128 move towards the centre (towards track 35).
+FA30: 10 31     BPL $FA63       ; move towards track 1 ( Values 0 - 127 move the head outside (towards track 1) and values over 128 move towards the centre (towards track 35) )
+
+; move towards track 35 (decrement stepper bits)
+
+FA32: E6 4A     INC $4A         ; increment step movement counter by one
+FA34: AE 00 1C  LDX $1C00       ; VIA #2 port B , bits 0-1 control stepper motor
+FA37: CA        DEX             ; count stepper bits down
+FA38: 4C 69 FA  JMP $FA69       ; Goto copy stepper control bits from X to lower two bits of VIA #2 , port B
+
+; =========================
+;  Move stepper motor short distance
+; =========================
+
+FA3B: A5 4A     LDA $4A         ; step counter for head transport
+FA3D: D0 EF     BNE $FA2E       ; not yet zero?
+FA3F: A9 4E     LDA #$4E
+FA41: 85 62     STA $62
+FA43: A9 FA     LDA #$FA        ; pointer $62/$63 to $FA4E
+FA45: 85 63     STA $63
+FA47: A9 05     LDA #$05
+FA49: 85 60     STA $60         ; $60 = 5
+FA4B: 4C BE FA  JMP $FABE       ; ==> Prepare slow head movement
+
+; =========
+; move head towards track 1 (=increment stepper bits)
+; =========
+
+FA63: C6 4A     DEC $4A        ;  decrement by one ( Values 0 - 127 move the head outside (towards track 1) and values over 128 move towards the centre (towards track 35) )
+FA65: AE 00 1C  LDX $1C00      ;  VIA #2 port B , bits 0-1 control stepper motor
+FA68: E8        INX            ;  count stepper bits upwards
+
+=========
+; copy stepper control bits from X to lower two bits of VIA #2 , port B
+=========
+
+FA69: 8A        TXA            ; Copy X -> Accu so that accu now holds stepper control bits / contents of VIA #2 port B
+FA6A: 29 03     AND #$03       ; Mask-out everything except the stepper bits
+FA6C: 85 4B     STA $4B        ; remember stepper value in temp. storage
+FA6E: AD 00 1C  LDA $1C00      ; Load VIA #2 port B again
+FA71: 29 FC     AND #$FC       ; clear lower two bits ( stepper motor control)
+FA73: 05 4B     ORA $4B        ; OR in values stepper motor control bits
+FA75: 8D 00 1C  STA $1C00      ; write new value to port register
+FA78: 4C BE FA  JMP $FABE      ; ==> Prepare slow head movement
+
+; =========================
+; Prepare slow head movement
+; =========================
+
+FAA5: AD 07 1C  LDA $1C07      ; Load VIA #2 timer 1 high-order latch
+FAA8: 18        CLC
+FAA9: 65 5F     ADC $5F        ; increment high-order latch value by accelerating/decl. factor [04] LOW byte
+FAAB: 8D 05 1C  STA $1C05      ; write new value to VIA #2 timer 1 high-order latch and restart timer
+FAAE: C6 60     DEC $60        ; decrement counter
+FAB0: D0 E2     BNE $FA94      ; not yet zero ==> Goto start of head movement loop 
+
+FAB2: A9 4E     LDA #$4E       ; load vector to $FA4e ( ==> Load head )
+FAB4: 85 62     STA $62
+FAB6: A9 FA     LDA #$FA     
+FAB8: 85 63     STA $63
+
+FABA: A9 05     LDA #$05
+FABC: 85 60     STA $60         ; $60 = 5 ; set Accelerating/decl. factor [04] hi-byte
+
+Jump from $F9D6, $F9FF, $FA4B, $FA50, $FA60, $FA78:
+
+FABE: AD 0C 1C  LDA $1C0C       ; Load PCR of VIA #2
+FAC1: 29 FD     AND #$FD        ; clear bit 1
+FAC3: 8D 0C 1C  STA $1C0C       ; switch CA2 control line LOW output
+FAC6: 60        RTS
+
+; =========================
+; Prepare fast head movement
+; =========================
+
+FA7B: 38        SEC             ; set carry
+FA7C: AD 07 1C  LDA $1C07       ; Load VIA #2 timer 1 high-order latch
+FA7F: E5 5F     SBC $5F         ; a = a - ($5f) - 1  , $f5 = Accelerating/decl. factor [04] lo-byte
+FA81: 8D 05 1C  STA $1C05       ; write new value to VIA #2 timer 1 high-order latch and restart timer
+FA84: C6 60     DEC $60         ; decrement counter
+FA86: D0 0C     BNE $FA94       ; not yet zero? Goto start of head movement loop 
+
+FA88: A5 5E     LDA $5E         ; Number of steps for head motor accelerating/decl. [04]
+FA8A: 85 60     STA $60         ; Accelerating/decl. factor [04]
+
+FA8C: A9 97     LDA #$97        ; load vector to $FA97 (==> Fast head movement)
+FA8E: 85 62     STA $62
+FA90: A9 FA     LDA #$FA        
+FA92: 85 63     STA $63
+
+FA94: 4C 2E FA  JMP $FA2E        ; Goto start of head movement loop 
+
+; ==
+; Perform Fast head movement
+; ==
+
+FA97: C6 61     DEC $61         ; decrement counter for fast head movement
+FA99: D0 F9     BNE $FA94       ; not yet zero ? Goto start of head movement loop
+
+FA9B: A9 A5     LDA #$A5        ; load vector to $faa5 (==> Slow head movement)
+FA9D: 85 62     STA $62
+FA9F: A9 FA     LDA #$FA        
+FAA1: 85 63     STA $63
+
+FAA3: D0 EF     BNE $FA94      ; Unconditional jump ==> start of head movement loop 
+
+; ==
+; Load head
+; ==
+
+FA4E: C6 60     DEC $60         ; decrement counter
+FA50: D0 6C     BNE $FABE       ; not yet zero?
+
+; $20/32:   Drive 0 status (disk and step motor)
+
+;   +-------+------------------------------------------------------+
+;   | Bit 7 | Disk drive ready: 1 = No, 0 = Yes                    |
+;   | Bit 6 | ReaD/Write head moving: 1 = Yes, 0= No               |
+;   | Bit 5 | Motor on: 1 = Yes, 0 = No                            |
+;   | Bit 4 | Switch off motor: 1 = Yes, 0 = No                    |
+;   +-------+------------------------------------------------------+
+FA52: A5 20     LDA $20   ; load drive status register
+FA54: 29 BF     AND #$BF  ; clear 'r/w head moving' flag
+FA56: 85 20     STA $20
+
+FA58: A9 05     LDA #$05  ; load vector Move head to next track
+FA5A: 85 62     STA $62
+FA5C: A9 FA     LDA #$FA   
+FA5E: 85 63     STA $63
+
+FA60: 4C BE FA  JMP $FABE ; switch CA2 control line LOW output (=disable BYTE-READY )and RTS 
