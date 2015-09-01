@@ -1,9 +1,9 @@
+; =========================
+ $FA05/64005:   Move head +/- one track
+;  $4A/74:   Step counter for head transport
 
- $4A/74:   Step counter for head transport
-
-   Values 0 - 127 move the head outside and values over 128 move towards the centre.
-
- $FA05/64005:   Move head to next track
+;   Values 0 - 127 move the head outside and values over 128 move towards the centre.
+; =========================
 
 FA05: A5 4A     LDA $4A   ;  Values 0 - 127 move the head outside (towards track 1) and values over 128 move towards the centre (towards track 35).
 FA07: 10 05     BPL $FA0E ; positive value => move towards track 1
@@ -12,7 +12,7 @@ FA0B: 18        CLC
 FA0C: 69 01     ADC #$01  ; add +1 to get to one's complement
 
 
-FA0E: C5 64     CMP $64  ; compare against minimum number of steps for one full rotation ( 1.8° per step = 200 steps per full rotation ) => Accu - 200
+FA0E: C5 64     CMP $64  ; compare against number of steps for one full rotation ( 1.8° per step = 200 steps per full rotation ) => Accu - 200
 FA10: B0 0A     BCS $FA1C ; Accu >= 200 , move more than one full rotation (360°) , calculate number of head steps
 
 ; move less than one full rotation (<360°)
@@ -22,7 +22,7 @@ FA14: 85 62     STA $62
 FA16: A9 FA     LDA #$FA 
 FA18: 85 63     STA $63
 
-FA1A: D0 12     BNE $FA2E ; start head movement
+FA1A: D0 12     BNE $FA2E ; unconditional jump ,  main head movement loop
 
 
 ; =========================
@@ -109,11 +109,9 @@ FAB8: 85 63     STA $63
 FABA: A9 05     LDA #$05
 FABC: 85 60     STA $60         ; $60 = 5 ; set Accelerating/decl. factor [04] hi-byte
 
-Jump from $F9D6, $F9FF, $FA4B, $FA50, $FA60, $FA78:
-
 FABE: AD 0C 1C  LDA $1C0C       ; Load PCR of VIA #2
 FAC1: 29 FD     AND #$FD        ; clear bit 1
-FAC3: 8D 0C 1C  STA $1C0C       ; switch CA2 control line LOW output
+FAC3: 8D 0C 1C  STA $1C0C       ; switch CA2 control line LOW output (= disable BYTE-READY)
 FAC6: 60        RTS
 
 ; =========================
@@ -170,7 +168,7 @@ FA52: A5 20     LDA $20   ; load drive status register
 FA54: 29 BF     AND #$BF  ; clear 'r/w head moving' flag
 FA56: 85 20     STA $20
 
-FA58: A9 05     LDA #$05  ; load vector Move head to next track
+FA58: A9 05     LDA #$05  ; load vector: Move head to next track
 FA5A: 85 62     STA $62
 FA5C: A9 FA     LDA #$FA   
 FA5E: 85 63     STA $63
