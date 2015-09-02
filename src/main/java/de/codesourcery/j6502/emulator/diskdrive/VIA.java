@@ -15,6 +15,7 @@ import de.codesourcery.j6502.utils.HexDump;
 public class VIA extends Memory
 {
     private static final boolean DEBUG = true;
+    private static final boolean DEBUG_CONTROL_LINE1_OUTPUT = false;
     private static final boolean DEBUG_CONTROL_LINE2_OUTPUT = false;
 
     private static final boolean DEBUG_SET_IRQ = false;
@@ -285,20 +286,6 @@ public class VIA extends Memory
             return latchingEnabled ? readRegisterLatchingEnabled() : readRegisterLatchingDisabled();
         }
 
-        public final void tick()
-        {
-            int result = pins;
-            int oldValue = result;
-            int value = or & ddr; // retain only bits for output ( 0 = input / 1 = output )
-            result &= ~ddr; // clear all output bits
-            result |= value;
-            pins = result;
-            if ( oldValue != result )
-            {
-                changeListener.portChanged( VIA.this , this );
-            }
-        }
-
         public final int getDDR() {
             return ddr;
         }
@@ -329,14 +316,14 @@ public class VIA extends Memory
             final boolean oldValue = this.controlLine1In;
             if ( oldValue != newValue )
             {
-                if ( DEBUG ) {
+                if ( DEBUG_CONTROL_LINE1_OUTPUT ) {
                     logDebug("control line #1 input transition: "+this.controlLine1In+" -> "+newValue);
                 }
                 this.controlLine1In = newValue;
                 if ( oldValue ) { // true -> false transition
                     if ( line1Mode == ControlLine1Mode.IRQ_NEG_ACTIVE_EDGE )
                     {
-                        if ( DEBUG ) {
+                        if ( DEBUG_CONTROL_LINE1_OUTPUT ) {
                             logDebug( "Port "+portName+" control line #1 triggers IRQ because of negative edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
                         }
                         setInterrupt( irqMaskBitsControlLine1 );
@@ -344,7 +331,7 @@ public class VIA extends Memory
                 } else { // false -> true transition
                     if ( line1Mode == ControlLine1Mode.IRQ_POS_ACTIVE_EDGE )
                     {
-                        if ( DEBUG ) {
+                        if ( DEBUG_CONTROL_LINE1_OUTPUT ) {
                             logDebug("Port "+portName+" control line #1 triggers IRQ because of positive edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
                         }
                         setInterrupt( irqMaskBitsControlLine1 );
@@ -392,7 +379,7 @@ public class VIA extends Memory
         {
             // ddr = 1 => output
         	value = value & 0xff;
-            int newValue = this.pins & ~ddr;
+        	int newValue = this.pins & ~ddr; // preserve input bits .. 1 = output , 0 = input
             newValue |= ( value & ddr );
             if ( DEBUG && ( DEBUG_WRITE_PORT_B || portName != PortName.B) )
             {
@@ -403,7 +390,7 @@ public class VIA extends Memory
                 HexDump.toBinaryString( (byte) newValue ), this.pins , newValue );
                 }
             }
-            final boolean valueChanged = this.or != value;
+            final boolean valueChanged = this.pins != newValue;
             this.or = value;
             this.pins = newValue;
             if ( valueChanged ) {
@@ -424,29 +411,14 @@ public class VIA extends Memory
 
         public final void setInputPin(int bit, boolean set)
         {
-            final int mask = (1<<bit) & ~ddr;
-            int newValue;
-            if ( set ) {
-                newValue = this.pins | mask;
-            } else {
-                newValue = this.pins & ~mask;
-            }
-//            if ( DEBUG && this.pins != newValue) {
-//                debugPrint( portName , set ? "setInputBit" : "clearInputBit" , newValue , bit );
-//            }
-            this.pins = newValue;
-        }
-        
-        public final void setInputPinForced(int bit, boolean set)
-        {
             final int mask = (1<<bit);
-            int newValue;
             if ( set ) {
-                newValue = this.pins | mask;
+                this.pins |= mask;
+                this.ir   |= mask;
             } else {
-                newValue = this.pins & ~mask;
+                this.pins &= ~mask;
+                this.ir   &= ~mask;
             }
-            this.pins = newValue;
         }
 
         public final boolean isInput(int bit) {
@@ -1046,15 +1018,18 @@ public class VIA extends Memory
             switch( timer1Mode )
             {
                 case IRQ_ON_LOAD:
+                    timer1Running = false;
+                    // $$FALL-THROUGH$$
                 case CONTINUOUS_IRQ:
+                    setInterrupt(IRQBIT_TIMER1_TIMEOUT);
+                    timer1 = t1latchhi << 8 | t1latchlo;   
                     break;
                 case CONTINUOUS_IRQ_PB7_SQUARE_WAVE:
                 case IRQ_ON_LOAD_PB7_ONESHOT:
                 default:
                     throw new RuntimeException("Unimplemented timer #1 mode: "+timer1Mode);
             }
-            setInterrupt(IRQBIT_TIMER1_TIMEOUT);
-            timer1 = t1latchhi << 8 | t1latchlo;            
+         
         }
         
         if ( timer2Running && --timer2 == 0 )
@@ -1062,8 +1037,6 @@ public class VIA extends Memory
             setInterrupt( IRQBIT_TIMER2_TIMEOUT );
             timer2 = t2latchhi << 8 | t2latchlo;
         }
-        portA.tick();
-        portB.tick();
     }
 
     private void setInterrupt(int bitMask)

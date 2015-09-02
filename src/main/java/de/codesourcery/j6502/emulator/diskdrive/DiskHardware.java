@@ -13,6 +13,7 @@ import de.codesourcery.j6502.emulator.diskdrive.VIA.Port;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.PortName;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.VIAChangeListener;
 import de.codesourcery.j6502.utils.BitStream;
+import de.codesourcery.j6502.utils.HexDump;
 
 public class DiskHardware implements SerialDevice
 {
@@ -47,16 +48,66 @@ public class DiskHardware implements SerialDevice
         public final void onEnter() {
             cycles = cyclesPerByte;
         }
+        
+        public abstract void trackChanged();
 
         public abstract void onEnterHook();
+    }
+    
+    protected static enum SyncMode {
+        WAIT_FOR_SYNC,READING_SYNC,READING_DATA
     }
 
     public final class ReadMode extends DriveMode
     {
         private int oneBits=0;
+        private SyncMode syncState = SyncMode.WAIT_FOR_SYNC;
         
         private int bytesAccepted;
         private int bytesRejected;
+        
+        private void syncFound() {
+            via2.getPortB().setInputPin(7, false ); // sync found (PB7 expects INVERTED signal !!)
+        }
+        
+        private void noSyncFound() {
+            via2.getPortB().setInputPin(7, true ); // no sync found (PB7 expects INVERTED signal !!)
+        }        
+        
+        public void trackChanged() 
+        {
+            noSyncFound();
+            oneBits = 0;
+            syncState = SyncMode.WAIT_FOR_SYNC;
+        }
+        
+        private void byteNotReady() {
+            via2.getPortB().setControlLine1( false , false ); // byte not ready
+        }
+        
+        private void byteReady() 
+        {
+            
+            cpu.setFlag( Flag.OVERFLOW ); // byte ready
+            
+            /* Das Byte Ready Signal kann nur mit SOE abgestellt werden,ansonsten kommt es regelmässig nach 8 Bits.
+             * Das ist unabhängig davon ob sich das Laufwerk dreht oder nicht. Das ist ein Zähler auf der Platine der vom SYNC Signal
+             * mit 0 geladen wird und immer wenn die Zeit für ein Bit abgelaufen ist eins hoch zählt.
+             * Wenn sich nichts tut (Kein Flusswechel am Lesekopf) denkt das Laufwerk, dass es ein "0" Bit ist.
+             */
+
+            if ( via2.getPortA().getControlLine2() ) // Trigger byte read signal ?
+            {
+                if ( DEBUG && (( ++bytesAccepted) % 10000) == 0 ) {
+                    System.out.println(">> Byte ready <<");
+                }
+                via2.getPortB().setControlLine1( true , false ); // byte ready
+            } else {
+                if ( DEBUG && (( ++bytesRejected) % 10000) == 0 ) {
+                    System.out.println(">> Byte sync not enabled <<");
+                }
+            }             
+        }
 
         @Override
         public void processByte()
@@ -65,56 +116,75 @@ public class DiskHardware implements SerialDevice
             {
                 return;
             }
-            int value = 0;
-            boolean syncFound = false;
-            for ( int i = 0 ; i < 7 ; i++ )
+            
+            switch(syncState) 
             {
-                value = value << 1;
-                final int bit = bitStream.readBit();
-                value |= bit;
-                if ( bit == 0 )
-                {
-                    if ( oneBits >= 12 )
+                case READING_DATA:
+                    
+                    noSyncFound();
+                    
+                    byteNotReady();
+                    
+                    int value = 0;
+                    for ( int i = 0 ; i < 8 ; i++ )
                     {
-                        syncFound = true;
-                        oneBits = 0;
-                        bitStream.rewind(1); /* align bitstream */
-                        value = bitStream.readByte();
-                        break;
+                        final int bit = bitStream.readBit();
+                        value = value << 1;
+                        value = value | bit;
+                        if ( bit == 0 )
+                        {
+                            oneBits = 0;
+                            if ( syncState == SyncMode.READING_SYNC )
+                            {
+                                syncFound();
+                                syncState = SyncMode.READING_DATA;
+                                bitStream.rewind(1); /* align bitstream */
+                                return;
+                            }
+                        } else {
+                            oneBits++;
+                            if ( oneBits >= 8 ) {
+                                syncState = SyncMode.READING_SYNC;
+                            }
+                        }
+                    }          
+                    
+                    if ( value == 0xff || syncState == SyncMode.READING_SYNC ) 
+                    {
+                        syncState = SyncMode.READING_SYNC;
+                        return;
                     }
-                    oneBits = 0;
-                } else {
-                    oneBits++;
-                }
-            }
-
-//            if ( DEBUG ) {
-//                System.out.println("Got byte , wrapped: "+bitStream.hasWrapped()+" : "+HexDump.toBinaryString((byte) value)+" [sync: "+syncFound+"]");
-//            }
-            
-            via2.getPortB().setInputPinForced(7, ! syncFound ); // PB7 expects INVERTED signal !!
-            
-            // TODO: Find out whether sync bits are visible to the CPU or not ...
-            via2.getPortA().setInputPins( value );
-            
-            // byte sync is connected to 6502 overflow pin... 
-            cpu.setFlag( Flag.OVERFLOW );
-            
-            /* Das Byte Ready Signal kann nur mit SOE abgestellt werden,ansonsten kommt es regelmässig nach 8 Bits.
-             * Das ist unabhängig davon ob sich das Laufwerk dreht oder nicht. Das ist ein Zähler auf der Platine der vom SYNC Signal
-             * mit 0 geladen wird und immer wenn die Zeit für ein Bit abgelaufen ist eins hoch zählt.
-             * Wenn sich nichts tut (Kein Flusswechel am Lesekopf) denkt das Laufwerk, dass es ein "0" Bit ist.
-             */
-            if ( via2.getPortA().getControlLine2() ) // Trigger byte read signal ?
-            {
-                if ( DEBUG && (( ++bytesAccepted) % 10000) == 0 ) {
-                    System.out.println(">> Byte ready <<");
-                }
-                via2.getPortB().setControlLine1( true , false ); // signal byte ready
-            } else {
-                if ( DEBUG && (( ++bytesRejected) % 10000) == 0 ) {
-                    System.out.println(">> Byte sync not enabled <<");
-                }
+                    
+                    via2.getPortA().setInputPins( value );
+                    
+                    byteReady();
+                    
+                    break;
+                case READING_SYNC:
+                case WAIT_FOR_SYNC:
+                    for ( int i = 0 ; i < 8 ; i++ )
+                    {
+                        final int bit = bitStream.readBit();
+                        if ( bit == 0 )
+                        {
+                            oneBits = 0;
+                            if ( syncState == SyncMode.READING_SYNC )
+                            {
+                                syncFound();
+                                syncState = SyncMode.READING_DATA;
+                                bitStream.rewind(1); /* align bitstream */
+                                return;
+                            }
+                        } else {
+                            oneBits++;
+                            if ( oneBits >= 10 ) {
+                                syncState = SyncMode.READING_SYNC;
+                            }
+                        }
+                    }                    
+                    return;
+                default:
+                    throw new RuntimeException("Unreachable code reached");
             }
         }
         
@@ -122,6 +192,7 @@ public class DiskHardware implements SerialDevice
         public void onEnterHook()
         {
             oneBits = 0;
+            syncState = SyncMode.WAIT_FOR_SYNC;
             bytesAccepted = bytesRejected = 0;
         }
     }
@@ -139,6 +210,12 @@ public class DiskHardware implements SerialDevice
             // TODO: Implement writing
             throw new RuntimeException("Write mode not implemented yet");
         }
+
+        @Override
+        public void trackChanged() {
+            // TODO Auto-generated method stub
+            
+        }
     }
 
     protected final CPU cpu;
@@ -147,7 +224,10 @@ public class DiskHardware implements SerialDevice
     protected int cyclesPerByte = SPEED10_CYCLES_PER_BYTE;
     protected float headPosition = 18;
     protected boolean driveLED;
+    
+    private boolean previousMotorFlag;
     protected boolean motorsRunning;
+    
     protected boolean writeProtectOn;
 
     protected G64File disk;
@@ -258,7 +338,7 @@ public class DiskHardware implements SerialDevice
      * PB5 - (OUT) bitrate select A (??)
      * PB6 - (OUT) bitrate select B (??)
      * PB7 - (IN)  SYNC detected
-     *
+     * 
      * CA1 - (IN) Byte read / Byte written (to be read in read mode / to be written in write mode)
      *
      *                Das Byte Ready Signal kann nur mit SOE abgestellt werden,ansonsten kommt es regelmässig nach 8 Bits.
@@ -424,28 +504,45 @@ public class DiskHardware implements SerialDevice
             if ( port.getPortName() == PortName.B )
             {
                 final int value = port.getPins();
+                
+                DiskHardware.this.driveLED = (value & 0b0000_1000) != 0;
+                final boolean motorFlag = (value & 0b0000_0100) != 0;;
+                
+                if ( previousMotorFlag == false && motorFlag == true )
+                {
+                    DiskHardware.this.motorsRunning = ! DiskHardware.this.motorsRunning;
+                }
+                previousMotorFlag = motorFlag;
+                
+                System.out.println("VIA #2 port B changed to "+HexDump.toBinaryString( (byte) value )+" motor on: "+motorsRunning );
+
                 final int speed = value & 0b0110_0000;
                 
-                if ( speed != cyclesPerByte ) {
-                    System.out.println("Read/write bit-rate changed to "+speed);
-                }
+                final int newCyclesPerByte;
                 switch( speed )
                 {
                     case 0b0000_0000:
-                        cyclesPerByte = SPEED00_CYCLES_PER_BYTE;
+                        newCyclesPerByte = SPEED00_CYCLES_PER_BYTE;
                         break;
                     case 0b0010_0000:
-                        cyclesPerByte = SPEED01_CYCLES_PER_BYTE;
+                        newCyclesPerByte = SPEED01_CYCLES_PER_BYTE;
                         break;
                     case 0b0100_0000:
-                        cyclesPerByte = SPEED10_CYCLES_PER_BYTE;
+                        newCyclesPerByte = SPEED10_CYCLES_PER_BYTE;
                         break;
                     case 0b0110_0000:
-                        cyclesPerByte = SPEED11_CYCLES_PER_BYTE;
+                        newCyclesPerByte = SPEED11_CYCLES_PER_BYTE;
                         break;
                     default:
                         throw new RuntimeException("Unreachable code reached");
                 }
+                
+                if ( newCyclesPerByte != cyclesPerByte ) 
+                {
+                    System.out.println("Read/write bit-rate changed to "+speed);
+                }
+                cyclesPerByte = newCyclesPerByte;
+                
                 int step = value & 0b11;
                 if ( step != previousStepMotorCycle && motorsRunning )
                 {
@@ -472,10 +569,9 @@ public class DiskHardware implements SerialDevice
                             }
                         }
                     }
-                    previousStepMotorCycle = step;
                 }
-                DiskHardware.this.driveLED = (value & 0b0000_1000) != 0;
-                DiskHardware.this.motorsRunning = (value & 0b0000_0100) != 0;
+                
+                previousStepMotorCycle = step;
             }
         }
 
@@ -517,7 +613,10 @@ public class DiskHardware implements SerialDevice
 
         setDriveMode( READ );
         driveLED = false;
+        
+        previousMotorFlag = false;
         motorsRunning = false;
+        
         writeProtectOn = true; // TODO: Set to 'false' once writing to disk is enabled
         
         stepCounter = 0;
@@ -607,6 +706,7 @@ public class DiskHardware implements SerialDevice
             System.out.println("Track "+track+" is missing");
             bitStream = new BitStream(new byte[0x55] , 8 ); // fake bitstream
         }
+        driveMode.trackChanged();
     }
 
     public void loadDisk(G64File disk) 
