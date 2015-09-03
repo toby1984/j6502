@@ -20,7 +20,6 @@ public class VIA extends Memory
 
     private static final boolean DEBUG_SET_IRQ = false;
     private static final boolean DEBUG_CLEAR_IRQ= false;
-    private static final boolean DEBUG_START_TIMER1 = false;
 
     private static final boolean DEBUG_WRITE_PORT_B = true;
 
@@ -96,11 +95,12 @@ public class VIA extends Memory
 
     private ShiftRegisterMode shiftRegisterMode = ShiftRegisterMode.DISABLED;
 
+    private boolean timer1Running ;
+    private boolean timer2Running ;
     private Timer1Mode timer1Mode=Timer1Mode.IRQ_ON_LOAD;
     private Timer2Mode timer2Mode=Timer2Mode.TIMED_INTERRUPT;
 
-    private boolean timer1Running;
-    private boolean timer2Running;
+    private boolean timer1OneShotIRQTriggered;
 
     private final CPU cpu;
     private VIAChangeListener changeListener;
@@ -280,7 +280,7 @@ public class VIA extends Memory
         public final int getPins() {
             return pins;
         }
-        
+
         public final int readRegister()
         {
             return latchingEnabled ? readRegisterLatchingEnabled() : readRegisterLatchingDisabled();
@@ -397,14 +397,14 @@ public class VIA extends Memory
                 changeListener.portChanged( VIA.this , this );
             }
         }
-        
+
         public final void setInputPins(int value)
         {
             this.ir = value & 0xff;
             this.pins = value & 0xff;
         }
-        
-        public final boolean getPin(int bit) 
+
+        public final boolean getPin(int bit)
         {
             return (pins & 1<<bit) != 0;
         }
@@ -525,7 +525,7 @@ public class VIA extends Memory
      * |1|0|1| Pulse output
      * |1|1|0| Low output
      * |1|1|1| High output
-     * 
+     *
      *      * |0|0|0| Input negative active edge
      * |0|1|0| Input positive active edge
      * |1|0|0| Handshake output
@@ -697,8 +697,10 @@ public class VIA extends Memory
         portA.reset();
         portB.reset();
 
-        timer1Running=false;
-        timer2Running=false;
+        timer1Running = false;
+        timer2Running = false;
+
+        timer1OneShotIRQTriggered=false;
 
         timer1Mode = Timer1Mode.IRQ_ON_LOAD;
         timer2Mode = Timer2Mode.TIMED_INTERRUPT;
@@ -750,6 +752,16 @@ public class VIA extends Memory
         }
     }
 
+    // debug
+    protected int readTimer1Counter() {
+    	return timer1;
+    }
+
+    // debug
+    protected int readTimer2Counter() {
+    	return timer2;
+    }
+
     @Override
     public void writeByte(int offset, byte value)
     {
@@ -780,14 +792,9 @@ public class VIA extends Memory
                 t1latchlo = value & 0xff;
                 break;
             case T1CH:
-                if ( DEBUG_START_TIMER1 ) {
-                    logDebug("CPU write timer #1 counter high: "+HexDump.toBinaryString( value ) );
-                }
                 t1latchhi = value & 0xff;
                 timer1 = ( (value & 0xff) << 8 ) | t1latchlo;
-                if ( DEBUG_START_TIMER1 && ! timer1Running ) {
-                    logDebug("Starting timer #1, counting down from "+timer1);
-                }
+                timer1OneShotIRQTriggered = false;
                 timer1Running = true;
                 clearInterupt(IRQBIT_TIMER1_TIMEOUT);
                 break;
@@ -815,9 +822,6 @@ public class VIA extends Memory
                 }
                 t2latchhi = value & 0xff;
                 timer2 = ( t2latchhi << 8 ) | t2latchlo;
-                if ( DEBUG && ! timer2Running ) {
-                    logDebug("Starting timer #2");
-                }
                 timer2Running = true;
                 clearInterupt(IRQBIT_TIMER2_TIMEOUT);
                 break;
@@ -1018,20 +1022,24 @@ public class VIA extends Memory
             switch( timer1Mode )
             {
                 case IRQ_ON_LOAD:
-                    timer1Running = false;
-                    // $$FALL-THROUGH$$
+                	if ( ! timer1OneShotIRQTriggered )
+                	{
+                		setInterrupt(IRQBIT_TIMER1_TIMEOUT);
+                        timer1 = t1latchhi << 8 | t1latchlo;
+                		timer1OneShotIRQTriggered=true;
+                	}
+                	break;
                 case CONTINUOUS_IRQ:
                     setInterrupt(IRQBIT_TIMER1_TIMEOUT);
-                    timer1 = t1latchhi << 8 | t1latchlo;   
+                    timer1 = t1latchhi << 8 | t1latchlo;
                     break;
                 case CONTINUOUS_IRQ_PB7_SQUARE_WAVE:
                 case IRQ_ON_LOAD_PB7_ONESHOT:
                 default:
                     throw new RuntimeException("Unimplemented timer #1 mode: "+timer1Mode);
             }
-         
         }
-        
+
         if ( timer2Running && --timer2 == 0 )
         {
             setInterrupt( IRQBIT_TIMER2_TIMEOUT );
@@ -1090,7 +1098,7 @@ public class VIA extends Memory
     {
         debugPrint(portName,msg,value,"ON","off");
     }
-    
+
     private void debugPrint2(PortName portName,String msg , int oldValue, int value)
     {
         debugPrint(portName,msg,oldValue , value,"ON","off");
@@ -1103,7 +1111,7 @@ public class VIA extends Memory
         {
             final boolean bitSet0 = (oldValue & 1<<i) != 0;
             final boolean bitSet1 = (value & 1<<i) != 0;
-            if ( bitSet0 != bitSet1 ) 
+            if ( bitSet0 != bitSet1 )
             {
                 switch( portName ) {
                     case A:
@@ -1119,7 +1127,7 @@ public class VIA extends Memory
         }
         logDebug( buffer.toString() );
     }
-    
+
     private void debugPrint(PortName portName,String msg , int value,String bitSetMsg,String bitClearedMsg)
     {
         final StringBuilder buffer = new StringBuilder( msg+"( cycle "+cycles+" , port "+portName+"): \n");
