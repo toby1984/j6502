@@ -315,7 +315,7 @@ public class CPU
 		return interruptQueued != IRQType.NONE;
 	}
 
-	private void clearInterruptQueued() {
+	public void clearInterruptQueued() {
 		this.interruptQueued = IRQType.NONE;
 	}
 
