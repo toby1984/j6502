@@ -144,9 +144,9 @@ public final class BreakpointsController
         }
     }    
     
-    public boolean stepReturn()
+    public boolean stepReturn(IMemoryRegion memory , CPU cpu)
     {
-        if ( canStepOver() ) // check whether PC is at a JSR $xxxx instruction
+        if ( canStepOver(memory,cpu) ) // check whether PC is at a JSR $xxxx instruction
         {
             addBreakpoint( new Breakpoint( cpu.pc()+3 , true , true ) ); // JSR $xxxx occupies 3 bytes
             return true;
@@ -176,7 +176,7 @@ public final class BreakpointsController
         return false;
     }
 
-    public boolean canStepOver()
+    public boolean canStepOver(IMemoryRegion memory , CPU cpu)
     {
         final int op = memory.readByte( cpu.pc() );
         return op == 0x20; // JSR $xxxx

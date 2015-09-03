@@ -785,7 +785,7 @@ public class Debugger
 			{
 				try
 				{
-					driver.singleStep();
+					driver.singleStep( getCPU() );
 				}
 				catch(final Throwable t)
 				{
@@ -807,7 +807,11 @@ public class Debugger
 			runButton.addActionListener( ev -> driver.setMode(Mode.CONTINOUS) );
 			stopButton.addActionListener( event -> driver.setMode(Mode.SINGLE_STEP) );
 
-			stepOverButton.addActionListener( ev -> getBreakPointsController().stepReturn() );
+			stepOverButton.addActionListener( ev -> 
+			{ 
+			    getBreakPointsController().stepReturn( getMemory(), getCPU() );
+			    driver.setMode( Mode.CONTINOUS );
+			});
 			refreshUIButton.addActionListener( ev ->
 			{
 				updateWindows( false );
@@ -832,7 +836,7 @@ public class Debugger
 			stopButton.setEnabled( currentMode != Mode.SINGLE_STEP );
 			runButton.setEnabled( currentMode == Mode.SINGLE_STEP);
 			resetButton.setEnabled( currentMode == Mode.SINGLE_STEP);
-			stepOverButton.setEnabled( getBreakPointsController().canStepOver() );
+			stepOverButton.setEnabled( getBreakPointsController().canStepOver( getMemory(), getCPU() ) );
 		}
 	}
 
