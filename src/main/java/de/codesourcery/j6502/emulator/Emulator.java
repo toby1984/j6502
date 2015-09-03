@@ -74,19 +74,19 @@ public class Emulator
          * first (LOW) phase.
 		 */
 
-		memory.tick( cpu , false ); // clock == LOW
+		memory.tick( this.cpu , false ); // clock == LOW
 
 		/*
 		 * Second (high) half of clock cycle.
 		 */
-		if ( cpu.cycles > 0 ) // wait until current command has 'finished' executing
+		if ( this.cpu.cycles > 0 ) // wait until current command has 'finished' executing
 		{
-			cpu.cycles--;
+			this.cpu.cycles--;
 		}
 		else
 		{
 
-			cpu.handleInterrupt();
+			this.cpu.handleInterrupt();
 
 			if ( PRINT_DISASSEMBLY )
 			{

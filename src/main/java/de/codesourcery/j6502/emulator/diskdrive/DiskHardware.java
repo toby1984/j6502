@@ -225,7 +225,6 @@ public class DiskHardware implements SerialDevice
     protected float headPosition = 18;
     protected boolean driveLED;
     
-    private boolean previousMotorFlag;
     protected boolean motorsRunning;
     
     protected boolean writeProtectOn;
@@ -505,14 +504,8 @@ public class DiskHardware implements SerialDevice
             {
                 final int value = port.getPins();
                 
-                DiskHardware.this.driveLED = (value & 0b0000_1000) != 0;
-                final boolean motorFlag = (value & 0b0000_0100) != 0;;
-                
-                if ( previousMotorFlag == false && motorFlag == true )
-                {
-                    DiskHardware.this.motorsRunning = ! DiskHardware.this.motorsRunning;
-                }
-                previousMotorFlag = motorFlag;
+                DiskHardware.this.driveLED      = (value & 0b0000_1000) != 0;
+                DiskHardware.this.motorsRunning = (value & 0b0000_0100) != 0;
                 
                 System.out.println("VIA #2 port B changed to "+HexDump.toBinaryString( (byte) value )+" motor on: "+motorsRunning );
 
@@ -614,7 +607,6 @@ public class DiskHardware implements SerialDevice
         setDriveMode( READ );
         driveLED = false;
         
-        previousMotorFlag = false;
         motorsRunning = false;
         
         writeProtectOn = true; // TODO: Set to 'false' once writing to disk is enabled

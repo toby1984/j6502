@@ -287,16 +287,19 @@ public abstract class EmulatorDriver extends Thread
 		}
 	}
 
-	public void singleStep() throws RuntimeException
+	public void singleStep(CPU cpu) throws RuntimeException
 	{
 		setMode(Mode.SINGLE_STEP);
 
 		synchronized( emulator )
 		{
 			lastException = null;
+            while ( cpu.cycles > 0 ) {
+                emulator.doOneCycle();
+            }
 			do {
 				emulator.doOneCycle();
-			} while ( emulator.getCPU().cycles > 0 );
+			} while ( cpu.cycles > 0 );
 		}
 	}
 
