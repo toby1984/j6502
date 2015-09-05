@@ -739,10 +739,12 @@ public class DiskHardware implements SerialDevice
         final boolean newClk = ! bus.getClk();
         final boolean newATN = ! bus.getATN();
 
-        portB.setInputPin( 0 , newData );
         portB.setInputPin( 2 , newClk );
-
         portB.setInputPin( 7 , newATN );
+        
+        final boolean atnXor= ( via1.getPortB().getPin(7) ^ via1.getPortB().getPin(4) );
+        portB.setInputPin( 0 , newData | atnXor );
+        
         via1.getPortA().setControlLine1( newATN , false );
 
         diskDrive.executeOneCPUCycle();
@@ -755,6 +757,7 @@ public class DiskHardware implements SerialDevice
     @Override
     public boolean getData()
     {
+        // Wiring is such that ATN from computer gets automatically acknowledged
         final boolean atn = via1.getPortB().getPin(7) ^ via1.getPortB().getPin(4);
         return (! via1.getPortB().getPin(1) | atn );
     }

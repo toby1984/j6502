@@ -74,6 +74,7 @@ import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.D64File;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.EmulatorDriver;
+import de.codesourcery.j6502.emulator.EmulatorDriver.IEmulationListener;
 import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
 import de.codesourcery.j6502.emulator.EmulatorTest;
 import de.codesourcery.j6502.emulator.G64File;
@@ -111,23 +112,6 @@ public class Debugger
 	protected final EmulatorDriver driver = new EmulatorDriver( emulator ) {
 
 		private long lastTick;
-
-		@Override
-		protected void onStopHook(Throwable t,boolean stoppedOnBreakpoint)
-		{
-			System.out.println("Emulation stopped (on breakpoint: "+stoppedOnBreakpoint+")");
-			if ( stoppedOnBreakpoint )
-			{
-				disassembly.setTrackPC(true);
-			}
-			SwingUtilities.invokeLater( () -> updateWindows(false) );
-		}
-
-		@Override
-		protected void onStartHook()
-		{
-			SwingUtilities.invokeLater( () -> updateWindows(false) );
-		}
 
 		@Override
 		protected void tick()
@@ -212,6 +196,30 @@ public class Debugger
 	private final List<IDebuggerView> panels = new ArrayList<>();
 
 	private IDebuggerView loc;
+	
+	public Debugger() 
+	{
+	    driver.addEmulationListener( new IEmulationListener() 
+	    {
+            
+            @Override
+            public void emulationStopped(Throwable t, boolean stoppedOnBreakpoint) 
+            {
+                System.out.println("Emulation stopped (on breakpoint: "+stoppedOnBreakpoint+")");
+                if ( stoppedOnBreakpoint )
+                {
+                    disassembly.setTrackPC(true);
+                }
+                SwingUtilities.invokeLater( () -> updateWindows(false) );
+            }
+            
+            @Override
+            public void emulationStarted() {
+                SwingUtilities.invokeLater( () -> updateWindows(false) );                
+            }
+        });
+	    driver.addEmulationListener( cpuPanel );
+	}
 
 	public static void main(String[] args)
 	{
@@ -1147,7 +1155,7 @@ public class Debugger
 			final Graphics2D g = getBackBufferGraphics();
 			try
 			{
-			    final IMemoryRegion memory = getBreakPointsController().getMemory();
+			    final IMemoryRegion memory = getMemory();
 				final String[] lines = hexdump.dump( startAddress , memory , startAddress , bytesToDisplay).split("\n");
 
 				int y = 15;

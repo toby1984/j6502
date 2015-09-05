@@ -48,6 +48,8 @@ public class BusAnalyzer extends JPanel implements IDebuggerView
 
     private int windowOffset = 0; // offset relative to oldestStatePtr
     private int windowSize = MAX_STATES; // number of states to render
+    
+    private boolean invert;
 
     public static void main(String[] args)
     {

@@ -59,7 +59,7 @@ public class HexDump {
 			{
 				final int adr = index % region.getAddressRange().getSizeInBytes();
 				index++;
-				final byte value = (byte) region.readByte( adr & 0xffff );
+				final byte value = (byte) region.readByteNoSideEffects( adr & 0xffff );
 				final char intValue = CharsetConverter.petToASCII( value );
 				final boolean doMark = mark && adr == addressToMark;
 				char toAppend;
@@ -144,6 +144,11 @@ public class HexDump {
 			public String dump(int offset, int len) {
 				throw new UnsupportedOperationException();
 			}
+
+            @Override
+            public int readByteNoSideEffects(int offset) {
+                return data[offset & 0xffff] & 0xff;
+            }
 		} , offset , len );
 	}
 

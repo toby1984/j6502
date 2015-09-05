@@ -157,6 +157,11 @@ public class Disassembler
 			public void bulkWrite(int startingAddress, byte[] data, int datapos,int len) {
 				throw new UnsupportedOperationException();
 			}
+
+            @Override
+            public int readByteNoSideEffects(int offset) {
+                return data[ offset & 0xffff ] & 0xff;
+            }
 		};
 	}
 
@@ -879,7 +884,7 @@ bbb	addressing mode
 	private byte readByte()
 	{
 		bytesLeft--;
-		return (byte) data.readByte( ( currentOffset++ & 0xffff) );
+		return (byte) data.readByteNoSideEffects( ( currentOffset++ & 0xffff) );
 	}
 
 	private short readWord()

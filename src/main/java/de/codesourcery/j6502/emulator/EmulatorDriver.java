@@ -1,8 +1,12 @@
 package de.codesourcery.j6502.emulator;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+
+import org.apache.commons.lang.Validate;
 
 import de.codesourcery.j6502.assembler.SourceMap;
 import de.codesourcery.j6502.utils.SourceHelper;
@@ -34,6 +38,14 @@ public abstract class EmulatorDriver extends Thread
 
 	protected Cmd stopCommand(boolean ackRequired,boolean stopOnBreakpoint) {
 		return new StopCmd(ackRequired,stopOnBreakpoint);
+	}
+	
+	private final List<IEmulationListener> listeners = new ArrayList<>();
+	
+	public interface IEmulationListener 
+	{
+	    public void emulationStarted();
+	    public void emulationStopped(Throwable t,boolean stoppedOnBreakpoint);
 	}
 
 	protected static enum CmdType { START , STOP }
@@ -155,7 +167,13 @@ public abstract class EmulatorDriver extends Thread
 		onStartHook();
 	}
 
-	protected abstract void onStartHook();
+	protected final void onStartHook() 
+	{
+	    synchronized (listeners) 
+	    {
+	        listeners.forEach( l -> l.emulationStarted() );
+        }
+	}
 
 	protected final void onStop(Throwable t,boolean stoppedOnBreakpoint)
 	{
@@ -163,7 +181,13 @@ public abstract class EmulatorDriver extends Thread
 		onStopHook( t , stoppedOnBreakpoint );
 	}
 
-	protected abstract void onStopHook(Throwable t,boolean stoppedOnBreakpoint);
+	protected final void onStopHook(Throwable t,boolean stoppedOnBreakpoint) 
+	{
+        synchronized (listeners) 
+        {
+            listeners.forEach( l -> l.emulationStopped( t , stoppedOnBreakpoint ) );
+        }	    
+	}
 
 	protected abstract void tick();
 
@@ -184,7 +208,6 @@ public abstract class EmulatorDriver extends Thread
 		Cmd cmd = null;
 		while( true )
 		{
-		    final CPU cpu = emulator.getCPU();
 			if ( isRunnable )
 			{
 				cmd = requestQueue.poll();
@@ -308,4 +331,20 @@ public abstract class EmulatorDriver extends Thread
 	}
 
 	protected abstract BreakpointsController getBreakPointsController();
+	
+	public void addEmulationListener(IEmulationListener l) 
+	{
+        Validate.notNull(l, "l must not be NULL");
+	    synchronized (listeners) {
+            listeners.add(l);
+        }
+	}
+	
+    public void removeEmulationListener(IEmulationListener l) 
+    {
+        Validate.notNull(l, "l must not be NULL");
+        synchronized (listeners) {
+            listeners.remove(l);
+        }
+    }
 }

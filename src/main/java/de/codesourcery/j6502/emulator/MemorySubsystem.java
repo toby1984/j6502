@@ -527,6 +527,14 @@ public final class MemorySubsystem extends IMemoryRegion
 		final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
 		return region.readByte( translatedOffset );
 	}
+	
+	@Override
+	public int readByteNoSideEffects(int offset) {
+        final int wrappedOffset = offset & 0xffff;
+        final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
+        final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+        return region.readByteNoSideEffects( translatedOffset );
+	}
 
 	@Override
 	public int readAndWriteByte(int offset)
