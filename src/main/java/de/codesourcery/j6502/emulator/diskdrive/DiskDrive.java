@@ -121,6 +121,10 @@ public class DiskDrive extends IMemoryRegion
         public int readByte(int offset) {
             return 0;
         }
+        
+        public int readByteNoSideEffects(int offset) {
+            return 0;
+        }
 
         @Override
         public int readAndWriteByte(int offset) {
@@ -243,12 +247,14 @@ public class DiskDrive extends IMemoryRegion
     {
         final IMemoryRegion region = memoryMap[offset];
         final int translated = offset - region.getAddressRange().getStartAddress();
-        try {
-            return region.readByte( translated );
-        } catch(ArrayIndexOutOfBoundsException e) {
-            System.err.println("Failed to read from "+region+" with offset "+HexDump.toAdr( offset )+" [ translated: "+HexDump.toAdr( translated ) );
-            throw e;
-        }
+        return region.readByte( translated );
+    }
+    
+    @Override
+    public int readByteNoSideEffects(int offset) {
+        final IMemoryRegion region = memoryMap[offset];
+        final int translated = offset - region.getAddressRange().getStartAddress();
+        return region.readByteNoSideEffects( translated );
     }
 
     @Override

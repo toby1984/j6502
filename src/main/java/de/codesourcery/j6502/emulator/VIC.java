@@ -769,6 +769,11 @@ public class VIC extends SlowMemory
         }
         return result;
     }
+    
+    @Override
+    public int readByteNoSideEffects(int offset) {
+        return readByte(offset);
+    }
 
     /**
      * CIA #2 , $DD00

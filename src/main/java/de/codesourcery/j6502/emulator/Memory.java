@@ -79,4 +79,9 @@ public class Memory extends IMemoryRegion
 			dstOffset = (dstOffset+1) % size;
 		}
 	}
+
+    @Override
+    public int readByteNoSideEffects(int offset) {
+        return data[offset & 0xffff] & 0xff;
+    }
 }

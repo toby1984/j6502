@@ -33,19 +33,20 @@ public class CPU
 
 	public static enum Flag
 	{
-		CARRY(1 <<0 , "C"), // 1
-		ZERO(1 <<1 , "Z" ), // 2
-		IRQ_DISABLE(1 <<2 , "I"), // 4
-		DECIMAL_MODE(1 <<3 , "D"), // 8
-		BREAK(1 <<4 , "B"), // 16
-		EXTENSION(1 <<5 , "X" ), // 32
-		OVERFLOW(1 <<6  , "O" ), // 64
-		NEGATIVE(1 <<7 , "N"); // 128
+		CARRY(1 <<0 , "C" , "Carry"), // 1
+		ZERO(1 <<1 , "Z" , "Zero" ), // 2
+		IRQ_DISABLE(1 <<2 , "I" , "IRQ disabled"), // 4
+		DECIMAL_MODE(1 <<3 , "D" , "Decimal mode"), // 8
+		BREAK(1 <<4 , "B" , "Break"), // 16
+		EXTENSION(1 <<5 , "X" , "<unused>"), // 32
+		OVERFLOW(1 <<6  , "O" , "Overflow"), // 64
+		NEGATIVE(1 <<7 , "N" , "Negative"); // 128
 
 		public final int value;
 		public final char symbol;
+		public final String name;
 
-		private Flag(int value,String symbol) { this.value = value; this.symbol = symbol.charAt(0); }
+		private Flag(int value,String symbol,String name) { this.value = value; this.symbol = symbol.charAt(0); this.name = name; }
 
 		public boolean isSet(byte flags) { return (flags&value) != 0; }
 		public boolean isNotSet(byte flags) { return (flags&value) == 0; }

@@ -41,6 +41,12 @@ public class SlowMemory extends IMemoryRegion
 	public int readByte(int offset) {
 		return data[offset & 0xffff] & 0xff;
 	}
+	
+
+    @Override
+    public int readByteNoSideEffects(int offset) {
+        return data[offset & 0xffff] & 0xff;
+    }	
 
 	@Override
 	public int readAndWriteByte(int offset) {

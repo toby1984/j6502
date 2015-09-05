@@ -27,6 +27,7 @@ import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.CPU.Flag;
+import de.codesourcery.j6502.emulator.EmulatorDriver.IEmulationListener;
 import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
 import de.codesourcery.j6502.emulator.exceptions.HLTException;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
@@ -652,15 +653,6 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
         final EmulatorDriver driver = new EmulatorDriver( e ) {
 
             @Override
-            protected void onStartHook() {
-            }
-
-            @Override
-            protected void onStopHook(Throwable t,boolean stoppedAtBreakpoint) {
-                stopped.countDown();
-            }
-
-            @Override
             protected void tick() {
             }
 
@@ -669,6 +661,19 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
                 return ctrl;
             }
         };
+        driver.addEmulationListener( new IEmulationListener() {
+
+            @Override
+            public void emulationStarted() {
+                
+            }
+
+            @Override
+            public void emulationStopped(Throwable t,boolean stoppedOnBreakpoint) {
+                stopped.countDown();                
+            }
+            
+        } );
 
         e.reset();
         e.getCPU().pc( origin );
@@ -726,15 +731,6 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
         final EmulatorDriver driver = new EmulatorDriver( e ) {
 
             @Override
-            protected void onStartHook() {
-            }
-
-            @Override
-            protected void onStopHook(Throwable t,boolean stoppedAtBreakpoint) {
-                stopped.countDown();
-            }
-
-            @Override
             protected void tick() {
             }
 
@@ -743,6 +739,20 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
                 return ctrl;
             }
         };
+        
+        driver.addEmulationListener( new IEmulationListener() {
+
+            @Override
+            public void emulationStarted() {
+                
+            }
+
+            @Override
+            public void emulationStopped(Throwable t,boolean stoppedOnBreakpoint) {
+                stopped.countDown();                
+            }
+            
+        } );        
 
         e.reset();
         e.getCPU().pc( origin );

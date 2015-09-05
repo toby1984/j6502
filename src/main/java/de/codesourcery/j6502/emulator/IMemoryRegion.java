@@ -55,6 +55,15 @@ public abstract class IMemoryRegion
 	 * @return
 	 */
 	public abstract int readAndWriteByte(int offset);
+	
+	/**
+	 * Reads a byte without triggering side-effects related to
+	 * memory-mapped I/O (like clearing IRQs etc.).
+	 *  
+	 * @param offset
+	 * @return
+	 */
+	public abstract int readByteNoSideEffects(int offset);
 
 	@Override
 	public String toString() {

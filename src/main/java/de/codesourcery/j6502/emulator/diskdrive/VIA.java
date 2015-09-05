@@ -15,17 +15,15 @@ import de.codesourcery.j6502.utils.HexDump;
 public class VIA extends Memory
 {
     private static final boolean DEBUG = true;
-    private static final boolean DEBUG_CONTROL_LINE1_OUTPUT = false;
+    private static final boolean DEBUG_CONTROL_LINE1_OUTPUT = true;
     private static final boolean DEBUG_CONTROL_LINE2_OUTPUT = false;
 
-    private static final boolean DEBUG_SET_IRQ = false;
     private static final boolean DEBUG_CLEAR_IRQ= false;
     
-    private static final boolean DEBUG_TIMER1_IRQ = true;
-
     private static final boolean DEBUG_WRITE_PORT_B = true;
 
     /*
+     * bit 7 - Any IRQ flag
      * bit 6 - Timer 1
      * bit 5 - Timer 2
      * bit 4 - CB1
@@ -35,6 +33,7 @@ public class VIA extends Memory
      * bit 0 - CA2
      */
     protected static final int IRQBIT_IRQ_OCCURRED = 1<<7;
+    
     protected static final int IRQBIT_TIMER1_TIMEOUT = 1<<6;
     protected static final int IRQBIT_TIMER2_TIMEOUT = 1<<5;
     protected static final int IRQBIT_CB1_ACTIVE_EDGE = 1<<4;
@@ -80,7 +79,7 @@ public class VIA extends Memory
     }
 
     public static enum Timer2Mode {
-        // bit 5 - Timer #2 control ( 0 = timed interrupt, 1 = count-down with pules on PB6)
+        // bit 5 - Timer #2 control ( 0 = timed interrupt (one-shot mode), 1 = count-down with pules on PB6)
         TIMED_INTERRUPT,
         CNT_DOWN_WITH_PB6_PULSE
     }
@@ -100,8 +99,9 @@ public class VIA extends Memory
     private Timer1Mode timer1Mode=Timer1Mode.IRQ_ON_LOAD;
     private Timer2Mode timer2Mode=Timer2Mode.TIMED_INTERRUPT;
 
-    private boolean timer1OneShotIRQTriggered;
-
+    private boolean timer1Running;
+    private boolean timer2Running;
+    
     private final CPU cpu;
     private VIAChangeListener changeListener;
 
@@ -283,6 +283,11 @@ public class VIA extends Memory
 
         public final int readRegister()
         {
+            if ( portName == PortName.A ) {
+                clearInterrupt( IRQBIT_CA1_ACTIVE_EDGE | IRQBIT_CA2_ACTIVE_EDGE );
+            } else {
+                clearInterrupt( IRQBIT_CB1_ACTIVE_EDGE | IRQBIT_CB2_ACTIVE_EDGE );
+            }            
             return latchingEnabled ? readRegisterLatchingEnabled() : readRegisterLatchingDisabled();
         }
         
@@ -333,18 +338,27 @@ public class VIA extends Memory
                 if ( oldValue ) { // true -> false transition
                     if ( line1Mode == ControlLine1Mode.IRQ_NEG_ACTIVE_EDGE )
                     {
+                        final boolean irqTriggered = setInterrupt( irqMaskBitsControlLine1 );
                         if ( DEBUG_CONTROL_LINE1_OUTPUT ) {
-                            logDebug( "Port "+portName+" control line #1 triggers IRQ because of negative edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
+                            if ( irqTriggered ) {
+                                logDebug( "[ triggered ] Port "+portName+" control line #1 triggers IRQ because of negative edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
+                            } else {
+                                logDebug( "[ not triggered ] Port "+portName+" control line #1 triggers IRQ because of negative edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
+                            }
                         }
-                        setInterrupt( irqMaskBitsControlLine1 );
                     }
                 } else { // false -> true transition
                     if ( line1Mode == ControlLine1Mode.IRQ_POS_ACTIVE_EDGE )
                     {
-                        if ( DEBUG_CONTROL_LINE1_OUTPUT ) {
-                            logDebug("Port "+portName+" control line #1 triggers IRQ because of positive edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
+                        boolean irqTriggered = setInterrupt( irqMaskBitsControlLine1 );
+                        if ( DEBUG_CONTROL_LINE1_OUTPUT )
+                        {
+                            if ( irqTriggered ) {
+                                logDebug("[ triggered ] Port "+portName+" control line #1 triggers IRQ because of positive edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
+                            } else {
+                                logDebug("[ not triggered ] Port "+portName+" control line #1 triggers IRQ because of positive edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
+                            }
                         }
-                        setInterrupt( irqMaskBitsControlLine1 );
                     }
                 }
                 if ( notifyListeners ) {
@@ -394,6 +408,7 @@ public class VIA extends Memory
         	value = value & 0xff;
         	int newValue = this.pins & ~ddr; // preserve input bits .. 1 = output , 0 = input
             newValue |= ( value & ddr );
+            
             if ( DEBUG && ( DEBUG_WRITE_PORT_B || portName != PortName.B) )
             {
                 if ( newValue != pins )
@@ -403,9 +418,17 @@ public class VIA extends Memory
                 HexDump.toBinaryString( (byte) newValue ), this.pins , newValue );
                 }
             }
+            
+            if ( portName == PortName.A ) {
+                clearInterrupt( IRQBIT_CA1_ACTIVE_EDGE | IRQBIT_CA2_ACTIVE_EDGE );
+            } else {
+                clearInterrupt( IRQBIT_CB1_ACTIVE_EDGE | IRQBIT_CB2_ACTIVE_EDGE );
+            }
+            
             final boolean valueChanged = this.pins != newValue;
             this.or = value;
             this.pins = newValue & 0xff;
+
             if ( valueChanged ) {
                 changeListener.portChanged( VIA.this , this );
             }
@@ -523,7 +546,7 @@ public class VIA extends Memory
      * bit 0 - CA1 interrupt control (0=negative active edge,1=positive active edge)
      *
      * |3|2|1| *** CA2/CB2 control bits ***
-     * |0|0|0| Input negative active edge
+     * |0|0|0| Input negative active edge. Set CA2/CB2 on negative edge. Clear IFR0 on read or write of output register
      * |0|0|1| Independent interrupt input negative edge (*)
      * |0|1|0| Input positive active edge
      * |0|1|1| Independent interrupt input positive edge (*)
@@ -703,12 +726,13 @@ public class VIA extends Memory
         portA.reset();
         portB.reset();
 
-        timer1OneShotIRQTriggered=false;
-
         timer1Mode = Timer1Mode.IRQ_ON_LOAD;
         timer2Mode = Timer2Mode.TIMED_INTERRUPT;
 
         shiftRegisterMode = ShiftRegisterMode.DISABLED;
+        
+        timer1Running = false;
+        timer2Running = false;
     }
 
     @Override
@@ -725,7 +749,7 @@ public class VIA extends Memory
             case DDRA:
                 return portA.getDDR();
             case T1CL:
-                clearInterupt(IRQBIT_TIMER1_TIMEOUT);
+                clearInterrupt(IRQBIT_TIMER1_TIMEOUT);
                 return timer1 & 0xff;
             case T1CH:
                 return (timer1 & 0xff00) >> 8;
@@ -734,7 +758,57 @@ public class VIA extends Memory
             case T1LH:
                 return t1latchhi;
             case T2CL:
-                clearInterupt(IRQBIT_TIMER2_TIMEOUT);
+                clearInterrupt(IRQBIT_TIMER2_TIMEOUT);
+                return (timer2 & 0xff);
+            case T2CH:
+                return (timer2 & 0xff00) >> 8;
+            case SR:
+                return sr;
+            case ACR:
+                return acr;
+            case PCR:
+                return pcr;
+            case IFR:
+                return irqFlags;
+            case IER:
+                return irqEnable & 0b0111_1111; // see spec, bit 7 will always be '0' when reading
+            case PORTA_NOHANDSHAKE:
+                return portA.readRegister();
+            default:
+                throw new IllegalArgumentException("No register at "+HexDump.toAdr(offset));
+        }
+    }
+    
+    @Override
+    public int readAndWriteByte(int offset) 
+    {
+        int result = readByte( offset );
+        writeByte( offset , (byte) result );
+        return result;
+    }
+    
+    @Override
+    public int readByteNoSideEffects(int offset) 
+    {
+        switch( offset )
+        {
+            case PORTB:
+                return portB.readRegister();
+            case PORTA:
+                return portA.readRegister();
+            case DDRB:
+                return portB.getDDR();
+            case DDRA:
+                return portA.getDDR();
+            case T1CL:
+                return timer1 & 0xff;
+            case T1CH:
+                return (timer1 & 0xff00) >> 8;
+            case T1LL:
+                return t1latchlo;
+            case T1LH:
+                return t1latchhi;
+            case T2CL:
                 return (timer2 & 0xff);
             case T2CH:
                 return (timer2 & 0xff00) >> 8;
@@ -795,9 +869,10 @@ public class VIA extends Memory
                 t1latchlo = value & 0xff;
                 break;
             case T1CH:
+                t1latchhi = value & 0xff;
                 timer1 = ( (t1latchhi & 0xff) << 8 ) | t1latchlo;
-                timer1OneShotIRQTriggered = false;
-                clearInterupt(IRQBIT_TIMER1_TIMEOUT);
+                timer1Running = true;
+                clearInterrupt(IRQBIT_TIMER1_TIMEOUT);
                 break;
             case T1LL:
                 if ( DEBUG ) {
@@ -809,6 +884,7 @@ public class VIA extends Memory
                 if ( DEBUG ) {
                     logDebug("CPU write timer #1 latch high: "+HexDump.toBinaryString( value ) );
                 }
+                clearInterrupt(IRQBIT_TIMER1_TIMEOUT);
                 t1latchhi = value & 0xff;
                 break;
             case T2CL:
@@ -823,7 +899,8 @@ public class VIA extends Memory
                 }
                 t2latchhi = value & 0xff;
                 timer2 = ( t2latchhi << 8 ) | t2latchlo;
-                clearInterupt(IRQBIT_TIMER2_TIMEOUT);
+                timer2Running = true;
+                clearInterrupt(IRQBIT_TIMER2_TIMEOUT);
                 break;
             case SR:
                 if ( DEBUG ) {
@@ -1018,34 +1095,19 @@ public class VIA extends Memory
     {
         cycles++;
 
-        if ( --timer1 == 0 )
+        if ( timer1Running && --timer1 == 0 )
         {
             switch( timer1Mode )
             {
-                case IRQ_ON_LOAD:
-                	if ( ! timer1OneShotIRQTriggered )
+                case IRQ_ON_LOAD: // one-shot mode
+                	if ( ( irqFlags & IRQBIT_TIMER1_TIMEOUT ) == 0 )
                 	{
-                	    if ( DEBUG_TIMER1_IRQ ) 
-                	    {
-                	        if ( setInterrupt(IRQBIT_TIMER1_TIMEOUT) ) {
-                	            logDebug("Timer #1 one-shot IRQ");
-                	        }
-                	    } else {
-                	        setInterrupt(IRQBIT_TIMER1_TIMEOUT);
-                	    }
-                        timer1 = t1latchhi << 8 | t1latchlo;
-                		timer1OneShotIRQTriggered=true;
+                	    setInterrupt(IRQBIT_TIMER1_TIMEOUT);
                 	}
+                	// in one-shot mode, the timer continues to decrement after reaching zero with no load taking place                	    
                 	break;
                 case CONTINUOUS_IRQ:
-                    if ( DEBUG_TIMER1_IRQ ) 
-                    {
-                        if ( setInterrupt(IRQBIT_TIMER1_TIMEOUT) ) {
-                            logDebug("Timer #1 continous IRQ");
-                        }
-                    } else {
-                        setInterrupt(IRQBIT_TIMER1_TIMEOUT);
-                    }
+                    setInterrupt(IRQBIT_TIMER1_TIMEOUT);
                     timer1 = t1latchhi << 8 | t1latchlo;
                     break;
                 case CONTINUOUS_IRQ_PB7_SQUARE_WAVE:
@@ -1055,34 +1117,28 @@ public class VIA extends Memory
             }
         }
 
-        if ( --timer2 == 0 )
+        if ( timer2Running && --timer2 == 0 )
         {
-            setInterrupt( IRQBIT_TIMER2_TIMEOUT );
-            timer2 = t2latchhi << 8 | t2latchlo;
+            if ( ( irqFlags & IRQBIT_TIMER2_TIMEOUT ) == 0 ) {
+                setInterrupt( IRQBIT_TIMER2_TIMEOUT );
+                // in one-shot mode, the timer continues to decrement after reaching zero with no load taking place
+                // timer2 = t2latchhi << 8 | t2latchlo;
+            }
         }
     }
 
     private boolean setInterrupt(int bitMask)
     {
+        irqFlags |= ( IRQBIT_IRQ_OCCURRED | bitMask );
         if ( (irqEnable & bitMask) != 0 )
         {
-            final int currentFlags = irqFlags;
-            irqFlags |= ( IRQBIT_IRQ_OCCURRED | bitMask );
-            if ( ( currentFlags & bitMask) == 0 )
-            {
-                if ( DEBUG_SET_IRQ ) {
-                    logDebug(" SET INTERRUPT - IRQ flags : "+HexDump.toBinaryString( (byte) irqFlags ) );
-                }
-                cpu.queueInterrupt( IRQType.REGULAR );
-                return true;
-            }
-        } else {
-            irqFlags |= ( IRQBIT_IRQ_OCCURRED | bitMask );
-        }
+            cpu.queueInterrupt( IRQType.REGULAR );
+            return true;
+        } 
         return false;
     }
 
-    private void clearInterupt(int bitMask)
+    private void clearInterrupt(int bitMask)
     {
         irqFlags &= ~bitMask;
         if ( ( irqFlags & 0b0111_1111) == 0 ) { // clear global irq flag bit if all IRQs are acknowledged
