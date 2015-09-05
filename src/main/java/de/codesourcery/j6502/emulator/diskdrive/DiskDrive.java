@@ -203,7 +203,11 @@ public class DiskDrive extends IMemoryRegion
         cpu.reset();
     }
 
-    public void executeOneCPUCycle()
+    /**
+     * 
+     * @return false if HW breakpoint reached, otherwise true
+     */
+    public boolean executeOneCPUCycle()
     {
         if ( cpu.cycles > 0 ) // wait until current command has 'finished' executing
         {
@@ -239,7 +243,9 @@ public class DiskDrive extends IMemoryRegion
             if ( PRINT_DISASSEMBLY ) {
                 System.out.println( cpu );
             }
-        }        
+        }   
+        
+        return cpu.isHardwareBreakpointReached() ? false:true; 
     }
 
     @Override

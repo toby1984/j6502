@@ -3,9 +3,8 @@ package de.codesourcery.j6502.emulator.diskdrive;
 import java.util.Optional;
 
 import de.codesourcery.j6502.emulator.CPU;
-import de.codesourcery.j6502.emulator.EmulatorDriver;
-import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
 import de.codesourcery.j6502.emulator.CPU.Flag;
+import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.G64File;
 import de.codesourcery.j6502.emulator.G64File.TrackData;
 import de.codesourcery.j6502.emulator.IECBus;
@@ -23,7 +22,7 @@ public class DiskHardware implements SerialDevice
      * Stepper motor moves in 1.8° increments = 200 steps for 360°
      */
     protected static final int STEPS_PER_FULL_ROTATION = 200;
-    
+
     public static final boolean DEBUG = false;
 
     protected static final int SPEED00_CYCLES_PER_BYTE = 32;
@@ -50,12 +49,12 @@ public class DiskHardware implements SerialDevice
         public final void onEnter() {
             cycles = cyclesPerByte;
         }
-        
+
         public abstract void trackChanged();
 
         public abstract void onEnterHook();
     }
-    
+
     protected static enum SyncMode {
         WAIT_FOR_SYNC,READING_SYNC,READING_DATA
     }
@@ -63,36 +62,36 @@ public class DiskHardware implements SerialDevice
     public final class ReadMode extends DriveMode
     {
         private int oneBits=0;
-        
+
         private int bytesAccepted;
         private int bytesRejected;
-        
+
         private SyncMode syncState = SyncMode.WAIT_FOR_SYNC;
-        
+
         private void syncFound() {
             via2.getPortB().setInputPin(7, false ); // sync found (PB7 expects INVERTED signal !!)
         }
-        
+
         private void noSyncFound() {
             via2.getPortB().setInputPin(7, true ); // no sync found (PB7 expects INVERTED signal !!)
         }        
-        
+
         public void trackChanged() 
         {
             noSyncFound();
             oneBits = 0;
             syncState = SyncMode.WAIT_FOR_SYNC;
         }
-        
+
         private void byteNotReady() {
             via2.getPortB().setControlLine1( false , false ); // byte not ready
         }
-        
+
         private void byteReady() 
         {
-            
+
             cpu.setFlag( Flag.OVERFLOW ); // byte ready
-            
+
             /* Das Byte Ready Signal kann nur mit SOE abgestellt werden,ansonsten kommt es regelmässig nach 8 Bits.
              * Das ist unabhängig davon ob sich das Laufwerk dreht oder nicht. Das ist ein Zähler auf der Platine der vom SYNC Signal
              * mit 0 geladen wird und immer wenn die Zeit für ein Bit abgelaufen ist eins hoch zählt.
@@ -111,6 +110,8 @@ public class DiskHardware implements SerialDevice
                 }
             }             
         }
+        
+        private int bytesToPrint = -1;
 
         @Override
         public void processByte()
@@ -119,11 +120,11 @@ public class DiskHardware implements SerialDevice
             {
                 return;
             }
-            
+
             noSyncFound();
-            
+
             byteNotReady();
-            
+
             int value = 0;
             for ( int i = 0 ; i < 8 ; i++ )
             {
@@ -135,11 +136,12 @@ public class DiskHardware implements SerialDevice
                     oneBits = 0;
                     if ( syncState == SyncMode.READING_SYNC )
                     {
+                        System.out.println("*** SYNC ***");
+                        bytesToPrint = 10;
                         syncFound();
                         syncState = SyncMode.READING_DATA;
                         bitStream.rewind(1); /* align bitstream */
-                        value = 0;
-                        i=-1;
+                        return;
                     }
                 } else {
                     oneBits++;
@@ -148,12 +150,16 @@ public class DiskHardware implements SerialDevice
                     }
                 }
             }          
-            
+
+            if ( bytesToPrint > 0 ) {
+                System.out.print( "0x"+HexDump.toHex( (byte) value )+" , " );
+                bytesToPrint--;
+            }
             via2.getPortA().setInputPins( value );
-            
+
             byteReady();
         }
-        
+
         @Override
         public void onEnterHook()
         {
@@ -180,20 +186,19 @@ public class DiskHardware implements SerialDevice
         @Override
         public void trackChanged() {
             // TODO Auto-generated method stub
-            
+
         }
     }
 
-    protected EmulatorDriver emulatorDriver;
     protected final CPU cpu;
     protected final DiskDrive diskDrive;
     protected final int driveAddress;
     protected int cyclesPerByte = SPEED10_CYCLES_PER_BYTE;
     protected float headPosition = 18;
     protected boolean driveLED;
-    
+
     protected boolean motorsRunning;
-    
+
     protected boolean writeProtectOn;
 
     protected G64File disk;
@@ -470,22 +475,25 @@ public class DiskHardware implements SerialDevice
             if ( port.getPortName() == PortName.B )
             {
                 final int value = port.getPins();
+
+                final boolean oldLedState = DiskHardware.this.driveLED; 
+                boolean newLedState = (value & 0b0000_1000) != 0;
+                DiskHardware.this.driveLED = newLedState;      
                 
-                DiskHardware.this.driveLED      = (value & 0b0000_1000) != 0;
                 final boolean oldState = DiskHardware.this.motorsRunning; 
                 final boolean newState = (value & 0b0000_0100) != 0;
                 DiskHardware.this.motorsRunning = newState;
-                if ( oldState != newState ) 
+                if ( oldState != newState || oldLedState != newLedState ) 
                 {
-                    DiskHardware.this.emulatorDriver.hardwareBreakpointReached();
+                    DiskHardware.this.cpu.setHardwareBreakpoint();
                 }
-                
+
                 System.out.println("VIA #2 port B changed to "+HexDump.toBinaryString( (byte) value )+"\n"
                         + " motor on: "+motorsRunning 
                         +"\nLED on: "+driveLED);
 
                 final int speed = value & 0b0110_0000;
-                
+
                 final int newCyclesPerByte;
                 switch( speed )
                 {
@@ -504,21 +512,22 @@ public class DiskHardware implements SerialDevice
                     default:
                         throw new RuntimeException("Unreachable code reached");
                 }
-                
+
                 if ( newCyclesPerByte != cyclesPerByte ) 
                 {
                     System.out.println("Read/write bit-rate changed to "+speed);
                 }
                 cyclesPerByte = newCyclesPerByte;
-                
+
                 int step = value & 0b11;
                 if ( step != previousStepMotorCycle && motorsRunning )
                 {
                     stepCounter++;
                     System.out.println("STEP: "+stepCounter);
-                    
-                    if ( stepCounter == STEPS_PER_FULL_ROTATION ) 
-                    {
+
+                    // TODO: Stepper motor does 1.8° degrees per step , this code should operate on this assumption
+                    if ( stepCounter == 2 ) // STEPS_PER_FULL_ROTATION )  
+                    { 
                         stepCounter = 0;
                         if ( step > previousStepMotorCycle ) { // incrementing .. move head towards center of disk (=
                             if ( headPosition > 1f )
@@ -538,7 +547,7 @@ public class DiskHardware implements SerialDevice
                         }
                     }
                 }
-                
+
                 previousStepMotorCycle = step;
             }
         }
@@ -581,11 +590,11 @@ public class DiskHardware implements SerialDevice
 
         setDriveMode( READ );
         driveLED = false;
-        
+
         motorsRunning = false;
-        
+
         writeProtectOn = true; // TODO: Set to 'false' once writing to disk is enabled
-        
+
         stepCounter = 0;
         previousStepMotorCycle = 0;
         headPosition = 18f;
@@ -653,7 +662,7 @@ public class DiskHardware implements SerialDevice
     private void setTrack(float track)
     {
         System.out.println("Head moved to track "+track);
-        
+
         this.headPosition = track;
 
         if ( disk != null )
@@ -690,7 +699,7 @@ public class DiskHardware implements SerialDevice
     protected boolean previousATN;
 
     @Override
-    public void tick(EmulatorDriver driver,IECBus bus)
+    public void tick(Emulator emulator,IECBus bus)
     {
         /* VIA1:
          *
@@ -708,9 +717,7 @@ public class DiskHardware implements SerialDevice
          * CB1 - Unused
          * CB2 - Unused
          */
-        
-        this.emulatorDriver = driver;
-        
+
         final Port portB = via1.getPortB();
 
         final boolean newData = ! bus.getData();
@@ -719,17 +726,20 @@ public class DiskHardware implements SerialDevice
 
         portB.setInputPin( 2 , newClk );
         portB.setInputPin( 7 , newATN );
-        
+
         final boolean atnXor= ( via1.getPortB().getPin(7) ^ via1.getPortB().getPin(4) );
         portB.setInputPin( 0 , newData | atnXor );
-        
+
         via1.getPortA().setControlLine1( newATN , false );
 
-        diskDrive.executeOneCPUCycle();
-
         driveMode.tick();
+
         this.via1.tick();
         this.via2.tick();
+        
+        if ( ! diskDrive.executeOneCPUCycle() ) {
+            emulator.hardwareBreakpointReached();
+        }        
     }
 
     @Override
@@ -777,15 +787,15 @@ public class DiskHardware implements SerialDevice
     public DiskDrive getDiskDrive() {
         return diskDrive;
     }
-    
+
     public float getHeadPosition() {
         return headPosition;
     }
-    
+
     public DriveMode getDriveMode() {
         return driveMode;
     }
- 
+
     public boolean getDriveLED() {
         return driveLED;
     }

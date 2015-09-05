@@ -3,10 +3,8 @@ package de.codesourcery.j6502.emulator;
 
 public interface SerialDevice
 {
-    /*
-     * TODO: Remove EmulatorDriver parameter , this is only used for debugging (stopping emulation at certain points)
-     */
-	public void tick(EmulatorDriver driver,IECBus bus);
+    // TODO: Remove Emulator , it's just there for debugging
+	public void tick(Emulator emulator,IECBus bus);
 	
 	/**
 	 * Returns the LOGICAL value of the clock line (true = HIGH , false = LOW).

@@ -28,6 +28,9 @@ public class CPU
 	private int x;
 	private int y;
 	public short sp;
+	
+	private boolean breakOnInterrupt;
+	private boolean hwBreakpointReached;
 
 	private byte flags = CPU.Flag.EXTENSION.set((byte)0); // extension bit is always 1
 
@@ -202,7 +205,11 @@ public class CPU
 
 	public void reset()
 	{
+	    breakOnInterrupt = false;
+	    hwBreakpointReached = false;
+	    
 		cycles = 0;
+		
 		pc = memory.readWord( RESET_VECTOR_LOCATION );
 		System.out.println("RESET: PC of CPU "+this.memory+" now points to "+HexDump.toAdr( pc ) );
 
@@ -214,6 +221,23 @@ public class CPU
 		sp = 0x1ff;
 		setFlagBits( CPU.Flag.IRQ_DISABLE.set( (byte) 0) );
 	}
+	
+	public void setBreakOnInterrupt() {
+	    breakOnInterrupt = true;
+	}
+	
+	public void setHardwareBreakpoint() {
+	    this.hwBreakpointReached = true;
+	}
+	
+	public boolean isHardwareBreakpointReached() 
+	{
+	    if ( hwBreakpointReached ) {
+	        hwBreakpointReached = false;
+	        return true;
+	    }
+        return false;
+    }
 
 	public void queueInterrupt(IRQType type)
 	{
@@ -298,6 +322,10 @@ public class CPU
 	    {
 	        case NMI:
 	            performInterrupt();
+	            if ( breakOnInterrupt ) {
+	                hwBreakpointReached = true;
+	                breakOnInterrupt = false;
+	            }
 	            break;
 	        case NONE:
 	            break;
@@ -305,6 +333,10 @@ public class CPU
             case BRK:
                 if ( isCleared( Flag.IRQ_DISABLE ) ) {
                     performInterrupt();
+                    if ( breakOnInterrupt ) {
+                        hwBreakpointReached = true;
+                        breakOnInterrupt = false;
+                    }                    
                 }
                 break;
             default:
@@ -367,4 +399,8 @@ public class CPU
 	public int getSP() {
 		return this.sp & 0xffff;
 	}
+
+    public boolean isBreakOnIRQ() {
+        return breakOnInterrupt;
+    }
 }
