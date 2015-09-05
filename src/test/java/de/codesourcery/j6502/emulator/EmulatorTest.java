@@ -1464,6 +1464,19 @@ Absolute,X    LDY $4400,X   $BC  3   4+
                 emulator.getCPU().pc( PRG_LOAD_ADDRESS-ADDITIONAL_BYTES );
 
                 blocks.forEach( b -> b.run() );
+                
+                final EmulatorDriver driver = new EmulatorDriver( emulator ) {
+                    
+                    private final BreakpointsController controller = new BreakpointsController( emulator.getCPU() , emulator.getMemory() ); 
+                    @Override
+                    protected void tick() {
+                    }
+                    
+                    @Override
+                    protected BreakpointsController getBreakPointsController() {
+                        return controller;
+                    }
+                };                
 
                 long cyclesExecuted = 0;
                 RuntimeException lastException = null;
@@ -1475,7 +1488,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
                         if ( previousInstructionFinished  ) {
                             beforeEachStep.forEach( r -> r.accept( emulator ) );
                         }
-                        emulator.doOneCycle();
+                        emulator.doOneCycle(driver);
                         cyclesExecuted++;
                         if ( previousInstructionFinished ) {
                             afterEachStep.forEach( r -> r.accept( emulator ) );

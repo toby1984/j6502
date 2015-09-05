@@ -63,7 +63,7 @@ public class Emulator
 		cpu.reset();
 	}
 
-	public void doOneCycle()
+	public void doOneCycle(EmulatorDriver driver)
 	{
 		/* First (low) half of clock cycle.
 		 *
@@ -74,7 +74,7 @@ public class Emulator
          * first (LOW) phase.
 		 */
 
-		memory.tick( this.cpu , false ); // clock == LOW
+		memory.tick( driver , this.cpu , false ); // clock == LOW
 
 		/*
 		 * Second (high) half of clock cycle.
@@ -116,7 +116,7 @@ public class Emulator
 			}
 		}
 
-		memory.tick( cpu , true ); // clock == HIGH
+		memory.tick( driver , cpu , true ); // clock == HIGH
 	}
 
 	public KeyboardBuffer getKeyboardBuffer() {

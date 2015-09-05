@@ -52,6 +52,9 @@ public abstract class CPUStatusPanel extends BufferedView implements WindowLocat
                 }
                 switch( e.getKeyChar() ) 
                 {
+                    case 'p':
+                        readValue("Change PC" , "$"+Integer.toHexString( getCPU().pc() ) , value -> getCPU().pc( value ) ); 
+                        break;
                     case 'a':
                         readValue("Change accumulator" , "$"+Integer.toHexString( getCPU().getAccumulator() ) , value -> getCPU().setAccumulator( value ) );
                         break;
@@ -131,7 +134,7 @@ public abstract class CPUStatusPanel extends BufferedView implements WindowLocat
                 e.printStackTrace();
                 return;
             }
-            consumer.accept( iValue & 0xff );
+            consumer.accept( iValue );
         }
     }
     
