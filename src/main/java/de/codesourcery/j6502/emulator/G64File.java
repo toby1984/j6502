@@ -28,6 +28,7 @@ import org.apache.commons.lang.Validate;
 import de.codesourcery.j6502.ui.G64Viewer;
 import de.codesourcery.j6502.utils.BitOutputStream;
 import de.codesourcery.j6502.utils.BitStream;
+import de.codesourcery.j6502.utils.HexDump;
 
 /**
  * G64 disk format.
@@ -999,6 +1000,13 @@ Byte    $00 - data block ID ($07)
 
 	public static void main(String[] args) throws IOException, InvocationTargetException, InterruptedException
 	{
+	    final BitStream stream = new BitStream(new byte[]{ 0x52,0x57,0x35,0x2d,0x72 });
+	    byte[] data = gcrDecode( stream );
+	    for ( byte b : data ) {
+	        System.out.println("GOT "+HexDump.toHex( b ) );
+	    }
+	    System.exit(0);;
+	    
 		InputStream in = D64File.class.getResourceAsStream( "/disks/pitfall.d64" );
 		D64File inFile = new D64File(in,"pitfall.d64");
 		try ( FileOutputStream fileOut = new FileOutputStream("/home/tobi/tmp/pitfall_from_d64.g64") ) {
@@ -1045,7 +1053,7 @@ Byte    $00 - data block ID ($07)
 		final int lo = gcrDecode( loNibble );
 		return hi << 4 | lo;
 	}
-
+	
 	protected static int readNibble(BitStream bitStream)
 	{
 		int hiValue = bitStream.readBit();
@@ -1115,7 +1123,7 @@ Byte    $00 - data block ID ($07)
 	protected static int gcrDecode(int value) throws GCRDecodingException
 	{
 		if ( value < 0 || value > 32 ) {
-			throw new IllegalArgumentException("Cannot GCR-decode: "+value);
+			throw new IllegalArgumentException("Nibble out of range (0...32) for GCR-decode: "+value);
 		}
 		final int result = FROM_GCR[ value ];
 		String binary = Integer.toBinaryString( result );
@@ -1126,6 +1134,23 @@ Byte    $00 - data block ID ($07)
 			throw new GCRDecodingException( value );
 		}
 		return result;
+	}
+	
+	protected static byte[] gcrDecode(BitStream stream) 
+	{
+	    final ByteArrayOutputStream out = new ByteArrayOutputStream();
+	    stream.mark();
+	    while ( ! stream.hasWrapped() ) 
+	    {
+	        int value = 0;
+	        for ( int i = 0 ; i < 10 ; i++ ) 
+	        {
+	            value = value << 1;
+	            value |= stream.readBit();
+	        }
+	        out.write( gcrDecode( (value & 0b1111100000) >> 5 , value & 0b11111 ) );
+	    }
+	    return out.toByteArray();
 	}
 
 	protected static int toBigEndian( int lo , int hi ) {

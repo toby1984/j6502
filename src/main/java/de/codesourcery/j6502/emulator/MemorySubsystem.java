@@ -398,9 +398,9 @@ public final class MemorySubsystem extends IMemoryRegion
 		System.out.println( this );
 	}
 
-	public void tick(EmulatorDriver driver,CPU cpu,boolean clockHigh)
+	public void tick(Emulator emulator,CPU cpu,boolean clockHigh)
 	{
-		ioArea.tick( driver, cpu , clockHigh );
+		ioArea.tick( emulator , cpu , clockHigh );
 	}
 
 	private void createRegions(int index)

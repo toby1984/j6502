@@ -682,6 +682,7 @@ public class Debugger
 		public final JButton singleStepButton = new JButton("Step");
 		public final JButton runButton = new JButton("Run");
 		public final JButton stopButton = new JButton("Stop");
+		public final JButton breakOnIRQButton = new JButton("Break on IRQ");
 		public final JButton resetButton = new JButton("Reset");
 		public final JButton stepOverButton = new JButton("Step over");
 		public final JButton loadButton = new JButton("Load");
@@ -824,6 +825,9 @@ public class Debugger
 			{
 				updateWindows( false );
 			});
+			breakOnIRQButton.addActionListener( ev -> {
+			    getCPU().setBreakOnInterrupt();
+			});
 
 			setLayout( new FlowLayout() );
 			add( stopButton );
@@ -831,6 +835,7 @@ public class Debugger
 			add( singleStepButton );
 			add( stepOverButton );
 			add( resetButton );
+			add( breakOnIRQButton );
 			add( loadButton );
 			add( refreshUIButton );
 
@@ -845,6 +850,7 @@ public class Debugger
 			runButton.setEnabled( currentMode == Mode.SINGLE_STEP);
 			resetButton.setEnabled( currentMode == Mode.SINGLE_STEP);
 			stepOverButton.setEnabled( getBreakPointsController().canStepOver( getMemory(), getCPU() ) );
+			breakOnIRQButton.setEnabled( ! getCPU().isBreakOnIRQ() );
 		}
 	}
 

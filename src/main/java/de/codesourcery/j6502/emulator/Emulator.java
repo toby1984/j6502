@@ -18,6 +18,8 @@ public class Emulator
 
 	private IMemoryProvider memoryProvider;
 
+	private boolean hwBreakpointReached;
+	
 	private final CPUImpl cpuImpl;
 
 	public Emulator() {
@@ -49,6 +51,8 @@ public class Emulator
 
 	public void reset()
 	{
+	    hwBreakpointReached = false;
+	    
 		memory.reset();
 
 		// all 6502 CPUs read their initial PC value from $FFFC
@@ -74,7 +78,7 @@ public class Emulator
          * first (LOW) phase.
 		 */
 
-		memory.tick( driver , this.cpu , false ); // clock == LOW
+		memory.tick( this , this.cpu , false ); // clock == LOW
 
 		/*
 		 * Second (high) half of clock cycle.
@@ -87,7 +91,7 @@ public class Emulator
 		{
 
 			this.cpu.handleInterrupt();
-
+			
 			if ( PRINT_DISASSEMBLY )
 			{
 				System.out.println("=====================");
@@ -116,7 +120,13 @@ public class Emulator
 			}
 		}
 
-		memory.tick( driver , cpu , true ); // clock == HIGH
+		memory.tick( this , cpu , true ); // clock == HIGH
+		
+        if ( cpu.isHardwareBreakpointReached() || hwBreakpointReached ) 
+        {
+            hwBreakpointReached = false;
+            driver.hardwareBreakpointReached();
+        }		
 	}
 
 	public KeyboardBuffer getKeyboardBuffer() {
@@ -126,4 +136,8 @@ public class Emulator
 	public IECBus getBus() {
 		return memory.ioArea.iecBus;
 	}
+
+    public void hardwareBreakpointReached() {
+        hwBreakpointReached = true;
+    }
 }

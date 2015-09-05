@@ -270,7 +270,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		cpuDevice = new SerialDevice() {
 
 			@Override
-			public void tick(EmulatorDriver driver,IECBus bus) {
+			public void tick(Emulator emulator,IECBus bus) {
 			}
 
 			@Override
@@ -422,13 +422,13 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		iecBus.reset();
 	}
 
-	public void tick(EmulatorDriver driver,CPU cpu,boolean clockHigh)
+	public void tick(Emulator emulator,CPU cpu,boolean clockHigh)
 	{
 		if ( clockHigh ) {
 			keyboardBuffer.tick( this );
 	        cia1.tick( cpu );
 	        cia2.tick(cpu );
-	        iecBus.tick(driver);
+	        iecBus.tick(emulator);
 		}
 
 		vic.tick( cpu , clockHigh );
