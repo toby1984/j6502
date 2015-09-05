@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.commons.lang.Validate;
 
 import de.codesourcery.j6502.assembler.SourceMap;
+import de.codesourcery.j6502.emulator.EmulatorDriver.Cmd;
 import de.codesourcery.j6502.utils.SourceHelper;
 
 public abstract class EmulatorDriver extends Thread
@@ -130,19 +131,29 @@ public abstract class EmulatorDriver extends Thread
 	{
 		return currentMode.get();
 	}
+	
+    public void setMode(Mode newMode)
+    {
+        setMode(newMode,true);
+    }
 
-	public void setMode(Mode newMode)
+	private void setMode(Mode newMode,boolean waitForAck)
 	{
 		final Cmd cmd;
 		if ( Mode.CONTINOUS.equals( newMode ) )
 		{
-			cmd = startCommand(true);
+			cmd = startCommand(waitForAck);
 		} else {
-			cmd = stopCommand(true,false);
+			cmd = stopCommand(waitForAck,false);
 		}
 		sendCmd( cmd );
 	}
-
+	
+	public void hardwareBreakpointReached() {
+        final Cmd cmd = stopCommand(false,true);
+        sendCmd( cmd );
+	}
+	
 	private void sendCmd(Cmd cmd)
 	{
 		cmd.enqueue();
@@ -263,16 +274,9 @@ public abstract class EmulatorDriver extends Thread
 
 					lastException = null;
 
-					emulator.doOneCycle();
+					emulator.doOneCycle(this);
 
 					cyclesUntilNextTick--;
-
-					if ( getBreakPointsController().isAtBreakpoint() )
-					{
-						isRunnable = false;
-						cmd = stopCommand( false , true ); // assign to cmd so that next loop iteration will know why we stopped execution
-						sendCmd( cmd );
-					}
 				}
 				catch(final Throwable e)
 				{
@@ -283,6 +287,14 @@ public abstract class EmulatorDriver extends Thread
 					sendCmd( stopCommand( false , false ) );
 				}
 			}
+			
+            if ( getBreakPointsController().isAtBreakpoint() )
+            {
+                isRunnable = false;
+                cmd = stopCommand( false , true ); // assign to cmd so that next loop iteration will know why we stopped execution
+                sendCmd( cmd );
+            }			
+			
 			if ( cyclesUntilNextTick <= 0 )
 			{
 				tick();
@@ -318,10 +330,10 @@ public abstract class EmulatorDriver extends Thread
 		{
 			lastException = null;
             while ( cpu.cycles > 0 ) {
-                emulator.doOneCycle();
+                emulator.doOneCycle(this);
             }
 			do {
-				emulator.doOneCycle();
+				emulator.doOneCycle(this);
 			} while ( cpu.cycles > 0 );
 		}
 	}

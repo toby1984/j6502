@@ -79,7 +79,7 @@ public class IECBus implements Bus
 		return "[BUS: "+identifier+"] ATN: "+getATN()+" | CLK: "+clkSum+" | DATA: "+dataSum;
 	}
 
-	public void tick()
+	public void tick(EmulatorDriver driver)
 	{
         /*
          * Method must ONLY be called when ph2 == HIGH
@@ -99,7 +99,7 @@ public class IECBus implements Bus
 		for (int i = 0, len = devices.size() ; i < len ; i++)
 		{
 			final SerialDevice dev = devices.get(i);
-			dev.tick(this );
+			dev.tick( driver , this );
 			sumData &= dev.getData();
 			sumClk &= dev.getClock();
 		}

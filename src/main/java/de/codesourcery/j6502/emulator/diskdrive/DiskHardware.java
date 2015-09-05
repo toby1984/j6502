@@ -3,6 +3,8 @@ package de.codesourcery.j6502.emulator.diskdrive;
 import java.util.Optional;
 
 import de.codesourcery.j6502.emulator.CPU;
+import de.codesourcery.j6502.emulator.EmulatorDriver;
+import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.G64File;
 import de.codesourcery.j6502.emulator.G64File.TrackData;
@@ -61,10 +63,11 @@ public class DiskHardware implements SerialDevice
     public final class ReadMode extends DriveMode
     {
         private int oneBits=0;
-        private SyncMode syncState = SyncMode.WAIT_FOR_SYNC;
         
         private int bytesAccepted;
         private int bytesRejected;
+        
+        private SyncMode syncState = SyncMode.WAIT_FOR_SYNC;
         
         private void syncFound() {
             via2.getPortB().setInputPin(7, false ); // sync found (PB7 expects INVERTED signal !!)
@@ -117,75 +120,38 @@ public class DiskHardware implements SerialDevice
                 return;
             }
             
-            switch(syncState) 
+            noSyncFound();
+            
+            byteNotReady();
+            
+            int value = 0;
+            for ( int i = 0 ; i < 8 ; i++ )
             {
-                case READING_DATA:
-                    
-                    noSyncFound();
-                    
-                    byteNotReady();
-                    
-                    int value = 0;
-                    for ( int i = 0 ; i < 8 ; i++ )
+                final int bit = bitStream.readBit();
+                value = value << 1;
+                value = value | bit;
+                if ( bit == 0 )
+                {
+                    oneBits = 0;
+                    if ( syncState == SyncMode.READING_SYNC )
                     {
-                        final int bit = bitStream.readBit();
-                        value = value << 1;
-                        value = value | bit;
-                        if ( bit == 0 )
-                        {
-                            oneBits = 0;
-                            if ( syncState == SyncMode.READING_SYNC )
-                            {
-                                syncFound();
-                                syncState = SyncMode.READING_DATA;
-                                bitStream.rewind(1); /* align bitstream */
-                                return;
-                            }
-                        } else {
-                            oneBits++;
-                            if ( oneBits >= 8 ) {
-                                syncState = SyncMode.READING_SYNC;
-                            }
-                        }
-                    }          
-                    
-                    if ( value == 0xff || syncState == SyncMode.READING_SYNC ) 
-                    {
-                        syncState = SyncMode.READING_SYNC;
-                        return;
+                        syncFound();
+                        syncState = SyncMode.READING_DATA;
+                        bitStream.rewind(1); /* align bitstream */
+                        value = 0;
+                        i=-1;
                     }
-                    
-                    via2.getPortA().setInputPins( value );
-                    
-                    byteReady();
-                    
-                    break;
-                case READING_SYNC:
-                case WAIT_FOR_SYNC:
-                    for ( int i = 0 ; i < 8 ; i++ )
-                    {
-                        final int bit = bitStream.readBit();
-                        if ( bit == 0 )
-                        {
-                            oneBits = 0;
-                            if ( syncState == SyncMode.READING_SYNC )
-                            {
-                                syncFound();
-                                syncState = SyncMode.READING_DATA;
-                                bitStream.rewind(1); /* align bitstream */
-                                return;
-                            }
-                        } else {
-                            oneBits++;
-                            if ( oneBits >= 10 ) {
-                                syncState = SyncMode.READING_SYNC;
-                            }
-                        }
-                    }                    
-                    return;
-                default:
-                    throw new RuntimeException("Unreachable code reached");
-            }
+                } else {
+                    oneBits++;
+                    if ( oneBits >= 10 ) {
+                        syncState = SyncMode.READING_SYNC;
+                    }
+                }
+            }          
+            
+            via2.getPortA().setInputPins( value );
+            
+            byteReady();
         }
         
         @Override
@@ -218,6 +184,7 @@ public class DiskHardware implements SerialDevice
         }
     }
 
+    protected EmulatorDriver emulatorDriver;
     protected final CPU cpu;
     protected final DiskDrive diskDrive;
     protected final int driveAddress;
@@ -505,9 +472,17 @@ public class DiskHardware implements SerialDevice
                 final int value = port.getPins();
                 
                 DiskHardware.this.driveLED      = (value & 0b0000_1000) != 0;
-                DiskHardware.this.motorsRunning = (value & 0b0000_0100) != 0;
+                final boolean oldState = DiskHardware.this.motorsRunning; 
+                final boolean newState = (value & 0b0000_0100) != 0;
+                DiskHardware.this.motorsRunning = newState;
+                if ( oldState != newState ) 
+                {
+                    DiskHardware.this.emulatorDriver.hardwareBreakpointReached();
+                }
                 
-                System.out.println("VIA #2 port B changed to "+HexDump.toBinaryString( (byte) value )+" motor on: "+motorsRunning );
+                System.out.println("VIA #2 port B changed to "+HexDump.toBinaryString( (byte) value )+"\n"
+                        + " motor on: "+motorsRunning 
+                        +"\nLED on: "+driveLED);
 
                 final int speed = value & 0b0110_0000;
                 
@@ -715,7 +690,7 @@ public class DiskHardware implements SerialDevice
     protected boolean previousATN;
 
     @Override
-    public void tick(IECBus bus)
+    public void tick(EmulatorDriver driver,IECBus bus)
     {
         /* VIA1:
          *
@@ -733,6 +708,9 @@ public class DiskHardware implements SerialDevice
          * CB1 - Unused
          * CB2 - Unused
          */
+        
+        this.emulatorDriver = driver;
+        
         final Port portB = via1.getPortB();
 
         final boolean newData = ! bus.getData();
