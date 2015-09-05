@@ -827,6 +827,7 @@ public class Debugger
 			});
 			breakOnIRQButton.addActionListener( ev -> {
 			    getCPU().setBreakOnInterrupt();
+			    breakOnIRQButton.setEnabled( false );
 			});
 
 			setLayout( new FlowLayout() );
