@@ -136,7 +136,7 @@ public class DiskHardware implements SerialDevice
                     oneBits = 0;
                     if ( syncState == SyncMode.READING_SYNC )
                     {
-                        System.out.println("*** SYNC ***");
+//                        System.out.println("*** SYNC ***");
                         bytesToPrint = 10;
                         syncFound();
                         syncState = SyncMode.READING_DATA;
@@ -151,10 +151,10 @@ public class DiskHardware implements SerialDevice
                 }
             }          
 
-            if ( bytesToPrint > 0 ) {
-                System.out.print( "0x"+HexDump.toHex( (byte) value )+" , " );
-                bytesToPrint--;
-            }
+//            if ( bytesToPrint > 0 ) {
+//                System.out.print( "0x"+HexDump.toHex( (byte) value )+" , " );
+//                bytesToPrint--;
+//            }
             via2.getPortA().setInputPins( value );
 
             byteReady();
@@ -208,6 +208,21 @@ public class DiskHardware implements SerialDevice
     protected final ReadMode READ = new ReadMode();
     protected final WriteMode WRITE = new WriteMode();
 
+    protected static enum HeadMovement { 
+        TO_TRACK_1(-0.5f) , 
+        TO_TRACK_35(0.5f), 
+        NONE(0);
+        
+        private final float inc;
+        
+        private HeadMovement(float inc) { this.inc = inc; }
+        
+        public float move(float currentPos) {
+            return currentPos+inc;
+        }
+    }
+    
+    private HeadMovement headMovement=HeadMovement.NONE;
     private int stepCounter;
     private int previousStepMotorCycle;
 
@@ -483,14 +498,14 @@ public class DiskHardware implements SerialDevice
                 final boolean oldState = DiskHardware.this.motorsRunning; 
                 final boolean newState = (value & 0b0000_0100) != 0;
                 DiskHardware.this.motorsRunning = newState;
-                if ( oldState != newState || oldLedState != newLedState ) 
-                {
-                    DiskHardware.this.cpu.setHardwareBreakpoint();
-                }
+//                if ( oldState != newState || oldLedState != newLedState ) 
+//                {
+//                    DiskHardware.this.cpu.setHardwareBreakpoint();
+//                }
 
-                System.out.println("VIA #2 port B changed to "+HexDump.toBinaryString( (byte) value )+"\n"
-                        + " motor on: "+motorsRunning 
-                        +"\nLED on: "+driveLED);
+//                System.out.println("VIA #2 port B changed to "+HexDump.toBinaryString( (byte) value )+"\n"
+//                        + " motor on: "+motorsRunning 
+//                        +"\nLED on: "+driveLED);
 
                 final int speed = value & 0b0110_0000;
 
@@ -519,36 +534,35 @@ public class DiskHardware implements SerialDevice
                 }
                 cyclesPerByte = newCyclesPerByte;
 
+                /*
+                 *  PB0 - (OUT) Step 1  |   Sequence 00/01/10/11/00... moves inwards      |
+                 *  PB1 - (OUT) Step 0  |   Sequence 00/11/10/01/00... moves outwards     |
+                 */
                 int step = value & 0b11;
                 if ( step != previousStepMotorCycle && motorsRunning )
                 {
+                    if ( previousStepMotorCycle == 0 ) {
+                        headMovement = step == 3 ? HeadMovement.TO_TRACK_1 : HeadMovement.TO_TRACK_35;
+                        System.out.println("Head direction: "+headMovement);
+                    }
+                    
                     stepCounter++;
-                    System.out.println("STEP: "+stepCounter);
+                    System.out.println("STEP: "+step+" ("+stepCounter+")");
 
                     // TODO: Stepper motor does 1.8° degrees per step , this code should operate on this assumption
-                    if ( stepCounter == 2 ) // STEPS_PER_FULL_ROTATION )  
+                    if ( stepCounter == 1 )  
                     { 
                         stepCounter = 0;
-                        if ( step > previousStepMotorCycle ) { // incrementing .. move head towards center of disk (=
-                            if ( headPosition > 1f )
-                            {
-                                headPosition -= 0.5f;
-                                setTrack( headPosition );
-                            }
+                        float newTrack = headMovement.move( headPosition );
+                        if ( newTrack < 1.0f ) {
+                            newTrack = 1f;
+                        } else if ( newTrack > 41.5f ) {
+                            newTrack = 41.5f;
                         }
-                        else
-                        {
-                            // decrementing.. move head towards track 35 (inwards)
-                            if ( headPosition < 41.5f )
-                            {
-                                headPosition += 0.5f;
-                                setTrack( headPosition );
-                            }
-                        }
+                        setTrack( newTrack );
                     }
                 }
-
-                previousStepMotorCycle = step;
+                previousStepMotorCycle = step;                
             }
         }
 
@@ -598,6 +612,8 @@ public class DiskHardware implements SerialDevice
         stepCounter = 0;
         previousStepMotorCycle = 0;
         headPosition = 18f;
+        headMovement = HeadMovement.NONE;
+        
         cyclesPerByte = SPEED10_CYCLES_PER_BYTE; // default speed for track #18
 
         // setup VIA1 inputs

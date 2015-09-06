@@ -14,7 +14,7 @@ import de.codesourcery.j6502.utils.HexDump;
  */
 public class VIA extends Memory
 {
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
     private static final boolean DEBUG_CONTROL_LINE1_OUTPUT = false;
     private static final boolean DEBUG_CONTROL_LINE2_OUTPUT = false;
 
