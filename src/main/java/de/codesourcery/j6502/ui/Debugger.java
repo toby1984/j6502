@@ -148,6 +148,8 @@ public class Debugger
 
 	private final KeyboardInputListener keyboardListener = new KeyboardInputListener(emulator);
 
+	private final FloppyJobQueuePanel floppyJobQueue = new FloppyJobQueuePanel();
+	
 	private final List<IDebuggerView> views = new ArrayList<>();
 
 	private final FloppyInfoPanel floppyInfoPanel = new FloppyInfoPanel();
@@ -240,6 +242,9 @@ public class Debugger
 		
         final JInternalFrame floppyInfoFrame = wrap( "Floppy status" , floppyInfoPanel );
         desktop.add( floppyInfoFrame  );
+        
+        final JInternalFrame floppyJobQueueFrame = wrap( "Floppy Job Queue" , floppyJobQueue );
+        desktop.add( floppyJobQueueFrame  );
         
 		final JInternalFrame cpuStatusFrame = wrap( "CPU" , cpuPanel );
 		desktop.add( cpuStatusFrame  );

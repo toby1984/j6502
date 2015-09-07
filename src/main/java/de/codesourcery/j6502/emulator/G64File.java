@@ -1136,7 +1136,7 @@ Byte    $00 - data block ID ($07)
 		return result;
 	}
 	
-	protected static byte[] gcrDecode(BitStream stream) 
+	public static byte[] gcrDecode(BitStream stream) 
 	{
 	    final ByteArrayOutputStream out = new ByteArrayOutputStream();
 	    stream.mark();
