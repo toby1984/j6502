@@ -10,6 +10,7 @@ import de.codesourcery.j6502.emulator.CPUImpl;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.emulator.Memory;
 import de.codesourcery.j6502.emulator.MemorySubsystem;
+import de.codesourcery.j6502.emulator.SlowMemory;
 import de.codesourcery.j6502.emulator.WriteOnceMemory;
 import de.codesourcery.j6502.utils.HexDump;
 
@@ -23,10 +24,54 @@ public class DiskDrive extends IMemoryRegion
     private static final AddressRange ROM1_RANGE = AddressRange.range(ROM_START1,0xc000);
     private static final AddressRange ROM2_RANGE = AddressRange.range(ROM_START2,0xffff);
 
-    private final Memory ram = new Memory( "RAM" , new AddressRange(0,2*1024) );
+    private final SlowMemory ram = new SlowMemory( "RAM" , new AddressRange(0,2*1024) ) {
+        
+        public void writeByte(int offset, byte value) 
+        {
+            int index = -1;
+            super.writeByte(offset,value);
+            switch( offset ) {
+                case 0x00:
+                case 0x06:
+                case 0x07:
+                    index = 0;
+                    break;
+                case 0x01:
+                case 0x08:
+                case 0x09:
+                    index = 1;
+                    break;
+                case 0x02:
+                case 0x0a:
+                case 0x0b:
+                    index = 2;
+                    break;      
+                case 0x03:
+                case 0x0c:
+                case 0x0d:
+                    index = 3;
+                    break;   
+                case 0x04:
+                case 0x0e:
+                case 0x0f:
+                    index = 4;
+                    break;      
+                case 0x05:
+                case 0x10:
+                case 0x11:
+                    index = 5;
+                    break;                       
+                default:
+                    return;
+            }
+            queueEntries[index].update( this );
+            System.out.println("JOB QUEUE #"+index+" changed: "+queueEntries[index]);
+        };
+    };
     private WriteOnceMemory rom1 = new WriteOnceMemory( "ROM" , ROM1_RANGE );
     private WriteOnceMemory rom2 = new WriteOnceMemory( "ROM" , ROM2_RANGE );
 
+    private final JobQueue[] queueEntries = new JobQueue[6];
     private final CPU cpu = new CPU( this );
     private final CPUImpl cpuImpl = new CPUImpl( cpu , this );
 
@@ -150,6 +195,10 @@ public class DiskDrive extends IMemoryRegion
     public DiskDrive(int driveAddress) 
     {
         super("1541", AddressRange.range(0,0xffff) );
+        
+        for ( int i = 0 ; i < queueEntries.length ; i++ ) {
+            queueEntries[i]=new JobQueue(i);
+        }
         this.hardware = new DiskHardware(this,busController,diskController, driveAddress);
 
         memoryMap = new IMemoryRegion[65536];
@@ -317,5 +366,118 @@ public class DiskDrive extends IMemoryRegion
 
     public CPU getCPU() {
         return cpu;
+    }
+
+    
+    public static enum JobStatus 
+    {
+        /*
+     |  $80  | READ    | Read sector                   |
+     |  $90  | WRITE   | Write sector (includes $A0)   |
+     |  $A0  | VERIFY  | Verify sector                 |
+     |  $B0  | SEEK    | Find sector                   |
+     |  $C0  | BUMP    | Bump, Find track 1            |
+     |  $D0  | JUMP    | Execute program in buffer     |
+     |  $E0  | EXECUTE | Execute program, first switch |
+     |       |         | drive on and find track       |         
+     
+     | $01  | Everything OK                  | 00, OK               |
+     | $02  | Header block not found         | 20, READ ERROR       |
+     | $03  | SYNC not found                 | 21, READ ERROR       |
+     | $04  | Data block not found           | 22, READ ERROR       |
+     | $05  | Checksum error in data block   | 23, READ ERROR       |
+     | $07  | Verify error                   | 25, WRITE ERROR      |
+     | $08  | Disk write protected           | 26, WRITE PROTECT ON |
+     | $09  | Checksum error in header block | 27, READ ERROR       |
+     | $0B  | Id mismatch                    | 29, DISK ID MISMATCH |
+     | $0F  | Disk not inserted              | 74, DRIVE NOT READY  |     
+         */
+        IDLE(0x00),
+        READ    (0x80),
+        WRITE   (0x90),
+        VERIFY  (0xA0),
+        SEEK    (0xB0),
+        BUMP    (0xC0),
+        JUMP    (0xD0),
+        EXECUTE (0xE0),
+        UNKNOWN(0xE1), // not used by 1541, just my internal marker        
+        // error codes
+        STATUS_OK(0x01),
+        STATUS_HDR_BLOCK_NOT_FOUND(0x02),
+        STATUS_SYNC_NOT_FOUND(0x03),
+        STATUS_DATA_BLOCK_NOT_FOUND(0x04),
+        STATUS_CHECKSUM_ERR_IN_DATA_BLOCK(0x05),
+        STATUS_VERIFY_ERROR(0x07),
+        STATUS_DISK_WRITE_PROTECTED(0x08),
+        STATUS_CHECKSUM_ERR_IN_HEADER_BLOCK(0x09),
+        STATUS_ID_MISMATCH(0x0b),
+        STATUS_NO_DISK(0x0f);
+        
+        private int code;
+        
+        private JobStatus(int code) {
+            this.code = code;
+        }
+        
+        public boolean isError() 
+        {
+            return this != IDLE && (code & 0b1000_0000) == 0;
+        }
+        
+        public boolean isIdle() {
+            return this == IDLE;
+        }
+        
+        public static JobStatus fromCode(int code) {
+            for ( JobStatus s : values() ) {
+                if ( s.code == code ) {
+                    return s;
+                }
+            }
+            return JobStatus.UNKNOWN;
+        }
+    }
+    
+    public static final class JobQueue {
+        
+        public final int index;
+        public JobStatus status = JobStatus.IDLE;
+        public int track;
+        public int sector;
+        
+        public JobQueue(int index) {
+            this.index = index;
+        }
+
+        public boolean update(IMemoryRegion region) 
+        {
+            JobStatus newStatus = JobStatus.fromCode( region.readByte( index ) );
+            int newTrack  = region.readByte( 0x06 + index*2 );
+            int newSector = region.readByte( 0x07 + index*2 );
+            boolean changed = newStatus != status || newTrack != track || newSector != sector;
+            this.status = newStatus;
+            this.track = newTrack;
+            this.sector = newSector;
+            return changed;
+        }
+        
+        public void copyTo(JobQueue other) 
+        {
+            if (other.index != this.index ) {
+                throw new IllegalArgumentException("Queue index mismatch: "+this.index+" <-> "+other.index);
+            }
+            other.status = this.status;
+            other.track = this.track;
+            other.sector = this.sector;
+        }
+        
+        @Override
+        public String toString() {
+            return status.name()+" - track "+track+" , sector "+sector;
+        }        
+    }
+    
+    public JobQueue[] getQueueEntries() {
+        return queueEntries;
     }
 }

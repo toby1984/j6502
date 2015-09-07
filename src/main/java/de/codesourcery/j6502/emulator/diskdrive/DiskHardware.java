@@ -6,6 +6,7 @@ import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.G64File;
+import de.codesourcery.j6502.emulator.G64File.GCRDecodingException;
 import de.codesourcery.j6502.emulator.G64File.TrackData;
 import de.codesourcery.j6502.emulator.IECBus;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
@@ -13,22 +14,20 @@ import de.codesourcery.j6502.emulator.SerialDevice;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.Port;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.PortName;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.VIAChangeListener;
+import de.codesourcery.j6502.utils.BitOutputStream;
 import de.codesourcery.j6502.utils.BitStream;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class DiskHardware implements SerialDevice
 {
-    /*
-     * Stepper motor moves in 1.8° increments = 200 steps for 360°
-     */
-    protected static final int STEPS_PER_FULL_ROTATION = 200;
-
     public static final boolean DEBUG = false;
+    
+    public static final boolean PRINT_HEADER_BLOCKS = false;
 
-    protected static final int SPEED00_CYCLES_PER_BYTE = 32;
-    protected static final int SPEED01_CYCLES_PER_BYTE = 30;
-    protected static final int SPEED10_CYCLES_PER_BYTE = 28;
-    protected static final int SPEED11_CYCLES_PER_BYTE = 26;
+    protected static final int SPEED00_CYCLES_PER_BYTE = 32*2;
+    protected static final int SPEED01_CYCLES_PER_BYTE = 30*2;
+    protected static final int SPEED10_CYCLES_PER_BYTE = 28*2;
+    protected static final int SPEED11_CYCLES_PER_BYTE = 26*2;
 
     public abstract class DriveMode
     {
@@ -63,9 +62,6 @@ public class DiskHardware implements SerialDevice
     {
         private int oneBits=0;
 
-        private int bytesAccepted;
-        private int bytesRejected;
-
         private SyncMode syncState = SyncMode.WAIT_FOR_SYNC;
 
         private void syncFound() {
@@ -76,20 +72,14 @@ public class DiskHardware implements SerialDevice
             via2.getPortB().setInputPin(7, true ); // no sync found (PB7 expects INVERTED signal !!)
         }        
 
-        public void trackChanged() 
-        {
-            noSyncFound();
-            oneBits = 0;
-            syncState = SyncMode.WAIT_FOR_SYNC;
-        }
-
         private void byteNotReady() {
             via2.getPortB().setControlLine1( false , false ); // byte not ready
         }
 
-        private void byteReady() 
+        private boolean byteReady() 
         {
 
+            final boolean byteLost = cpu.isSet( Flag.OVERFLOW );
             cpu.setFlag( Flag.OVERFLOW ); // byte ready
 
             /* Das Byte Ready Signal kann nur mit SOE abgestellt werden,ansonsten kommt es regelmässig nach 8 Bits.
@@ -100,19 +90,16 @@ public class DiskHardware implements SerialDevice
 
             if ( via2.getPortA().getControlLine2() ) // Trigger byte read signal ?
             {
-                if ( DEBUG && (( ++bytesAccepted) % 10000) == 0 ) {
-                    System.out.println(">> Byte ready <<");
-                }
                 via2.getPortB().setControlLine1( true , false ); // byte ready
-            } else {
-                if ( DEBUG && (( ++bytesRejected) % 10000) == 0 ) {
-                    System.out.println(">> Byte sync not enabled <<");
-                }
-            }             
+            }            
+            return byteLost;
         }
         
+        
+        private final BitOutputStream bitOut = new BitOutputStream();
+        private BitStream bitIn;
         private int bytesToPrint = -1;
-
+        
         @Override
         public void processByte()
         {
@@ -136,7 +123,10 @@ public class DiskHardware implements SerialDevice
                     oneBits = 0;
                     if ( syncState == SyncMode.READING_SYNC )
                     {
-//                        System.out.println("*** SYNC ***");
+                        if ( PRINT_HEADER_BLOCKS ) {
+                            System.out.print("*** SYNC ***");
+                        }
+                        bitOut.clear();
                         bytesToPrint = 10;
                         syncFound();
                         syncState = SyncMode.READING_DATA;
@@ -151,21 +141,64 @@ public class DiskHardware implements SerialDevice
                 }
             }          
 
-//            if ( bytesToPrint > 0 ) {
-//                System.out.print( "0x"+HexDump.toHex( (byte) value )+" , " );
-//                bytesToPrint--;
-//            }
+            if ( PRINT_HEADER_BLOCKS && bytesToPrint > 0 )
+            {
+                bitOut.writeByte( (byte) value );
+                bytesToPrint--;
+                if ( bytesToPrint == 0 ) 
+                {
+                    final byte[] data = bitOut.toByteArray();
+                    System.out.print("ENCODED: ");
+                    for ( byte b : data ) {
+                        System.out.print( HexDump.toHex( b ) +" , ");
+                    }
+                    final byte[] expected = new byte[] {0x52 , 0x57 , 0x25 , 0x4d , 0x6b};
+                    boolean match = true;
+                    for ( int i = 0 ; i < expected.length ; i++ ) {
+                        if ( data[i] != expected[i] ) 
+                        {
+                            match = false;
+                            break;
+                        }
+                    }
+                    System.out.println();
+                    if ( match ) {
+                        diskDrive.getCPU().setHardwareBreakpoint();
+                    }
+                    try {
+                        final byte[] decoded = G64File.gcrDecode( new BitStream( data ) );
+                        if ( decoded[0] == 0x08 ) {
+                            for ( int i = 0 ; i < decoded.length ; i++ ) {
+                                System.out.print( HexDump.toHex( decoded[i] ) +" , ");
+                            }
+                        }
+                    } catch(GCRDecodingException e) {
+                        System.err.println("Decoding failed");
+                    }
+                    System.out.println();
+                }
+            }
             via2.getPortA().setInputPins( value );
 
-            byteReady();
+            if ( ! byteReady() ) {
+                System.out.println("Byte lost: "+HexDump.toHex( (byte) value ) );
+            }
         }
+        
+        public void trackChanged() 
+        {
+            noSyncFound();
+            byteNotReady();
+            oneBits = 0;
+            syncState = SyncMode.WAIT_FOR_SYNC;
+            bytesToPrint = -1;
+        }        
 
         @Override
         public void onEnterHook()
         {
             oneBits = 0;
             syncState = SyncMode.WAIT_FOR_SYNC;
-            bytesAccepted = bytesRejected = 0;
         }
     }
 
@@ -212,19 +245,20 @@ public class DiskHardware implements SerialDevice
         TO_TRACK_1(-0.5f) , 
         TO_TRACK_35(0.5f), 
         NONE(0);
-        
+
         private final float inc;
-        
+
         private HeadMovement(float inc) { this.inc = inc; }
-        
+
         public float move(float currentPos) {
             return currentPos+inc;
         }
     }
-    
+
     private HeadMovement headMovement=HeadMovement.NONE;
     private int stepCounter;
-    private int previousStepMotorCycle;
+    private int previousStepMotorCycle=3;
+    private boolean warmupFinished = false;
 
     private DriveMode driveMode = READ;
 
@@ -463,8 +497,8 @@ public class DiskHardware implements SerialDevice
          * PA0...8 - (IN/OUT) Read data/Write data
          *
          *
-         * PB0 - (OUT) Step 1  |   Sequence 00/01/10/11/00... moves inwards      |
-         * PB1 - (OUT) Step 0  |   Sequence 00/11/10/01/00... moves outwards     |
+         * PB0 - (OUT) Step 1  |   Sequence 00/01/10/11/00... moves inwards (towards track 35)      |
+         * PB1 - (OUT) Step 0  |   Sequence 00/11/10/01/00... moves outwards (towards track 1)    |
          * PB2 - (OUT) Drive motor AND Step Motor on/off
          * PB3 - (OUT) LED
          * PB4 - (INT) Write-protect
@@ -494,18 +528,15 @@ public class DiskHardware implements SerialDevice
                 final boolean oldLedState = DiskHardware.this.driveLED; 
                 boolean newLedState = (value & 0b0000_1000) != 0;
                 DiskHardware.this.driveLED = newLedState;      
-                
-                final boolean oldState = DiskHardware.this.motorsRunning; 
+
+                final boolean oldMotor = DiskHardware.this.motorsRunning; 
                 final boolean newState = (value & 0b0000_0100) != 0;
                 DiskHardware.this.motorsRunning = newState;
-//                if ( oldState != newState || oldLedState != newLedState ) 
-//                {
-//                    DiskHardware.this.cpu.setHardwareBreakpoint();
-//                }
 
-//                System.out.println("VIA #2 port B changed to "+HexDump.toBinaryString( (byte) value )+"\n"
-//                        + " motor on: "+motorsRunning 
-//                        +"\nLED on: "+driveLED);
+                if ( oldMotor && ! newState ) {
+                    warmupFinished = false;
+                    previousStepMotorCycle = 3;
+                }
 
                 final int speed = value & 0b0110_0000;
 
@@ -530,36 +561,47 @@ public class DiskHardware implements SerialDevice
 
                 if ( newCyclesPerByte != cyclesPerByte ) 
                 {
-                    System.out.println("Read/write bit-rate changed to "+speed);
+                    System.out.println("Read/write bit-rate changed to "+newCyclesPerByte+" cycles/byte");
                 }
                 cyclesPerByte = newCyclesPerByte;
 
                 /*
-                 *  PB0 - (OUT) Step 1  |   Sequence 00/01/10/11/00... moves inwards      |
-                 *  PB1 - (OUT) Step 0  |   Sequence 00/11/10/01/00... moves outwards     |
+                 * PB0 - (OUT) Step 1  |   Sequence 00/01/10/11/00... moves inwards (towards track 35)      |
+                 * PB1 - (OUT) Step 0  |   Sequence 00/11/10/01/00... moves outwards (towards track 1)    |
                  */
                 int step = value & 0b11;
                 if ( step != previousStepMotorCycle && motorsRunning )
                 {
-                    if ( previousStepMotorCycle == 0 ) {
-                        headMovement = step == 3 ? HeadMovement.TO_TRACK_1 : HeadMovement.TO_TRACK_35;
-                        System.out.println("Head direction: "+headMovement);
-                    }
-                    
-                    stepCounter++;
-                    System.out.println("STEP: "+step+" ("+stepCounter+")");
+                    System.out.println("STEP: "+previousStepMotorCycle+" -> "+step+" ("+stepCounter+") , warmup: "+warmupFinished);
 
-                    // TODO: Stepper motor does 1.8° degrees per step , this code should operate on this assumption
-                    if ( stepCounter == 1 )  
-                    { 
-                        stepCounter = 0;
-                        float newTrack = headMovement.move( headPosition );
-                        if ( newTrack < 1.0f ) {
-                            newTrack = 1f;
-                        } else if ( newTrack > 41.5f ) {
-                            newTrack = 41.5f;
+                    if ( previousStepMotorCycle == 0 ) 
+                    {
+                        headMovement = step == 3 ? HeadMovement.TO_TRACK_1 : HeadMovement.TO_TRACK_35;
+                        warmupFinished = true;
+                        System.out.println("Head direction: "+headMovement);
+                    } else if ( step > previousStepMotorCycle ){
+                        headMovement = HeadMovement.TO_TRACK_35;
+                    } else {
+                        headMovement = HeadMovement.TO_TRACK_1;
+                    }
+
+                    if ( warmupFinished ) 
+                    {
+                        stepCounter++;
+
+                        if ( stepCounter == 1 )  
+                        { 
+                            stepCounter = 0;
+                            float newTrack = headMovement.move( headPosition );
+                            if ( newTrack < 1.0f ) {
+                                newTrack = 1f;
+                            } else if ( newTrack > 41.5f ) {
+                                newTrack = 41.5f;
+                            }
+                            if ( newTrack != headPosition ) {
+                                setTrack( newTrack );
+                            }
                         }
-                        setTrack( newTrack );
                     }
                 }
                 previousStepMotorCycle = step;                
@@ -594,7 +636,7 @@ public class DiskHardware implements SerialDevice
         via1.setChangeListener( via1Listener );
         via2.setChangeListener( via2Listener );
     }
-
+    
     @Override
     public void reset()
     {
@@ -610,10 +652,11 @@ public class DiskHardware implements SerialDevice
         writeProtectOn = true; // TODO: Set to 'false' once writing to disk is enabled
 
         stepCounter = 0;
-        previousStepMotorCycle = 0;
+        warmupFinished = false;
+        previousStepMotorCycle = 3;
         headPosition = 18f;
         headMovement = HeadMovement.NONE;
-        
+
         cyclesPerByte = SPEED10_CYCLES_PER_BYTE; // default speed for track #18
 
         // setup VIA1 inputs
@@ -742,8 +785,8 @@ public class DiskHardware implements SerialDevice
 
         final boolean atnXor= ( via1.getPortB().getPin(7) ^ via1.getPortB().getPin(4) );
         portB.setInputPin( 0 , newData | atnXor );
-        
-//        portB.setInputPin( 0 , newData );
+
+        //        portB.setInputPin( 0 , newData );
         portB.setInputPin( 2 , newClk );
 
         portB.setInputPin( 7 , newATN );
@@ -753,7 +796,7 @@ public class DiskHardware implements SerialDevice
 
         this.via1.tick();
         this.via2.tick();
-        
+
         if ( ! diskDrive.executeOneCPUCycle() ) {
             emulator.hardwareBreakpointReached();
         }        
