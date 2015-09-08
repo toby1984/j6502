@@ -1,6 +1,5 @@
 package de.codesourcery.j6502.emulator;
 
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 import de.codesourcery.j6502.disassembler.Disassembler;
@@ -8,7 +7,7 @@ import de.codesourcery.j6502.disassembler.Disassembler.Line;
 
 public class Emulator
 {
-    public static final boolean TRACK_TOTAL_CYCLES = true;
+    public static final boolean TRACK_TOTAL_CYCLES = false;
     
 	protected static final boolean PRINT_CURRENT_INS = false;
 
@@ -90,11 +89,7 @@ public class Emulator
 		/*
 		 * Second (high) half of clock cycle.
 		 */
-		if ( this.cpu.cycles > 0 ) // wait until current command has 'finished' executing
-		{
-			this.cpu.cycles--;
-		}
-		else
+		if ( --this.cpu.cycles == 0 ) // wait until current command has 'finished' executing
 		{
 			this.cpu.handleInterrupt();
 			

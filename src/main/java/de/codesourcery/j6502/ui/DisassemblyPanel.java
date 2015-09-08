@@ -29,7 +29,7 @@ import de.codesourcery.j6502.ui.Debugger.LineWithBounds;
 
 public abstract class DisassemblyPanel extends BufferedView implements WindowLocationHelper.IDebuggerView , IBreakpointLister
 {
-    private final Disassembler dis = new Disassembler().setAnnotate(true).setPrintCycleTimings( true );
+    private final Disassembler dis = new Disassembler().setAnnotate(true);// .setPrintCycleTimings( true );
 
     protected final Short TRACK_CURRENT_PC = Short.valueOf( (short) 0xdead ); // dummy value, any will do since doRefresh() just checks for != NULL
 

@@ -212,7 +212,7 @@ public class CPU
 	    breakOnInterrupt = false;
 	    hwBreakpointReached = false;
 	    
-		cycles = 0;
+		cycles = 1;
 		
 		pc = memory.readWord( RESET_VECTOR_LOCATION );
 		System.out.println("RESET: PC of CPU "+this.memory+" now points to "+HexDump.toAdr( pc ) );

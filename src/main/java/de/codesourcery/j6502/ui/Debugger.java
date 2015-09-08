@@ -691,6 +691,7 @@ public class Debugger
 		public final JButton resetButton = new JButton("Reset");
 		public final JButton stepOverButton = new JButton("Step over");
 		public final JButton loadButton = new JButton("Load");
+		public final JButton toggleSpeedButton = new JButton("Toggle speed");
 		public final JButton refreshUIButton = new JButton("Refresh UI");
 
 		private Component peer;
@@ -826,6 +827,20 @@ public class Debugger
 			    getBreakPointsController().stepReturn( getMemory(), getCPU() );
 			    driver.setMode( Mode.CONTINOUS );
 			});
+			
+			final boolean[] trueSpeed = {true};
+			driver.setTrueSpeed();
+			
+			toggleSpeedButton.addActionListener( ev -> 
+			{
+			    if ( trueSpeed[0] ) {
+			        driver.setMaxSpeed();
+			    } else {
+			        driver.setTrueSpeed();
+			    }
+			    trueSpeed[0] = ! trueSpeed[0];
+			});
+			
 			refreshUIButton.addActionListener( ev ->
 			{
 				updateWindows( false );
@@ -843,6 +858,7 @@ public class Debugger
 			add( resetButton );
 			add( breakOnIRQButton );
 			add( loadButton );
+			add( toggleSpeedButton );
 			add( refreshUIButton );
 
 			updateButtons();
