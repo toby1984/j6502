@@ -10,19 +10,19 @@ This screenshot should explain it :)
 
 What's working:
 
-- 6502 assembler (supports local labels and expressions but no macros and currently no illegal opcodes)
-- 6502 disassembler (does not support illegal opcodes) 
-- CPU (most illegal opcodes are currently missing, preventing games like Blue max etc. from running)
-- CIA 
+- 6502 assembler (supports local labels and expressions but no macros and currently only a few illegal opcodes)
+- 6502 disassembler (supports all illegal opcodes) 
+- CPU including support for illegal opcodes
+- supports .d64 and .g64 files
+- true 1541 drive emulation
+- CIA 6526 
+- VIA 6522
 - VIC with sprites (regular & multi-color), raster IRQ and all valid text/graphics mode (regular/multi-color/extended-bg-color)
-- IEC bus-level emulation 
-- D64 file support
-- loading programs/directory from D64 file
 
 What's not working:
 
+- emulation currently chokes on most "sophisticated" code (demos, games later than 1984 ), needs debugging...
 - VIC implementation is very crude and doesn't respect the actual cycle timings (apart from the fact that each raster line takes 63 cycles to render => PAL VIC)
 - VIC currently does not trigger IRQ on sprite-sprite/sprite-background collisions
-- Writing/modifying D64 files is not implemented (and thus SAVE cannot work even if my floppy emulation had it implemented)
+- Writing to disks is currently not implemented
 - no SID
-- floppy only supports LOAD and nothing else (and even this will most likely not work for REL files etc. because my filesystem implementation is not dealing with those yet)
