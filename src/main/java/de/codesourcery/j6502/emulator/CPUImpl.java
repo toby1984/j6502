@@ -19,6 +19,8 @@ import de.codesourcery.j6502.utils.HexDump;
  */
 public final class CPUImpl
 {
+    protected static final boolean TRACK_INS_DURATION = true;
+    
 	protected IMemoryRegion memory;
 	protected CPU cpu;
 
@@ -1034,11 +1036,24 @@ public final class CPUImpl
 		adrModeTable[opcode].run();
 		optable[opcode].run();
 
-		cpu.cycles += TICK_TABLE[opcode];
-
-		if (penaltyop && penaltyaddr)
+		if ( TRACK_INS_DURATION ) 
 		{
-			cpu.cycles++;
+		    int tmp = TICK_TABLE[opcode];
+		    if (penaltyop && penaltyaddr)
+		    {
+		        tmp++;
+		    }
+		    cpu.lastInsDuration = tmp;
+	        cpu.cycles += tmp;
+		} 
+		else 
+		{
+		    cpu.cycles += TICK_TABLE[opcode];
+
+    		if (penaltyop && penaltyaddr)
+    		{
+    			cpu.cycles++;
+    		}
 		}
 
 		cpu.previousPC = (short) initialPC;
@@ -1051,6 +1066,7 @@ public final class CPUImpl
 		public int availableBytes();
 		public void mark();
 		public int getMark();
+		public int currentOffset();
 		public int toAbsoluteAddress(int relativeAddress);
 	}
 
@@ -1064,7 +1080,7 @@ public final class CPUImpl
 		if ( provider.availableBytes() >= 1 )
 		{
 			byte offset = (byte) provider.readByte();
-			return toWordString( provider.toAbsoluteAddress( offset+2 ) ); // +2 bytes for opcode + branch distance byte
+			return toWordString( provider.toAbsoluteAddress( offset+2 ) & 0xffff ); // +2 bytes for opcode + branch distance byte
 		}
 		return "< 1 byte missing >";
 	};
@@ -1084,17 +1100,32 @@ public final class CPUImpl
 	protected static final  InstructionPrinter pimp  = provider -> "";
 	protected static final  InstructionPrinter pind  = provider -> "("+toWordString(provider)+")";
 
-	public boolean disassemble( StringBuilder buffer , String separator,ByteProvider byteProvider)
+	public boolean disassemble(  StringBuilder operandBuffer,StringBuilder argsBuffer , ByteProvider byteProvider)
 	{
 		if ( byteProvider.availableBytes() > 0 )
 		{
 			final int op = byteProvider.readByte() & 0xff;
 			final String mnemonic = MNEMONICS_TABLE[ op ];
 			final String operand = getInstructionPrinter( op ).getOperand( byteProvider );
-			buffer.append( mnemonic ).append( separator ).append( operand );
+			
+            operandBuffer.append( mnemonic );
+            argsBuffer.append( operand );
 		}
 		return byteProvider.availableBytes()>0;
 	}
+	
+    public boolean disassembleWithCycleTiming( StringBuilder operandBuffer,StringBuilder argsBuffer , ByteProvider byteProvider)
+    {
+        if ( byteProvider.availableBytes() > 0 )
+        {
+            final int op = byteProvider.readByte() & 0xff;
+            final String mnemonic = MNEMONICS_TABLE[ op ];
+            final String operand = getInstructionPrinter( op ).getOperand( byteProvider );
+            operandBuffer.append("[").append( getMinimumCycles( op ) ).append("] ").append( mnemonic );
+            argsBuffer.append( operand );
+        }
+        return byteProvider.availableBytes()>0;
+    }	
 
 	private InstructionPrinter getInstructionPrinter(int opcode)
 	{
@@ -1263,6 +1294,10 @@ public final class CPUImpl
 					/* F */      2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7   /* F */
 			};
 
+	public static int getMinimumCycles(int opcode) {
+	    return TICK_TABLE[ opcode ];
+	}
+	
 	public static void main(String[] args) {
 
 		final Set<String> mnemonics = Arrays.stream( MNEMONICS_TABLE ).collect( Collectors.toSet() );

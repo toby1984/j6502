@@ -29,6 +29,8 @@ public class CPU
 	private int y;
 	public short sp;
 	
+	public int lastInsDuration;
+	
 	private boolean breakOnInterrupt;
 	private boolean hwBreakpointReached;
 
@@ -205,6 +207,8 @@ public class CPU
 
 	public void reset()
 	{
+	    lastInsDuration = 0;
+	    
 	    breakOnInterrupt = false;
 	    hwBreakpointReached = false;
 	    

@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.emulator;
 
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 import de.codesourcery.j6502.disassembler.Disassembler;
@@ -7,12 +8,16 @@ import de.codesourcery.j6502.disassembler.Disassembler.Line;
 
 public class Emulator
 {
+    public static final boolean TRACK_TOTAL_CYCLES = true;
+    
 	protected static final boolean PRINT_CURRENT_INS = false;
 
 	protected static final boolean PRINT_DISASSEMBLY = false;
 
 	protected static final String EMPTY_STRING = "";
 
+	public static long totalCycles;
+	
 	private final MemorySubsystem memory = new MemorySubsystem();
 	private final CPU cpu = new CPU( this.memory );
 
@@ -65,6 +70,8 @@ public class Emulator
 
 		// reset CPU, will initialize PC from RESET_VECTOR_LOCATION
 		cpu.reset();
+		
+		totalCycles = 0;
 	}
 
 	public void doOneCycle(EmulatorDriver driver)
@@ -89,7 +96,6 @@ public class Emulator
 		}
 		else
 		{
-
 			this.cpu.handleInterrupt();
 			
 			if ( PRINT_DISASSEMBLY )
@@ -127,6 +133,10 @@ public class Emulator
             hwBreakpointReached = false;
             driver.hardwareBreakpointReached();
         }		
+        
+        if ( TRACK_TOTAL_CYCLES ) {
+            totalCycles++;
+        }
 	}
 
 	public KeyboardBuffer getKeyboardBuffer() {

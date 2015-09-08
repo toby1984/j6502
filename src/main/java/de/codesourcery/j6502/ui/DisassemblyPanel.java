@@ -26,11 +26,10 @@ import de.codesourcery.j6502.emulator.BreakpointsController.IBreakpointLister;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.ui.Debugger.LineWithBounds;
-import de.codesourcery.j6502.utils.HexDump;
 
 public abstract class DisassemblyPanel extends BufferedView implements WindowLocationHelper.IDebuggerView , IBreakpointLister
 {
-    private final Disassembler dis = new Disassembler().setAnnotate(true);
+    private final Disassembler dis = new Disassembler().setAnnotate(true).setPrintCycleTimings( true );
 
     protected final Short TRACK_CURRENT_PC = Short.valueOf( (short) 0xdead ); // dummy value, any will do since doRefresh() just checks for != NULL
 
@@ -219,7 +218,6 @@ public abstract class DisassemblyPanel extends BufferedView implements WindowLoc
 
     public void setAddress(short adr,Short addressToMark)
     {
-        System.out.println("Disassembling starts @ "+HexDump.toAdr( adr ) );
         internalSetAddress(adr, addressToMark);
 
         doRefresh();
