@@ -26,18 +26,6 @@ import sun.misc.IOUtils;
 @SuppressWarnings("restriction")
 public class DisassemblerTest extends TestCase {
 
-	public void testSTX1()
-	{
-		final byte[] data = new byte[] { (byte) 0x9e ,0x1c ,(byte) 0x91 , 0x12 };
-		final Disassembler dis = new Disassembler();
-		final StringBuilder buffer = new StringBuilder();
-		dis.disassemble( 0 , data , 0 , 4 ).forEach( line -> buffer.append( line.toString()+"\n" ) );
-		final String expected = "0000:  .byte $9e\n" +
-				"0001:  .byte $1c\n" +
-				"0002:  STA   ($12) , Y\n";
-		assertEquals( expected , buffer.toString());
-	}
-
 	public void testBranchForward()
 	{
 		// BPL +10
@@ -72,16 +60,6 @@ public class DisassemblerTest extends TestCase {
 		final Disassembler dis = new Disassembler();
 		dis.setAnnotate( true );
 		dis.disassemble( 0xa000 , data , 0x38a , data.length-0x38a , new FileWriter("/tmp/basic.asm") );
-	}
-
-	public void testASLWithAccu() {
-
-		final byte[] data = new byte[] { (byte) 0x44  };
-		final Disassembler dis = new Disassembler();
-		final StringBuilder buffer = new StringBuilder();
-		dis.disassemble( 0 , data , 0 , 1 ).forEach( line -> buffer.append( line.toString()+"\n" ) );
-		final String expected = "0000:  .byte $44\n";
-		assertEquals( expected , buffer.toString());
 	}
 
 	public void testBVS() {
@@ -146,12 +124,58 @@ public class DisassemblerTest extends TestCase {
 
 	public void testSKW()
 	{
-		// 0C, 1C, 3C, 5C, 7C, DC, FC
-		final byte[] data = new byte[] { (byte) 0x0c };
+		final byte[] data = new byte[] { (byte) 0x0C, 0 , 0,
+				(byte) 0x1C, 0 , 0,
+				(byte) 0x3C, 0 , 0,
+				(byte) 0x5C, 0 , 0,
+				(byte) 0x7C, 0 , 0,
+				(byte) 0xDC, 0 , 0,
+				(byte) 0xFC, 0 , 0 };
+
 		final Disassembler dis = new Disassembler();
 		final StringBuilder buffer = new StringBuilder();
-		dis.disassemble( 0 , data , 0 , 1 ).forEach( line -> buffer.append( line.toString()+"\n" ) );
-		final String expected = "0000:  SKW\n";
+		dis.disassemble( 0 , data , 0 , data.length ).forEach( line -> buffer.append( line.toString()+"\n" ) );
+		final String expected = "0000:  SKW\n" +
+				"0003:  SKW\n" +
+				"0006:  SKW\n" +
+				"0009:  SKW\n" +
+				"000c:  SKW\n" +
+				"000f:  SKW\n" +
+				"0012:  SKW\n";
+		assertEquals( expected , buffer.toString());
+	}
+
+	public void testSKB()
+	{
+		final byte[] data = new byte[] { (byte) 0x80,0,
+				(byte) 0x82,0,
+				(byte) 0xC2,0,
+				(byte) 0xE2,0,
+				(byte) 0x04,0,
+				(byte) 0x14,0,
+				(byte) 0x34,0,
+				(byte) 0x44,0,
+				(byte) 0x54,0,
+				(byte) 0x64,0,
+				(byte) 0x74,0,
+				(byte) 0xD4,0,
+				(byte) 0xF4,0 };
+		final Disassembler dis = new Disassembler();
+		final StringBuilder buffer = new StringBuilder();
+		dis.disassemble( 0 , data , 0 , data.length ).forEach( line -> buffer.append( line.toString()+"\n" ) );
+		final String expected = "0000:  SKB\n" +
+				"0002:  SKB\n" +
+				"0004:  SKB\n" +
+				"0006:  SKB\n" +
+				"0008:  SKB\n" +
+				"000a:  SKB\n" +
+				"000c:  SKB\n" +
+				"000e:  SKB\n" +
+				"0010:  SKB\n" +
+				"0012:  SKB\n" +
+				"0014:  SKB\n" +
+				"0016:  SKB\n" +
+				"0018:  SKB\n";
 		assertEquals( expected , buffer.toString());
 	}
 
@@ -196,38 +220,13 @@ public class DisassemblerTest extends TestCase {
 		assertEquals( expected , buffer.toString());
 	}
 
-	public void testUnknownOp() {
-		// JMP   ($9d77)   ; 0164:  7c 77 9d |w.
-		final byte[] data = new byte[] { (byte) 0x7c, (byte) 0x77, (byte) 0x9d };
-		final Disassembler dis = new Disassembler();
-		final StringBuilder buffer = new StringBuilder();
-		dis.disassemble( 0 , data , 0 , 3 ).forEach( line -> buffer.append( line.toString()+"\n" ) );
-		final String expected = "0000:  .byte $7c\n" +
-				"0001:  .byte $77\n" +
-				"0002:  .byte $9d\n";
-		assertEquals( expected , buffer.toString());
-	}
-
-	public void testUnknownOp3() {
-		// JMP   ($fc0b)   ; 012c:  64 0b fc d..
-		final byte[] data = new byte[] { (byte) 0x64, (byte) 0x0b, (byte) 0xfc };
-		final Disassembler dis = new Disassembler();
-		final StringBuilder buffer = new StringBuilder();
-		dis.disassemble( 0 , data , 0 , 3 ).forEach( line -> buffer.append( line.toString()+"\n" ) );
-		final String expected = "0000:  .byte $64\n" +
-				"0001:  .byte $0b\n" +
-				"0002:  .byte $fc\n";
-		assertEquals( expected , buffer.toString());
-	}
-
 	public void testUnknownOp2() {
 		final byte[] data = new byte[] { (byte) 0x74, (byte) 0xc7, (byte) 0xf7 };
 		final Disassembler dis = new Disassembler();
 		final StringBuilder buffer = new StringBuilder();
 		dis.disassemble( 0 , data , 0 , 3 ).forEach( line -> buffer.append( line.toString()+"\n" ) );
-		final String expected = "0000:  .byte $74\n" +
-				"0001:  .byte $c7\n" +
-				"0002:  .byte $f7\n";
+		final String expected = "0000:  SKB\n" +
+				"0002:  ISB   < 1 byte missing> , X\n";
 		assertEquals( expected , buffer.toString());
 	}
 
