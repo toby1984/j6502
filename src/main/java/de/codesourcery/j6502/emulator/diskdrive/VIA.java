@@ -20,7 +20,7 @@ public class VIA extends Memory
 
     private static final boolean DEBUG_CLEAR_IRQ= false;
     
-    private static final boolean DEBUG_WRITE_PORT_B = true;
+    private static final boolean DEBUG_WRITE_PORT_B = false;
     
     protected static final int PORTB = 0x0000; // Data port B
     protected static final int PORTA = 0x0001; // Data port A

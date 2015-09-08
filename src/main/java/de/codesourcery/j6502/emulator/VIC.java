@@ -880,7 +880,7 @@ public class VIC extends SlowMemory
                 final int mask = ~value;
                 final int oldValue = super.readByte( VIC_IRQ_ACTIVE_BITS );
                 final int newValue = oldValue & mask;
-                System.out.println("VIC_IRQ_ACTIVE: "+HexDump.toBinaryString( (byte) oldValue )+" => "+HexDump.toBinaryString( (byte) newValue )+" (written: "+HexDump.toBinaryString( (byte) value));
+//                System.out.println("VIC_IRQ_ACTIVE: "+HexDump.toBinaryString( (byte) oldValue )+" => "+HexDump.toBinaryString( (byte) newValue )+" (written: "+HexDump.toBinaryString( (byte) value));
                 super.writeByte( VIC_IRQ_ACTIVE_BITS , (byte) newValue );
                 break;
             case VIC_IRQ_ENABLE_BITS:

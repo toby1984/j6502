@@ -19,7 +19,7 @@ public abstract class EmulatorDriver extends Thread
 
 	public volatile Throwable lastException;
 
-	public static final boolean PRINT_SPEED = false;
+	public static final boolean PRINT_SPEED = true;
 
 	public static enum Mode { SINGLE_STEP , CONTINOUS; }
 
@@ -49,7 +49,7 @@ public abstract class EmulatorDriver extends Thread
 	    public void emulationStopped(Throwable t,boolean stoppedOnBreakpoint);
 	}
 
-	protected static enum CmdType { START , STOP }
+	protected static enum CmdType { START , STOP , MAX_SPEED, TRUE_SPEED }
 
 	protected final class StopCmd extends Cmd
 	{
@@ -61,11 +61,25 @@ public abstract class EmulatorDriver extends Thread
 			this.stoppedAtBreakpoint = stoppedAtBreakpoint;
 		}
 	}
+	
+    protected final class TrueSpeedCommand extends Cmd 
+    {
+        public TrueSpeedCommand() {
+            super(CmdType.TRUE_SPEED, false );
+        }
+    }	
+	
+	protected final class MaxSpeedCommand extends Cmd {
+
+        public MaxSpeedCommand() {
+            super(CmdType.MAX_SPEED, false );
+        }
+	}
 
 	protected class Cmd
 	{
 		public final long id = CMD_ID.incrementAndGet();
-		private final CmdType type;
+		public final CmdType type;
 		private final boolean ackRequired;
 
 		public Cmd(CmdType type,boolean ackRequired) {
@@ -73,19 +87,23 @@ public abstract class EmulatorDriver extends Thread
 			this.ackRequired = ackRequired;
 		}
 
-		public boolean isAckRequired() {
+		public final boolean isAckRequired() {
 			return ackRequired;
 		}
 
-		public boolean isStartCmd() {
+		public final boolean isStartCmd() {
 			return this.type.equals( CmdType.START );
 		}
 
-		public boolean isStopCmd() {
+		public final boolean isStopCmd() {
 			return this.type.equals( CmdType.STOP );
 		}
+		
+		public final boolean hasType(CmdType t) {
+		    return this.type == t;
+		}
 
-		public void enqueue()
+		public final void enqueue()
 		{
 			try {
 				requestQueue.put( this );
@@ -94,7 +112,7 @@ public abstract class EmulatorDriver extends Thread
 			}
 		}
 
-		public void ack()
+		public final void ackIfNecessary()
 		{
 			if ( ackRequired ) {
 				try {
@@ -149,6 +167,14 @@ public abstract class EmulatorDriver extends Thread
 		sendCmd( cmd );
 	}
 	
+    public void setMaxSpeed() {
+        sendCmd( new MaxSpeedCommand() );
+    }
+    
+    public void setTrueSpeed() {
+        sendCmd( new TrueSpeedCommand() );
+    }    
+    
 	public void hardwareBreakpointReached() {
         final Cmd cmd = stopCommand(false,true);
         sendCmd( cmd );
@@ -215,6 +241,8 @@ public abstract class EmulatorDriver extends Thread
 		int delayIterationsCount=90;
 
 		boolean adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
+		
+		boolean runAtTrueSpeed = true;
 
 		Cmd cmd = null;
 		while( true )
@@ -224,12 +252,21 @@ public abstract class EmulatorDriver extends Thread
 				cmd = requestQueue.poll();
 				if ( cmd != null )
 				{
-					cmd.ack();
-					if ( cmd.isStopCmd() )
-					{
-						isRunnable = false;
-						continue;
-					}
+					cmd.ackIfNecessary();
+                    switch( cmd.type )
+                    {
+                        case MAX_SPEED:
+                            runAtTrueSpeed = false;
+                            break;
+                        case STOP:
+                            isRunnable = false;
+                            break;
+                        case TRUE_SPEED:
+                            runAtTrueSpeed = true;
+                            break;
+                        default:
+                            break;
+                    }
 				}
 			}
 			else
@@ -244,11 +281,21 @@ public abstract class EmulatorDriver extends Thread
 					try
 					{
 						cmd = requestQueue.take();
-						cmd.ack();
+						cmd.ackIfNecessary();
 
-						if ( cmd.isStartCmd() )
+						switch( cmd.type )
 						{
-							isRunnable = true;
+                            case MAX_SPEED:
+                                runAtTrueSpeed = false;
+                                break;
+                            case START:
+                                isRunnable = true;
+                                break;
+                            case TRUE_SPEED:
+                                runAtTrueSpeed = true;
+                                break;
+                            default:
+                                break;
 						}
 					} catch (final InterruptedException e) {
 						continue;
@@ -267,10 +314,11 @@ public abstract class EmulatorDriver extends Thread
 			{
 				try
 				{
-					// run at max. speed if floppy is transferring data
-					for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
-						dummy += Math.sqrt( i );
-					}
+				    if ( runAtTrueSpeed ) {
+				        for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
+				            dummy += Math.sqrt( i );
+				        }
+				    }
 
 					lastException = null;
 
@@ -305,7 +353,7 @@ public abstract class EmulatorDriver extends Thread
 				{
 					System.out.println("CPU frequency: "+khz+" kHz (delay iterations: "+delayIterationsCount+") "+dummy);
 				}
-				if ( adjustDelayLoop )
+				if ( adjustDelayLoop && runAtTrueSpeed )
 				{
     				if ( khz >= 1000 ) {
     				    delayIterationsCount++;
@@ -358,5 +406,5 @@ public abstract class EmulatorDriver extends Thread
         synchronized (listeners) {
             listeners.remove(l);
         }
-    }
+    }   
 }

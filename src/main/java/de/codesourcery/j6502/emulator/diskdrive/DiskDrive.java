@@ -1,9 +1,5 @@
 package de.codesourcery.j6502.emulator.diskdrive;
 
-import java.util.function.Consumer;
-
-import de.codesourcery.j6502.disassembler.Disassembler;
-import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.emulator.AddressRange;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPUImpl;
@@ -16,7 +12,7 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class DiskDrive extends IMemoryRegion 
 {
-    protected static final boolean PRINT_DISASSEMBLY = false;
+    protected static final boolean TRACK_JOBQUEUE = false;
 
     private static final int ROM_START1 = 0x8000;
     private static final int ROM_START2 = 0xc000;
@@ -24,50 +20,8 @@ public class DiskDrive extends IMemoryRegion
     private static final AddressRange ROM1_RANGE = AddressRange.range(ROM_START1,0xc000);
     private static final AddressRange ROM2_RANGE = AddressRange.range(ROM_START2,0xffff);
 
-    private final SlowMemory ram = new SlowMemory( "RAM" , new AddressRange(0,2*1024) ) {
-        
-        public void writeByte(int offset, byte value) 
-        {
-            int index = -1;
-            super.writeByte(offset,value);
-            switch( offset ) {
-                case 0x00:
-                case 0x06:
-                case 0x07:
-                    index = 0;
-                    break;
-                case 0x01:
-                case 0x08:
-                case 0x09:
-                    index = 1;
-                    break;
-                case 0x02:
-                case 0x0a:
-                case 0x0b:
-                    index = 2;
-                    break;      
-                case 0x03:
-                case 0x0c:
-                case 0x0d:
-                    index = 3;
-                    break;   
-                case 0x04:
-                case 0x0e:
-                case 0x0f:
-                    index = 4;
-                    break;      
-                case 0x05:
-                case 0x10:
-                case 0x11:
-                    index = 5;
-                    break;                       
-                default:
-                    return;
-            }
-            queueEntries[index].update( this );
-            System.out.println("JOB QUEUE #"+index+" changed: "+queueEntries[index]);
-        };
-    };
+    private final IMemoryRegion ram;
+
     private WriteOnceMemory rom1 = new WriteOnceMemory( "ROM" , ROM1_RANGE );
     private WriteOnceMemory rom2 = new WriteOnceMemory( "ROM" , ROM2_RANGE );
 
@@ -109,18 +63,18 @@ public class DiskDrive extends IMemoryRegion
     private final VIA diskController = new VIA("DiskController VIA 6522 #2", AddressRange.range( 0x1c00 , 0x1c10) , cpu ) {
 
         protected String getNamePortB(int bit) {
-         /*
-                  * PA0...8 - (IN/OUT) Read data/Write data 
-     * 
-     * PB0 - (OUT) Step 1  |   Sequence 00/01/10/11/00... moves inwards      | 
-     * PB1 - (OUT) Step 0  |   Sequence 00/11/10/01/00... moves outwards     | 
-     * PB2 - (OUT) Drive motor AND Step Motor on/off
-     * PB3 - (OUT) LED
-     * PB4 - (IN) Write-protect
-     * PB5 - (OUT) bitrate select A (??)
-     * PB6 - (OUT) bitrate select B (??)
-     * PB7 - (IN)  SYNC detected
-          */
+            /*
+             * PA0...8 - (IN/OUT) Read data/Write data 
+             * 
+             * PB0 - (OUT) Step 1  |   Sequence 00/01/10/11/00... moves inwards      | 
+             * PB1 - (OUT) Step 0  |   Sequence 00/11/10/01/00... moves outwards     | 
+             * PB2 - (OUT) Drive motor AND Step Motor on/off
+             * PB3 - (OUT) LED
+             * PB4 - (IN) Write-protect
+             * PB5 - (OUT) bitrate select A (??)
+             * PB6 - (OUT) bitrate select B (??)
+             * PB7 - (IN)  SYNC detected
+             */
             switch( bit ) {
                 case 0: return "Step #1 (OUT)";
                 case 1: return "Step #0 (OUT)";
@@ -166,7 +120,7 @@ public class DiskDrive extends IMemoryRegion
         public int readByte(int offset) {
             return 0;
         }
-        
+
         public int readByteNoSideEffects(int offset) {
             return 0;
         }
@@ -195,10 +149,12 @@ public class DiskDrive extends IMemoryRegion
     public DiskDrive(int driveAddress) 
     {
         super("1541", AddressRange.range(0,0xffff) );
-        
+
         for ( int i = 0 ; i < queueEntries.length ; i++ ) {
             queueEntries[i]=new JobQueue(i);
         }
+        
+        this.ram = createRAM();
         this.hardware = new DiskHardware(this,busController,diskController, driveAddress);
 
         memoryMap = new IMemoryRegion[65536];
@@ -232,6 +188,61 @@ public class DiskDrive extends IMemoryRegion
                 memoryMap[i] = nonExistant;
             }
         }
+
+
+    }
+
+    private IMemoryRegion createRAM() 
+    {
+        final AddressRange adrRange = new AddressRange(0,2*1024);
+        if ( ! TRACK_JOBQUEUE ) 
+        {
+            return new Memory( "RAM" , adrRange );
+        }
+        return new SlowMemory( "RAM" , adrRange ) {
+
+            public void writeByte(int offset, byte value) 
+            {
+                super.writeByte(offset,value);
+                int index = -1;
+                switch( offset ) {
+                    case 0x00:
+                    case 0x06:
+                    case 0x07:
+                        index = 0;
+                        break;
+                    case 0x01:
+                    case 0x08:
+                    case 0x09:
+                        index = 1;
+                        break;
+                    case 0x02:
+                    case 0x0a:
+                    case 0x0b:
+                        index = 2;
+                        break;      
+                    case 0x03:
+                    case 0x0c:
+                    case 0x0d:
+                        index = 3;
+                        break;   
+                    case 0x04:
+                    case 0x0e:
+                    case 0x0f:
+                        index = 4;
+                        break;      
+                    case 0x05:
+                    case 0x10:
+                    case 0x11:
+                        index = 5;
+                        break;                       
+                    default:
+                        return;
+                }
+                queueEntries[index].update( this );
+                System.out.println("JOB QUEUE #"+index+" changed: "+queueEntries[index]);
+            };
+        };
     }
 
     @Override
@@ -258,42 +269,12 @@ public class DiskDrive extends IMemoryRegion
      */
     public boolean executeOneCPUCycle()
     {
-        if ( cpu.cycles > 0 ) // wait until current command has 'finished' executing
-        {
-            cpu.cycles--;
-        }
-        else
+        if ( --cpu.cycles == 0 ) // wait until current command has 'finished' executing
         {
             cpu.handleInterrupt();
 
-            if ( PRINT_DISASSEMBLY )
-            {
-                System.out.println("=====================");
-                final Disassembler dis = new Disassembler();
-                dis.setAnnotate( true );
-                dis.setWriteAddresses( true );
-                dis.disassemble( this , cpu.pc() , 3 , new Consumer<Line>()
-                {
-                    private boolean linePrinted = false;
-
-                    @Override
-                    public void accept(Line line)
-                    {
-                        if ( ! linePrinted ) {
-                            System.out.println( line );
-                            linePrinted = true;
-                        }
-                    }
-                });
-            }
-
             cpuImpl.executeInstruction();
-
-            if ( PRINT_DISASSEMBLY ) {
-                System.out.println( cpu );
-            }
         }   
-        
         return cpu.isHardwareBreakpointReached() ? false:true; 
     }
 
@@ -304,7 +285,7 @@ public class DiskDrive extends IMemoryRegion
         final int translated = offset - region.getAddressRange().getStartAddress();
         return region.readByte( translated );
     }
-    
+
     @Override
     public int readByteNoSideEffects(int offset) {
         final IMemoryRegion region = memoryMap[offset];
@@ -368,7 +349,7 @@ public class DiskDrive extends IMemoryRegion
         return cpu;
     }
 
-    
+
     public static enum JobStatus 
     {
         /*
@@ -380,7 +361,7 @@ public class DiskDrive extends IMemoryRegion
      |  $D0  | JUMP    | Execute program in buffer     |
      |  $E0  | EXECUTE | Execute program, first switch |
      |       |         | drive on and find track       |         
-     
+
      | $01  | Everything OK                  | 00, OK               |
      | $02  | Header block not found         | 20, READ ERROR       |
      | $03  | SYNC not found                 | 21, READ ERROR       |
@@ -412,22 +393,22 @@ public class DiskDrive extends IMemoryRegion
         STATUS_CHECKSUM_ERR_IN_HEADER_BLOCK(0x09),
         STATUS_ID_MISMATCH(0x0b),
         STATUS_NO_DISK(0x0f);
-        
+
         private int code;
-        
+
         private JobStatus(int code) {
             this.code = code;
         }
-        
+
         public boolean isError() 
         {
             return this != IDLE && (code & 0b1000_0000) == 0;
         }
-        
+
         public boolean isIdle() {
             return this == IDLE;
         }
-        
+
         public static JobStatus fromCode(int code) {
             for ( JobStatus s : values() ) {
                 if ( s.code == code ) {
@@ -437,14 +418,14 @@ public class DiskDrive extends IMemoryRegion
             return JobStatus.UNKNOWN;
         }
     }
-    
+
     public static final class JobQueue {
-        
+
         public final int index;
         public JobStatus status = JobStatus.IDLE;
         public int track;
         public int sector;
-        
+
         public JobQueue(int index) {
             this.index = index;
         }
@@ -460,7 +441,7 @@ public class DiskDrive extends IMemoryRegion
             this.sector = newSector;
             return changed;
         }
-        
+
         public void copyTo(JobQueue other) 
         {
             if (other.index != this.index ) {
@@ -470,13 +451,13 @@ public class DiskDrive extends IMemoryRegion
             other.track = this.track;
             other.sector = this.sector;
         }
-        
+
         @Override
         public String toString() {
             return status.name()+" - track "+track+" , sector "+sector;
         }        
     }
-    
+
     public JobQueue[] getQueueEntries() {
         return queueEntries;
     }
