@@ -5,6 +5,8 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -22,6 +24,7 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.filechooser.FileFilter;
 
+import de.codesourcery.j6502.emulator.D64File;
 import de.codesourcery.j6502.emulator.G64File;
 import de.codesourcery.j6502.ui.G64ViewPanel.ViewMode;
 
@@ -56,7 +59,7 @@ public class G64Viewer extends JPanel
             }
         });
     }
-    
+
     public static void show(final G64File file) throws InvocationTargetException, InterruptedException 
     {
         SwingUtilities.invokeAndWait( () ->
@@ -156,57 +159,81 @@ public class G64Viewer extends JPanel
         add( viewerPanel , cnstrs );
     }
 
-	private void saveDisk()
-	{
-		if ( viewerPanel.getDisk() == null ) {
-			return;
-		}
-		final JFileChooser chooser = new JFileChooser();
-		if ( lastSavedFile != null ) {
-			chooser.setSelectedFile( lastSavedFile );
-		}
-		if ( chooser.showSaveDialog( null ) == JFileChooser.APPROVE_OPTION )
-		{
-			lastSavedFile = chooser.getSelectedFile();
-			try ( FileOutputStream out = new FileOutputStream( chooser.getSelectedFile() ) )
-			{
-				viewerPanel.getDisk().toD64( out );
-			}
-			catch(IOException e) {
-				e.printStackTrace();
-			}
-		}
-	}
+    private void saveDisk()
+    {
+        if ( viewerPanel.getDisk() == null ) {
+            return;
+        }
+        final JFileChooser chooser = new JFileChooser();
+        if ( lastSavedFile != null ) {
+            chooser.setSelectedFile( lastSavedFile );
+        }
+        if ( chooser.showSaveDialog( null ) == JFileChooser.APPROVE_OPTION )
+        {
+            lastSavedFile = chooser.getSelectedFile();
+            try ( FileOutputStream out = new FileOutputStream( chooser.getSelectedFile() ) )
+            {
+                viewerPanel.getDisk().toD64( out );
+            }
+            catch(IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
 
-	private void loadDisk() {
-		final JFileChooser chooser = new JFileChooser();
-		if ( lastLoadedFile != null ) {
-			chooser.setSelectedFile( lastLoadedFile );
-		}
-		chooser.setFileFilter( new FileFilter() {
+    private void loadDisk() {
+        final JFileChooser chooser = new JFileChooser();
+        if ( lastLoadedFile != null ) {
+            chooser.setSelectedFile( lastLoadedFile );
+        }
+        chooser.setFileFilter( new FileFilter() {
 
-			@Override
-			public boolean accept(File f) {
-				return f.isDirectory() || ( f.isFile() && f.getName().toLowerCase().endsWith("g64") );
-			}
+            @Override
+            public boolean accept(File f) {
+                return f.isDirectory() || ( f.isFile() && f.getName().toLowerCase().endsWith("g64") )
+                        || ( f.isFile() && f.getName().toLowerCase().endsWith("d64") );
+            }
 
-			@Override
-			public String getDescription() {
-				return ".g64";
-			}
+            @Override
+            public String getDescription() {
+                return ".g64";
+            }
 
-		});
-		if ( chooser.showOpenDialog( null ) == JFileChooser.APPROVE_OPTION )
-		{
-			try ( FileInputStream in = new FileInputStream( chooser.getSelectedFile() ) )
-			{
-				viewerPanel.setDisk( new G64File( in , chooser.getSelectedFile().getAbsolutePath() ) );
-				lastLoadedFile = chooser.getSelectedFile();
-			} catch(IOException e) {
-				e.printStackTrace();
-			}
-		}
-	}
+        });
+        if ( chooser.showOpenDialog( null ) == JFileChooser.APPROVE_OPTION )
+        {
+            final File selectedFile = chooser.getSelectedFile();
+            G64File disk;
+            if ( selectedFile.getName().toLowerCase().endsWith("d64" ) ) 
+            {
+                try  
+                {
+                    final FileInputStream in = new FileInputStream( selectedFile );
+                    final D64File d64 = new D64File( in , selectedFile.getAbsolutePath() );
+                    final ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
+                    G64File.toG64( d64 , byteOut );
+                    disk = new G64File( new ByteArrayInputStream( byteOut.toByteArray() ) , chooser.getSelectedFile().getAbsolutePath() );
+                    in.close();
+                } 
+                catch(IOException e) {
+                    return;
+                }
+            }
+            else 
+            {
+                try  
+                {
+                    final FileInputStream in = new FileInputStream( selectedFile ); 
+                    disk = new G64File( in , chooser.getSelectedFile().getAbsolutePath() );
+                    in.close();
+                } catch(IOException e) {
+                    return;
+                }
+            }
+            viewerPanel.setDisk( disk);
+            lastLoadedFile = chooser.getSelectedFile();
+        }
+    }
 
     public void setViewMode(ViewMode viewMode)
     {
