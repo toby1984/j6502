@@ -9,12 +9,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.commons.lang.Validate;
 
 import de.codesourcery.j6502.assembler.SourceMap;
-import de.codesourcery.j6502.emulator.EmulatorDriver.Cmd;
 import de.codesourcery.j6502.utils.SourceHelper;
 
 public abstract class EmulatorDriver extends Thread
 {
 	private static final AtomicLong CMD_ID = new AtomicLong(0);
+	
 	private static final long CALLBACK_INVOKE_CYCLES = 300_000;
 
 	public volatile Throwable lastException;

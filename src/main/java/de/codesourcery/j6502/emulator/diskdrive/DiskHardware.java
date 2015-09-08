@@ -22,16 +22,17 @@ public class DiskHardware implements SerialDevice
 {
     public static final boolean DEBUG = false;
     
+    public static final boolean PRINT_SYNC = true;
     public static final boolean PRINT_HEADER_BLOCKS = false;
 
-    protected static final int SPEED00_CYCLES_PER_BYTE = 32*2;
-    protected static final int SPEED01_CYCLES_PER_BYTE = 30*2;
-    protected static final int SPEED10_CYCLES_PER_BYTE = 28*2;
-    protected static final int SPEED11_CYCLES_PER_BYTE = 26*2;
+    protected static final int SPEED00_CYCLES_PER_BYTE = 32;
+    protected static final int SPEED01_CYCLES_PER_BYTE = 30;
+    protected static final int SPEED10_CYCLES_PER_BYTE = 28;
+    protected static final int SPEED11_CYCLES_PER_BYTE = 26;
 
     public abstract class DriveMode
     {
-        private long cycles = SPEED10_CYCLES_PER_BYTE;
+        protected long cycles = SPEED10_CYCLES_PER_BYTE;
 
         public final void tick()
         {
@@ -64,8 +65,13 @@ public class DiskHardware implements SerialDevice
 
         private SyncMode syncState = SyncMode.WAIT_FOR_SYNC;
 
-        private void syncFound() {
+        private void syncFound() 
+        {
+            // reset cycle counter
+            cycles = cyclesPerByte;
+            
             via2.getPortB().setInputPin(7, false ); // sync found (PB7 expects INVERTED signal !!)
+            syncAtCycle = Emulator.totalCycles;
         }
 
         private void noSyncFound() {
@@ -76,11 +82,19 @@ public class DiskHardware implements SerialDevice
             via2.getPortB().setControlLine1( false , false ); // byte not ready
         }
 
-        private boolean byteReady() 
+        private void byteReady() 
         {
-
             final boolean byteLost = cpu.isSet( Flag.OVERFLOW );
             cpu.setFlag( Flag.OVERFLOW ); // byte ready
+            
+            if ( byteLost ) {
+                long cyclesElapsed = Emulator.totalCycles - byteReadyAtCycle;
+                System.out.println("Byte lost @ "+Emulator.totalCycles+" , "+cyclesElapsed+"cycles)");
+            }
+            byteReadyAtCycle  = Emulator.totalCycles;
+
+            // reset cycle counter
+            cycles = cyclesPerByte;
 
             /* Das Byte Ready Signal kann nur mit SOE abgestellt werden,ansonsten kommt es regelmässig nach 8 Bits.
              * Das ist unabhängig davon ob sich das Laufwerk dreht oder nicht. Das ist ein Zähler auf der Platine der vom SYNC Signal
@@ -92,13 +106,12 @@ public class DiskHardware implements SerialDevice
             {
                 via2.getPortB().setControlLine1( true , false ); // byte ready
             }            
-            return byteLost;
         }
         
         
         private final BitOutputStream bitOut = new BitOutputStream();
         private BitStream bitIn;
-        private int bytesToPrint = -1;
+        private int bytesToPrint = -1; // TODO: remove debug code
         
         @Override
         public void processByte()
@@ -123,8 +136,8 @@ public class DiskHardware implements SerialDevice
                     oneBits = 0;
                     if ( syncState == SyncMode.READING_SYNC )
                     {
-                        if ( PRINT_HEADER_BLOCKS ) {
-                            System.out.print("*** SYNC ***");
+                        if ( PRINT_SYNC ) {
+                            System.out.print("*** SYNC @ "+Emulator.totalCycles+" ***");
                         }
                         bitOut.clear();
                         bytesToPrint = 10;
@@ -179,10 +192,7 @@ public class DiskHardware implements SerialDevice
                 }
             }
             via2.getPortA().setInputPins( value );
-
-            if ( ! byteReady() ) {
-                System.out.println("Byte lost: "+HexDump.toHex( (byte) value ) );
-            }
+            byteReady();
         }
         
         public void trackChanged() 
@@ -223,6 +233,8 @@ public class DiskHardware implements SerialDevice
         }
     }
 
+    protected long byteReadyAtCycle; // TODO: Debug code, remove when done
+    protected long syncAtCycle; // TODO: Debug code, remove when done
     protected final CPU cpu;
     protected final DiskDrive diskDrive;
     protected final int driveAddress;
@@ -651,6 +663,9 @@ public class DiskHardware implements SerialDevice
 
         writeProtectOn = true; // TODO: Set to 'false' once writing to disk is enabled
 
+        byteReadyAtCycle = 0; // TODO: Debug code, remove when done
+        syncAtCycle = 0; // TODO: Debug code, remove when done
+        
         stepCounter = 0;
         warmupFinished = false;
         previousStepMotorCycle = 3;

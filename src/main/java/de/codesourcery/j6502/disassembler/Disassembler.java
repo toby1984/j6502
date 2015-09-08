@@ -26,16 +26,18 @@ public class Disassembler
 	private final HexDump hexdump = new HexDump();
 
 	private int previousOffset;
-	private short currentOffset;
+	private int currentOffset;
 	private Consumer<Line> lineConsumer;
 
 	private boolean writeAddresses = true;
 	private boolean annotate = false;
-
+	private boolean printTiming = false;
+	
 	private int baseAddressToPrint;
 
 	private ByteProvider byteProvider;
-	private final StringBuilder buffer = new StringBuilder();
+	private final StringBuilder operandBuffer = new StringBuilder();
+	private final StringBuilder argsBuffer = new StringBuilder();
 
 	private static final IMemoryRegion DUMMY_MEM = new Memory("dummy", AddressRange.range(0,65535) );
 	private static final CPUImpl DUMMY_CPU = new CPUImpl( new CPU( DUMMY_MEM ) , DUMMY_MEM );
@@ -79,35 +81,20 @@ public class Disassembler
 			{
 				adrCol = HexDump.toHexBigEndian( address )+":  ";
 			}
-			final String paddedArgs = StringUtils.rightPad( argsCol , 10 );
-			return (adrCol+StringUtils.rightPad(insCol,6)+paddedArgs+commentCol).trim();
+			final String paddedArgs = StringUtils.rightPad( argsCol , 14 );
+			return (adrCol+StringUtils.rightPad(insCol,6)+" "+paddedArgs+commentCol).trim();
 		}
-	}
-
-	public static void main(String[] args) {
-
-		final int[] data = new int[] {
-				0xad, 0x00, 0x44 , // Absolute      LDA $4400     $AD  3   4
-				0xbd,0x00,0x44,    // Absolute,X    LDA $4400,X   $BD  3   4+
-				0xb9,0x00,0x44,    // Absolute,Y    LDA $4400,Y   $B9  3   4+
-				0xb5,0x44,         // Zero Page,X   LDA $44,X     $B5  2   4
-				0xa9,0x44,         // # Immediate   LDA #$44      $A9  2   2
-				0xa1,0x44,         // Indirect,X    LDA ($44,X)   $A1  2   6
-				0xb1,0x44,         // Indirect,Y    LDA ($44),Y   $B1  2   5+
-				0xa5,0x44};        // Zero Page     LDA $44       $A5  2   3		#
-
-		final byte[] real = new byte[ data.length ];
-		for ( int i = 0 ; i < data.length ; i++ ) {
-			real[i]=(byte) data[i];
-		}
-
-		new Disassembler().disassemble( 0x1000, real , 0 , data.length ).forEach( System.out::println );
 	}
 
 	public Disassembler setAnnotate(boolean annotate) {
 		this.annotate = annotate;
 		return this;
 	}
+	
+    public Disassembler setPrintCycleTimings(boolean annotate) {
+        this.printTiming = annotate;
+        return this;
+    }	
 
 	public Disassembler setWriteAddresses(boolean writeAddresses) {
 		this.writeAddresses = writeAddresses;
@@ -229,6 +216,7 @@ public class Disassembler
 		while ( byteProvider.availableBytes() > 0 )
 		{
 			disassembleLine();
+			this.currentOffset = byteProvider.currentOffset();
 			this.previousOffset = currentOffset;
 		}
 	}
@@ -250,7 +238,7 @@ public class Disassembler
 			@Override
 			public int readWord() {
 				assertBytesRemaining(2);
-				final int result = data.readWord( ptr );
+				final int result = data.readWord( ptr & 0xffff );
 				ptr += 2;
 				return result;
 			}
@@ -258,7 +246,7 @@ public class Disassembler
 			@Override
 			public int readByte() {
 				assertBytesRemaining(1);
-				return data.readByte( ptr++ );
+				return data.readByte( ptr++ & 0xffff );
 			}
 
 			@Override
@@ -282,27 +270,42 @@ public class Disassembler
 			{
 				return baseAddressToPrint + insOffset + relOffset;
 			}
+
+            @Override
+            public int currentOffset() {
+                return ptr;
+            }
 		};
 	}
-
 	private void disassembleLine()
 	{
-		buffer.setLength(0);
+		operandBuffer.setLength(0);
+		argsBuffer.setLength(0);
 
 		byteProvider.mark();
 
-		DUMMY_CPU.disassemble( buffer , "   " , byteProvider );
-		System.out.println( buffer.toString() );
-		addLine( (short) byteProvider.getMark()  , buffer.toString() );
+		if ( printTiming ) {
+		    DUMMY_CPU.disassembleWithCycleTiming( operandBuffer , argsBuffer , byteProvider );
+		} else {
+		    DUMMY_CPU.disassemble( operandBuffer, argsBuffer , byteProvider );
+		}
+		addLine( (short) byteProvider.getMark()  , operandBuffer.toString(), argsBuffer.toString() );
 	}
 
-	private void addLine(short address,String instruction)
+	private void addLine(short address,String instruction,String arguments)
 	{
 		final int adr = baseAddressToPrint + address;
 		String comment = EMPTY_STRING;
 		if ( annotate ) {
-			comment = "; "+hexdump.dump( (short) adr , data , previousOffset , currentOffset - previousOffset );
+			comment = "; "+hexdump.dump( (short) adr , data , previousOffset , byteProvider.currentOffset() - previousOffset );
 		}
-		lineConsumer.accept( new Line( (short) adr , instruction , comment ) );
+		lineConsumer.accept( new Line( (short) adr , instruction , arguments , comment ) );
 	}
+	
+	public static void main(String[] args) {
+        
+	    byte[] data = new byte[] { 0x12 , 0x13, 0x14, 0x15 , 0x16 , 0x17, 0x18 };
+	    Disassembler dis = new Disassembler().setAnnotate( true );
+	    dis.disassemble( 0 , data ,0 , data.length ).forEach( System.out::println );
+    }
 }

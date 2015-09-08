@@ -184,6 +184,8 @@ public abstract class CPUStatusPanel extends BufferedView implements WindowLocat
         lines.clear();
         lines.add( "PC: "+HexDump.toAdr( cpu.pc() ) + "   Flags: "+ cpu.getFlagsString() );
         lines.add("Cycles: "+cpu.cycles);
+        lines.add("Total cycles: "+Emulator.totalCycles);
+        lines.add("Last ins duration: "+cpu.lastInsDuration);
         lines.add("Previous PC: "+HexDump.toAdr( cpu.previousPC ) );
         lines.add(" A: "+HexDump.byteToString( (byte) cpu.getAccumulator() ) );
         lines.add(" X: $"+HexDump.byteToString( (byte) cpu.getX()) );
