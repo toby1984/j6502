@@ -504,10 +504,6 @@ public class DiskHardware implements SerialDevice
                         throw new RuntimeException("Unreachable code reached");
                 }
 
-                if ( newCyclesPerByte != cyclesPerByte ) 
-                {
-                    System.out.println("Read/write bit-rate changed to "+newCyclesPerByte+" cycles/byte");
-                }
                 cyclesPerByte = newCyclesPerByte;
 
                 /*
@@ -517,13 +513,10 @@ public class DiskHardware implements SerialDevice
                 int step = value & 0b11;
                 if ( step != previousStepMotorCycle && motorsRunning )
                 {
-                    System.out.println("STEP: "+previousStepMotorCycle+" -> "+step+" , warmup: "+warmupFinished);
-
                     if ( previousStepMotorCycle == 0 ) 
                     {
                         headMovement = step == 3 ? HeadMovement.TO_TRACK_1 : HeadMovement.TO_TRACK_35;
                         warmupFinished = true;
-                        System.out.println("Head direction: "+headMovement);
                     } else if ( step > previousStepMotorCycle ){
                         headMovement = HeadMovement.TO_TRACK_35;
                     } else {

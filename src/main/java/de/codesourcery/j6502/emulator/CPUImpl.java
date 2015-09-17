@@ -87,7 +87,9 @@ public final class CPUImpl
 	}
 
 	protected int readAndWrite6502(int address) {
-		return memory.readAndWriteByte( address );
+	    int value = memory.readByte( address );
+	    memory.writeByte( address , (byte) value );
+		return value;
 	}
 
 	protected void write6502(int address,int value)
@@ -284,7 +286,7 @@ public final class CPUImpl
 	protected final Runnable adc = () ->
 	{
 		penaltyop = true;
-		value = getvaluereadwrite();
+		value = getvalue();
 
 		if ( cpu.isSet( Flag.DECIMAL_MODE) )
 		{
@@ -358,13 +360,6 @@ public final class CPUImpl
 		adc( cpu.getAccumulator() , value , cpu.isSet(Flag.CARRY) ? 1 : 0 );
 	};
 
-	private int bcdToBinary(int value ) {
-
-		int hi = (value & 0b1111_0000) >>> 4;
-		int lo = (value & 0b0000_1111);
-		return hi*10 + lo;
-	}
-
 	protected void adc(int a,int b,int carry)
 	{
 		int result = (a & 0xff) + (b & 0xff) + carry;
@@ -383,7 +378,7 @@ public final class CPUImpl
 	protected final Runnable and = () ->
 	{
 		penaltyop = true;
-		value = getvaluereadwrite();
+		value = getvalue();
 		result = cpu.getAccumulator() & value;
 
 		zerocalc(result);
@@ -861,7 +856,7 @@ public final class CPUImpl
 	protected final Runnable sbc = () ->
 	{
 		penaltyop = true;
-		value = getvaluereadwrite();
+		value = getvalue();
 
 		int a = cpu.getAccumulator();
 

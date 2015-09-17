@@ -43,6 +43,8 @@ public class WindowLocationHelper
 		public default void setConfigProperties(Map<String,String> properties)
 		{
 		}
+		
+		public String getIdentifier();
 
 		public void setLocationPeer(Component frame);
 

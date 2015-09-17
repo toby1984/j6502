@@ -156,4 +156,9 @@ public class BlockAllocationPanel extends JPanel implements IDebuggerView {
 		
 		g.setColor( Color.WHITE );
 	}
+
+    @Override
+    public String getIdentifier() {
+        return "BAM view";
+    }
 }

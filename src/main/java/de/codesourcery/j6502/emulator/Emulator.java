@@ -44,7 +44,15 @@ public class Emulator
 	public VIC getVIC() {
 		return memory.ioArea.vic;
 	}
-
+	
+	public CIA getCIA1() {
+	    return memory.ioArea.cia1;
+	}
+	
+    public CIA getCIA2() {
+        return memory.ioArea.cia2;
+    }	
+	
 	public CPU getCPU() {
 		return cpu;
 	}

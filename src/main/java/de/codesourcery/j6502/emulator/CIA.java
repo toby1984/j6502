@@ -114,7 +114,7 @@ $DC09 	56329 	9
 TOD SEC 	Real Time Clock
          Seconds 	Bit 0..3: Single seconds in BCD-format ($0-$9)
 
-         Bit 4..6: Ten seconds in BCD-format ($0-$5)
+         Bit 4..6: Ten (0..9) seconds in BCD-format ($0-$5)
          Bit 7: always 0
 ------------
 $DC0A 	56330 	10
@@ -332,13 +332,13 @@ CRB 	Control Timer B 	see CIA 1
 
 	public CIA(String identifier, AddressRange range)
 	{
-		super(identifier, range);
+		super(identifier, MemoryType.IOAREA , range);
 	}
-	
+
 	@Override
 	public boolean isReadsReturnWrites(int offset) {
         return false; // not for all registers
-    }	
+    }
 
 	private void initTOD() {
 
@@ -475,6 +475,7 @@ ende     rts             ; back to BASIC
 	public void writeByte(int adr , byte value)
 	{
 		final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
+		
 		// System.out.println("Write to "+this+" @ "+HexDump.toAdr( offset ) );
 		switch (offset)
 		{
@@ -719,8 +720,8 @@ ende     rts             ; back to BASIC
 		}
 		if ( (crb & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
 			timerBRunning = false;
-		} 
-		
+		}
+
 		if ( DEBUG_VERBOSE ) {
 			System.out.println(this+" , loading timer B latch = "+timerBLatch);
 		}

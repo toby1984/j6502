@@ -6,8 +6,8 @@ public class Memory extends IMemoryRegion
 {
 	private final byte[] data;
 
-	public Memory(String identifier, AddressRange range) {
-		super(identifier, range);
+	public Memory(String identifier, MemoryType type, AddressRange range) {
+		super(identifier, type , range);
 		this.data = new byte[ range.getSizeInBytes() ];
 	}
 
@@ -29,11 +29,6 @@ public class Memory extends IMemoryRegion
 	@Override
 	public boolean isReadsReturnWrites(int offset) {
 	    return true;
-	}
-
-	@Override
-	public int readAndWriteByte(int offset) {
-		return data[offset & 0xffff] & 0xff;
 	}
 
 	@Override

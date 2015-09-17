@@ -36,9 +36,24 @@ public class IOArea extends SlowMemory
 
 	public final CIA cia1 = new CIA("CIA #1" , AddressRange.range( 0xdc00, 0xdd00 ) ) {
 
+	    @Override
+	    public void writeByte(int address, byte value) 
+	    {
+	        // do NOT move this to the CIA (superclass) class as this method is also calling super.readByte() 
+	        // with different addresses for internal purposes and this would trigger 
+	        // memory breakpoints without the client code actually accessing the memory location  
+	        getBreakpointsContainer().write( address );	        
+	        super.writeByte( address , value);
+	    }
+	    
 		@Override
 		public int readByte(int adr)
 		{
+		    // do NOT move this to the CIA (superclass) class as this method is also calling super.readByte() 
+		    // with different addresses for internal purposes and this would trigger 
+		    // memory breakpoints without the client code actually accessing the memory location  		    
+	        breakpointsContainer.read( adr );
+	        
 			/*
 $DC00
 PRA 	Data Port A 	Monitoring/control of the 8 data lines of Port A
@@ -77,7 +92,11 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 						}
 					}
 				}
-				return result2 & joy1Mask;
+				result2 &= joy1Mask;
+				if ( result2 != 0xff ) {
+				    System.out.println("CIA #1 - PRA: %"+StringUtils.leftPad( Integer.toBinaryString( pra ) , 8 , '0') + " , result: %"+StringUtils.leftPad( Integer.toBinaryString( result2 ) , 8 , '0' ) +" ( $"+Integer.toHexString( result2 )+", joyMask: "+joy1Mask+")" );
+				}
+				return result2;
 			}
 			return super.readByte( offset );
 		}
@@ -152,6 +171,11 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		@Override
 		public void writeByte(int adr, byte value)
 		{
+            // do NOT move this to the CIA (superclass) class as this method is also calling super.readByte() 
+            // with different addresses for internal purposes and this would trigger 
+            // memory breakpoints without the client code actually accessing the memory location  
+            getBreakpointsContainer().write( adr );   
+            
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
 			if (offset == CIA2_PRA )
 			{
@@ -209,6 +233,11 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		@Override
 		public int readByte(int adr)
 		{
+            // do NOT move this to the CIA (superclass) class as this method is also calling super.readByte() 
+            // with different addresses for internal purposes and this would trigger 
+            // memory breakpoints without the client code actually accessing the memory location  		    
+	        breakpointsContainer.read( adr );
+	        
 			int value = super.readByte(adr);
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
 			if ( offset == 0 ) {
@@ -263,7 +292,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 	 */
 	public IOArea(String identifier, AddressRange range, MemorySubsystem mainMemory,IMemoryRegion colorRAMBank)
 	{
-		super(identifier, range);
+		super(identifier, MemoryType.IOAREA ,range);
 
 		this.colorRAMBank = colorRAMBank;
 
@@ -333,6 +362,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 	protected void handleKeyPress(Key key)
 	{
 		keyboardColumns[ key.colBitNo ] &= ~(1 << key.rowBitNo); // bits are low-active so clear bit if key is pressed
+		System.out.println("handleKeyPress(): "+key+" => keyboardColumns[ "+key.colBitNo+" ] = "+StringUtils.leftPad( Integer.toBinaryString( keyboardColumns[ key.colBitNo ]) , 8 , '0' ) );
 		if ( key.clearShift() ) {
 			handleKeyRelease(Key.KEY_LEFT_SHIFT);
 			handleKeyRelease(Key.KEY_RIGHT_SHIFT);
@@ -350,35 +380,36 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 	}
 
 	@Override
-	public void writeByte(int set, byte value)
+	public void writeByte(int address, byte value)
 	{
 		/*
 // CIA #1: actually only 16 byte registers but mirrored in range $DC10-$DCFF
 // CIA #2: actually only 16 byte registers but mirrored in range $DD10-$DDFF
 		 */
-		final int offset = set & 0xffff;
+		final int trimmedAddress = address & 0xffff;
 
 		// I/O area starts at 0xd000
 		// but input to writeByte is already translated by -d000
 
-		if ( offset >= 0x800 && offset < 0x800+1024) {
-			colorRAMBank.writeByte( offset, value );
+		if ( trimmedAddress >= 0x800 && trimmedAddress < 0x800+1024) {
+		    // intentionally NOT trimmedAddress - 0x800 as colorRAMBank is actually the whole bank #5 (D000-DFFF) and not just the 1 KB block starting at $D800
+			colorRAMBank.writeByte( trimmedAddress , value );
 			return;
 		}
-		if ( offset >= 0xc00 && offset <= 0xcff) { // $DC00-$DCFF
-			cia1.writeByte( set , value );
+		if ( trimmedAddress >= 0xc00 && trimmedAddress <= 0xcff) { // $DC00-$DCFF
+			cia1.writeByte( address - 0xc00 , value );
 			return;
 		}
-		if ( offset >= 0xd00 && offset <= 0xdff ) { // $DD10-$DDFF
-			cia2.writeByte( set , value );
+		if ( trimmedAddress >= 0xd00 && trimmedAddress <= 0xdff ) { // $DD10-$DDFF
+			cia2.writeByte( address - 0xd00 , value );
 			return;
 		}
-		if ( offset < 0x002f)  // $D000 - $D02F ... VIC
+		if ( trimmedAddress < 0x002f)  // $D000 - $D02F ... VIC
 		{
-			vic.writeByte( set , value );
+			vic.writeByte( address , value );
 			return;
 		}
-		super.writeByte(offset, value);
+		super.writeByte(trimmedAddress, value);
 	}
 
 	@Override
@@ -387,20 +418,19 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		// this I/O area starts at 0xd000
 		// but input to writeByte is already translated by -d000
 		final int offset = adr & 0xffff;
-
 		if ( offset >= 0x800 && offset < 0x800+1024) {
-			return colorRAMBank.readByte( adr );
+			return colorRAMBank.readByte( offset ); // intentionally NOT offset - 0x800 as colorRAMBank is actually the whole bank #5 (D000-DFFF) and not just the 1 KB block starting at $D800
 		}
 		if ( offset >= 0xc00 && offset <= 0xcff) { // CIA #1 $DC00-$DCFF
-			return cia1.readByte( offset );
+			return cia1.readByte( offset - 0xc00 );
 		}
 		if ( offset >= 0xd00 && offset <= 0xdff ) { // CIA #2 $DD10-$DDFF
-			return cia2.readByte( offset );
+			return cia2.readByte( offset - 0xd00 );
 		}
 		if ( offset < 0x002f ) { // $D000 - $D02F ... VIC
-			return vic.readByte( adr );
+			return vic.readByte( offset );
 		}
-		return super.readByte(adr);
+		return super.readByte(offset);
 	}
 
 	@Override

@@ -158,6 +158,11 @@ public abstract class CPUStatusPanel extends BufferedView implements WindowLocat
     }
     
     @Override
+    public String getIdentifier() {
+        return "CPU view";
+    }
+    
+    @Override
     public Component getLocationPeer() {
         return peer;
     }

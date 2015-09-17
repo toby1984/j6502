@@ -413,4 +413,9 @@ public class BusAnalyzer extends JPanel implements IDebuggerView
     public boolean isRefreshAfterTick() {
         return isDisplayed;
     }
+    
+    @Override
+    public String getIdentifier() {
+        return "IEC bus view";
+    }    
 }

@@ -712,7 +712,7 @@ public class VIA extends Memory
 
     public VIA(String identifier, AddressRange range,CPU cpu)
     {
-        super(identifier, range);
+        super(identifier, MemoryType.IOAREA , range);
         this.cpu = cpu;
     }
 
@@ -779,14 +779,6 @@ public class VIA extends Memory
             default:
                 throw new IllegalArgumentException("No register at "+HexDump.toAdr(offset));
         }
-    }
-    
-    @Override
-    public int readAndWriteByte(int offset) 
-    {
-        int result = readByte( offset );
-        writeByte( offset , (byte) result );
-        return result;
     }
     
     @Override

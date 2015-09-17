@@ -13,6 +13,7 @@ import de.codesourcery.j6502.emulator.AddressRange;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPUImpl;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
+import de.codesourcery.j6502.emulator.IMemoryRegion.MemoryType;
 import de.codesourcery.j6502.emulator.Memory;
 import de.codesourcery.j6502.emulator.CPUImpl.ByteProvider;
 import de.codesourcery.j6502.utils.HexDump;
@@ -39,7 +40,7 @@ public class Disassembler
 	private final StringBuilder operandBuffer = new StringBuilder();
 	private final StringBuilder argsBuffer = new StringBuilder();
 
-	private static final IMemoryRegion DUMMY_MEM = new Memory("dummy", AddressRange.range(0,65535) );
+	private static final IMemoryRegion DUMMY_MEM = new Memory("dummy", MemoryType.RAM,AddressRange.range(0,65535) );
 	private static final CPUImpl DUMMY_CPU = new CPUImpl( new CPU( DUMMY_MEM ) , DUMMY_MEM );
 
 	public final class Line
@@ -102,7 +103,7 @@ public class Disassembler
 	}
 
 	private IMemoryRegion wrap(int startingOffset, byte[] data) {
-		return new IMemoryRegion("dummy", new AddressRange(startingOffset & 0xffff, data.length))
+		return new IMemoryRegion("dummy", MemoryType.RAM,new AddressRange(startingOffset & 0xffff, data.length))
 		{
 			@Override
 			public void writeWord(int offset, short value) {
@@ -134,11 +135,6 @@ public class Disassembler
 
 			@Override
 			public int readByte(int offset) {
-				return data[ offset & 0xffff ] & 0xff;
-			}
-
-			@Override
-			public int readAndWriteByte(int offset) {
 				return data[ offset & 0xffff ] & 0xff;
 			}
 

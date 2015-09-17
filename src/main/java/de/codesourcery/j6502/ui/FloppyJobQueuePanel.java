@@ -31,6 +31,11 @@ public final class FloppyJobQueuePanel extends JPanel implements IDebuggerView {
     }
     
     @Override
+    public String getIdentifier() {
+        return "Floppy Job Queue view";
+    }
+    
+    @Override
     public void setLocationPeer(Component frame) {
         this.peer = frame;
     }

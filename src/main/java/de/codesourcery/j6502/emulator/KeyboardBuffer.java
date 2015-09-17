@@ -146,6 +146,7 @@ public class KeyboardBuffer
 	 */
 	public void keyPressed(Key key,long pressInCycle) 
 	{
+	    System.out.println("PRESSED: "+key);
 		synchronized( buffer ) 
 		{	
 			buffer.add( new KeyEvent(key , pressInCycle ) );
