@@ -2,15 +2,27 @@ package de.codesourcery.j6502.emulator;
 
 public abstract class IMemoryRegion
 {
+    public static enum MemoryType {
+        RAM,ROM,IOAREA;
+    }
+    
+    private final MemoryType type;
 	private final String identifier;
 	private final AddressRange addressRange;
+    protected final MemoryBreakpointsContainer breakpointsContainer;
 
-	public IMemoryRegion(String identifier,AddressRange range)
+	public IMemoryRegion(String identifier,MemoryType type,AddressRange range)
 	{
+	    this.type = type;
 		this.identifier = identifier;
 		this.addressRange = range;
+		this.breakpointsContainer = new MemoryBreakpointsContainer( identifier , type , range );
 	}
-
+	
+	public MemoryBreakpointsContainer getBreakpointsContainer() {
+        return breakpointsContainer;
+    }
+	
 	public abstract void reset();
 
 	public String getIdentifier() {
@@ -21,7 +33,7 @@ public abstract class IMemoryRegion
 		return addressRange;
 	}
 
-	public void bulkRead(int startingAddress,final byte[] inputBuffer, final int len)
+	public final void bulkRead(int startingAddress,final byte[] inputBuffer, final int len)
 	{
 		for ( int i = 0 ; i < len ; i++ , startingAddress++ )
 		{
@@ -32,30 +44,17 @@ public abstract class IMemoryRegion
 	public abstract void bulkWrite(int startingAddress,byte[] data, int datapos, int len);
 
 	public abstract int readByte(int offset);
-
+	
 	public abstract int readWord(int offset);
 
 	public abstract void writeWord(int offset,short value);
-
+	
 	public abstract void writeByte(int offset,byte value);
 
 	public abstract String dump(int offset, int len);
 
 	public abstract boolean isReadsReturnWrites(int offset);
 
-	/**
-	 * Special method that first performs a read of the given location
-	 * and then immediately writes back the value it just read.
-	 *
-	 * <p>This method is used to fake a peculiar behavior of the 6510 CPU where
-	 * read-modify-write operations like DEC,INC,ASL etc. actually write-back the value
-	 * they just read. This in turn gets abused a lot to reset latch registers like $D019 (VIC irq bits).</p>
-	 *
-	 * @param offset
-	 * @return
-	 */
-	public abstract int readAndWriteByte(int offset);
-	
 	/**
 	 * Reads a byte without triggering side-effects related to
 	 * memory-mapped I/O (like clearing IRQs etc.).

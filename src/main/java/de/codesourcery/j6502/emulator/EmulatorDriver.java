@@ -19,7 +19,7 @@ public abstract class EmulatorDriver extends Thread
 
 	public volatile Throwable lastException;
 
-	public static final boolean PRINT_SPEED = true;
+	public static final boolean PRINT_SPEED = false;
 
 	public static enum Mode { SINGLE_STEP , CONTINOUS; }
 
@@ -29,6 +29,8 @@ public abstract class EmulatorDriver extends Thread
 
 	public volatile SourceMap sourceMap = null;
 	public volatile SourceHelper sourceHelper = null;
+	
+	public double dummyValue; // just used to prevent the compiler from optimizing away our delay loop
 
 	protected final ArrayBlockingQueue<Cmd> requestQueue = new ArrayBlockingQueue<>(10);
 	protected final ArrayBlockingQueue<Cmd> ackQueue = new ArrayBlockingQueue<>(10);
@@ -227,14 +229,13 @@ public abstract class EmulatorDriver extends Thread
 	}
 
 	protected abstract void tick();
-
+	
 	@Override
 	public void run()
 	{
 		boolean justStarted = true;
 		boolean isRunnable = false;
 
-		float dummy = 0; // used to prevent the compiler from optimizing away the delay loop
 		long startTime = System.currentTimeMillis();
 		long cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
 
@@ -314,10 +315,13 @@ public abstract class EmulatorDriver extends Thread
 			{
 				try
 				{
-				    if ( runAtTrueSpeed ) {
+				    if ( runAtTrueSpeed ) 
+				    {
+				        double dummy = 0;
 				        for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
 				            dummy += Math.sqrt( i );
 				        }
+				        this.dummyValue=dummy;
 				    }
 
 					lastException = null;
@@ -351,7 +355,7 @@ public abstract class EmulatorDriver extends Thread
                 final float khz = cyclesPerSecond / 1000f;
 				if ( PRINT_SPEED )
 				{
-					System.out.println("CPU frequency: "+khz+" kHz (delay iterations: "+delayIterationsCount+") "+dummy);
+					System.out.println("CPU frequency: "+khz+" kHz (delay iterations: "+delayIterationsCount+") "+this.dummyValue);
 				}
 				if ( adjustDelayLoop && runAtTrueSpeed )
 				{
@@ -377,12 +381,12 @@ public abstract class EmulatorDriver extends Thread
 		synchronized( emulator )
 		{
 			lastException = null;
-            while ( cpu.cycles > 0 ) {
+			long cycles = cpu.cycles;
+            while ( cycles > 0 ) {
                 emulator.doOneCycle(this);
+                cycles--;
             }
-			do {
-				emulator.doOneCycle(this);
-			} while ( cpu.cycles > 0 );
+            emulator.doOneCycle(this);
 		}
 	}
 

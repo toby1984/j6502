@@ -38,4 +38,4 @@ printtext:
  
 outtext
  .byte 2,12,21,2,2
- .byte $00                       ;Textend            
+ .byte $00                       ;Textend                

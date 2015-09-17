@@ -10,11 +10,15 @@ public final class MemorySubsystem extends IMemoryRegion
 {
 	private static final boolean DEBUG_READS = false;
 	private static final boolean DEBUG_ROM_IMAGES = false;
-
+	
+    private final IMemoryRegion CART_ROM_HI_A000_BFFF =  new Memory("Cart ROM hi  $A000 - $BFFF" , MemoryType.ROM, Bank.BANK3.range );
+    private final IMemoryRegion CART_ROM_HI_E000_FFFF =   new Memory("Cart ROM hi  $E000 - $FFFF" , MemoryType.ROM, Bank.BANK6.range );
+    private final IMemoryRegion CART_ROM_LOW_8000_9FFFF = new Memory("Cart ROM low  $8000 - $9FFF" , MemoryType.ROM, Bank.BANK2.range );
+    
 	public static enum Bank
 	{
 		/**
-		 * $0000 - $0FFF
+		 * $0000 - $0FFF 
 		 */
 		BANK0(0,AddressRange.range(0x0000,0x0FFF) ),
 		/**
@@ -87,7 +91,7 @@ public final class MemorySubsystem extends IMemoryRegion
 	 */
 	private byte plaLatchBits = 0; // address $01
 
-	private final IMemoryRegion ram0= new SlowMemory("RAM #0",Bank.BANK0.range) {
+	private final IMemoryRegion ram0= new SlowMemory("RAM #0",MemoryType.RAM,Bank.BANK0.range) {
 
 	    @Override
 	    public void reset()
@@ -120,13 +124,13 @@ public final class MemorySubsystem extends IMemoryRegion
 	        switch(wrappedOffset)
 	        {
 	            case 0:
-	                /* TODO: See behaviour of writes to $00 / $01 
+	                /* TODO: See behaviour of writes to $00 / $01
 	                 * http://sourceforge.net/p/vice-emu/code/HEAD/tree/testprogs/general/ram0001/
 	                 */
 	                plaDataDirection = value;
 	                break;
 	            case 1:
-                    /* TODO: See behaviour of writes to $00 / $01 
+                    /* TODO: See behaviour of writes to $00 / $01
                      * http://sourceforge.net/p/vice-emu/code/HEAD/tree/testprogs/general/ram0001/
                      */
 	                super.writeByte(wrappedOffset,value);
@@ -142,12 +146,12 @@ public final class MemorySubsystem extends IMemoryRegion
 	    }
 	};
 
-	private final IMemoryRegion ram1= new Memory("RAM #1",Bank.BANK1.range);
-	private final IMemoryRegion ram2= new Memory("RAM #2",Bank.BANK2.range);
-	private final IMemoryRegion ram3= new Memory("RAM #3",Bank.BANK3.range);
-	private final IMemoryRegion ram4= new Memory("RAM #4",Bank.BANK4.range);
+	private final IMemoryRegion ram1= new Memory("RAM #1",MemoryType.RAM,Bank.BANK1.range);
+	private final IMemoryRegion ram2= new Memory("RAM #2",MemoryType.RAM,Bank.BANK2.range);
+	private final IMemoryRegion ram3= new Memory("RAM #3",MemoryType.RAM,Bank.BANK3.range);
+	private final IMemoryRegion ram4= new Memory("RAM #4",MemoryType.RAM,Bank.BANK4.range);
 
-	private final IMemoryRegion ram5= new SlowMemory("RAM #5",Bank.BANK5.range)
+	private final IMemoryRegion ram5= new SlowMemory("RAM #5",MemoryType.RAM,Bank.BANK5.range) // $D000 - $DFFF = 4096 bytes
 	{
 		@Override
 		public int readByte(int offset)
@@ -160,12 +164,18 @@ public final class MemorySubsystem extends IMemoryRegion
 		}
 	};
 
-	private final IMemoryRegion ram6= new Memory("RAM #6",Bank.BANK6.range);
+	private final IMemoryRegion ram6= new Memory("RAM #6",MemoryType.RAM,Bank.BANK6.range);
 
-	private WriteOnceMemory kernelROM;
-	private WriteOnceMemory charROM;
-	private WriteOnceMemory basicROM;
+	public final IMemoryRegion[] ramRegions = { ram0,ram1,ram2,ram3,ram4,ram5,ram6 };
+	
+	private final RAMView ramView = new RAMView();
+
+	public final WriteOnceMemory kernelROM;
+	public final WriteOnceMemory charROM;
+	public final WriteOnceMemory basicROM;
+	
 	public final IOArea ioArea = new IOArea("I/O area", Bank.BANK5.range , this , ram5 );
+	
 	private IMemoryRegion cartROMLow;
 	private IMemoryRegion cartROMHi;
 
@@ -183,7 +193,18 @@ public final class MemorySubsystem extends IMemoryRegion
 
 	public MemorySubsystem()
 	{
-		super("main memory" , new AddressRange(0,65536 ) );
+		super("main memory" , MemoryType.RAM , new AddressRange(0,65536 ) );
+		
+        // kernel ROM
+        kernelROM = new WriteOnceMemory("Kernel ROM" , Bank.BANK6.range );
+        loadROM("kernel_v2.rom" , kernelROM );
+
+        // char ROM
+        charROM = loadCharacterROM();
+
+        // basic ROM
+        basicROM = new WriteOnceMemory("Basic ROM" , Bank.BANK3.range );
+        loadROM( "basic_v2.rom" , basicROM );   		
 
 		// setup memory from addresses to different memory banks
 		for ( final Bank bank : Bank.values() )
@@ -290,6 +311,7 @@ public final class MemorySubsystem extends IMemoryRegion
 				// RAM 	RAM 	CART_ROM_LO 	CART_ROM_HI 	RAM 	CHAR_ROM 	KERNAL_ROM
 				readRegions  = new IMemoryRegion[] { ram0 , ram1 , cartROMLow , cartROMHi, ram4 , charROM, kernelROM };
 				writeRegions = new IMemoryRegion[] { ram0 , ram1 , ram2       , ram3     , ram4 , ram5   , ram6 };
+				
 				break;
 			case 5:
 				// RAM 	RAM 	RAM 	RAM 	RAM 	I/O 	RAM
@@ -394,7 +416,6 @@ public final class MemorySubsystem extends IMemoryRegion
 				previous = next;
 			}
 		}
-
 		System.out.println( this );
 	}
 
@@ -402,22 +423,10 @@ public final class MemorySubsystem extends IMemoryRegion
 	{
 		ioArea.tick( emulator , cpu , clockHigh );
 	}
-
+	
 	private void createRegions(int index)
 	{
-		// kernel ROM
-		kernelROM = new WriteOnceMemory("Kernel ROM" , Bank.BANK6.range );
-		loadROM("kernel_v2.rom" , kernelROM );
-
-		// char ROM
-		charROM = loadCharacterROM();
-
-		// basic ROM
-		basicROM = new WriteOnceMemory("Basic ROM" , Bank.BANK3.range );
-		loadROM( "basic_v2.rom" , basicROM );
-
 		// I/O area
-
 		cartROMLow = null;
 		cartROMHi = null;
 
@@ -425,16 +434,16 @@ public final class MemorySubsystem extends IMemoryRegion
 		{
 			case 2:
 			case 6:
-				cartROMHi = new Memory("Cart ROM hi" , Bank.BANK3.range );
+				cartROMHi = CART_ROM_HI_A000_BFFF;
 				break;
 			case 3:
 			case 7:
-				cartROMLow = new Memory("Cart ROM low" , Bank.BANK2.range );
-				cartROMHi = new Memory("Cart ROM hi" , Bank.BANK3.range );
+				cartROMLow = CART_ROM_LOW_8000_9FFFF;
+				cartROMHi = CART_ROM_HI_A000_BFFF;
 				break;
 			case 11:
 			case 15:
-				cartROMLow = new Memory("Cart ROM low" , Bank.BANK2.range );
+				cartROMLow = CART_ROM_LOW_8000_9FFFF;
 				break;
 			case 16:
 			case 17:
@@ -444,8 +453,8 @@ public final class MemorySubsystem extends IMemoryRegion
 			case 21:
 			case 22:
 			case 23:
-				cartROMLow = new Memory("Cart ROM low" , Bank.BANK2.range );
-				cartROMHi = new Memory("Cart ROM hi" , Bank.BANK6.range );
+				cartROMLow = CART_ROM_LOW_8000_9FFFF;
+				cartROMHi = CART_ROM_HI_E000_FFFF;
 				break;
 		}
 	}
@@ -508,7 +517,6 @@ public final class MemorySubsystem extends IMemoryRegion
 	@Override
 	public int readWord(int offset)
 	{
-		// FIXME: Maybe always use ( offset & 0xffff ) here ???
 		final int low = readByte(offset);
 		final int hi = readByte( offset+1 );
 
@@ -527,7 +535,7 @@ public final class MemorySubsystem extends IMemoryRegion
 		final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
 		return region.readByte( translatedOffset );
 	}
-	
+
 	@Override
 	public int readByteNoSideEffects(int offset) {
         final int wrappedOffset = offset & 0xffff;
@@ -536,14 +544,24 @@ public final class MemorySubsystem extends IMemoryRegion
         return region.readByteNoSideEffects( translatedOffset );
 	}
 
-	@Override
 	public int readAndWriteByte(int offset)
 	{
 		final int wrappedOffset = offset & 0xffff;
-		final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
-		final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
-		return region.readAndWriteByte( translatedOffset );
+		final IMemoryRegion readRegion = readRegions[ readMap[ wrappedOffset ] ];
+		final int translatedOffset = wrappedOffset - readRegion.getAddressRange().getStartAddress();
+		final IMemoryRegion writeRegion = writeRegions[ writeMap[ wrappedOffset ] ];
+		final int result = readRegion.readByte( translatedOffset );
+		writeRegion.writeByte( translatedOffset , (byte) result );
+		return result;
 	}
+	
+//    public int readAndWriteByte(int offset)
+//    {	
+//        final int wrappedOffset = offset & 0xffff;
+//        final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
+//        final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+//        return region.readAndWriteByte( translatedOffset );
+//    }
 
     @Override
     public void writeByte(int offset, byte value)
@@ -608,5 +626,90 @@ public final class MemorySubsystem extends IMemoryRegion
 			}
 		}
 		return buffer.toString();
+	}
+
+	protected final class RAMView extends IMemoryRegion
+	{
+		public RAMView()
+		{
+			super("linear RAM", MemoryType.RAM,AddressRange.range(0,0xffff) );
+		}
+
+		@Override
+		public void reset() {
+			// NOP
+		}
+
+		@Override
+		public void bulkWrite(int startingAddress, byte[] data, int datapos, int len)
+		{
+			for ( ; len > 0 ; len--)
+			{
+				writeByte( ( startingAddress++ & 0xffff) ,data[datapos++] );
+			}
+		}
+
+		@Override
+		public int readByte(int offset)
+		{
+	        final int wrappedOffset = offset & 0xffff;
+	        final IMemoryRegion region = ramRegions[ readMap[ wrappedOffset ] ];
+	        final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+	        return region.readByte( translatedOffset );
+		}
+
+		@Override
+		public int readWord(int offset)
+		{
+			final int low = readByte(offset);
+			final int hi = readByte( offset+1 );
+			return (hi<<8|low);
+		}
+
+		@Override
+		public void writeWord(int offset, short value)
+		{
+			final byte low = (byte) value;
+			final byte hi = (byte) (value>>8);
+
+			writeByte( offset , low );
+			writeByte( offset+1 , hi );
+		}
+
+		@Override
+		public void writeByte(int offset, byte value)
+		{
+	        final int wrappedOffset = offset & 0xffff;
+	        final IMemoryRegion region = ramRegions[ writeMap[ wrappedOffset ] ];
+	        final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+	        region.writeByte( realOffset , value );
+		}
+
+		@Override
+		public String dump(int offset, int len)
+		{
+			return HexDump.INSTANCE.dump( (short) (getAddressRange().getStartAddress()+offset),this,offset,len);
+		}
+
+		@Override
+		public boolean isReadsReturnWrites(int offset) {
+			return true;
+		}
+
+		@Override
+		public int readByteNoSideEffects(int offset) {
+            final int wrappedOffset = offset & 0xffff;
+            final IMemoryRegion region = ramRegions[ readMap[ wrappedOffset ] ];
+            final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+            return region.readByte( translatedOffset );
+		}
+	}
+
+	/**
+	 * Returns a continuous view of all RAM for use by the VIC.
+	 * @return
+	 */
+	public RAMView getRAMView() {
+		return ramView;
 	}
 }

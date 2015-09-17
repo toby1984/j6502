@@ -5,16 +5,15 @@ public final class WriteOnceMemory extends Memory {
 	private boolean writeProtected = false;
 
 	public WriteOnceMemory(String identifier, AddressRange range) {
-		super(identifier, range);
+		super(identifier, MemoryType.ROM, range);
 	}
 
 	@Override
 	public void writeByte(int offset, byte value)
 	{
-		if ( writeProtected ) {
-			throw new UnsupportedOperationException("Can't write to write-protected memory  "+this);
+		if ( ! writeProtected ) {
+		    super.writeByte(offset, value);
 		}
-		super.writeByte(offset, value);
 	}
 
 	@Override

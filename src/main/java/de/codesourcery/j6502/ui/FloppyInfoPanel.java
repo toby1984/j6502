@@ -31,6 +31,11 @@ public class FloppyInfoPanel extends JPanel implements IDebuggerView {
     public void setLocationPeer(Component frame) {
         this.peer = frame;
     }
+    
+    @Override
+    public String getIdentifier() {
+        return "Floppy Info view";
+    }
 
     @Override
     public Component getLocationPeer() {

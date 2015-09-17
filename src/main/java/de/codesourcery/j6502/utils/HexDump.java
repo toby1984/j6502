@@ -4,6 +4,7 @@ import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.emulator.AddressRange;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
+import de.codesourcery.j6502.emulator.IMemoryRegion.MemoryType;
 
 public class HexDump {
 
@@ -98,7 +99,7 @@ public class HexDump {
 
 	public String dump(short startingAddress , byte[] data,int offset,int len)
 	{
-		return dump(startingAddress,new IMemoryRegion("dummy", new AddressRange( 0,len) ) {
+		return dump(startingAddress,new IMemoryRegion("dummy", MemoryType.RAM,new AddressRange( 0,len) ) {
 
 			@Override
 			public void reset() {
@@ -119,11 +120,6 @@ public class HexDump {
 			public int readByte(int offset) {
 				return data[offset & 0xffff] & 0xff;
 			}
-
-			@Override
-			public int readAndWriteByte(int offset) {
-				return data[offset & 0xffff] & 0xff;
-			};
 
 			@Override
 			public int readWord(int offset) {

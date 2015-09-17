@@ -3,6 +3,7 @@ package de.codesourcery.j6502.ui;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
@@ -54,6 +55,11 @@ public abstract class DisassemblyPanel extends BufferedView implements WindowLoc
         if ( trackPC ) {
             addressToMark = TRACK_CURRENT_PC;
         }
+    }
+    
+    @Override
+    public String getIdentifier() {
+        return "Disassembly view";
     }
 
     @Override
@@ -113,6 +119,7 @@ public abstract class DisassemblyPanel extends BufferedView implements WindowLoc
 
                 g.setColor( Debugger.FG_COLOR );
                 g.drawString( line.line.toString() , X_OFFSET , y );
+                
                 if ( adrToMark != null && line.line.address == adrToMark.shortValue() )
                 {
                     g.setColor(Color.RED);
@@ -239,33 +246,37 @@ public abstract class DisassemblyPanel extends BufferedView implements WindowLoc
          * at the exact location where the PC currently is .. we'll use this flag to re-try disassembling with a
          * different offset until we succeed
          */
-        boolean alignmentCorrect =false;
+        final boolean[] alignmentCorrect = { false };
 
         final BreakpointsController controller = getBreakpointsController();
         final IMemoryRegion memory = controller.getMemory();
         final short pc;
         pc = currentAddress;
         short offset = (short) (pc - bytesToDisassemble/2);
-        while ( offset != pc && ! alignmentCorrect )
+        while ( offset != pc && ! alignmentCorrect[0] )
         {
-            alignmentCorrect = false;
             lines.clear();
             final Consumer<Line> lineConsumer = new Consumer<Line>()
             {
+                private final FontMetrics fm = g.getFontMetrics();
                 private int y = Y_OFFSET;
 
                 @Override
-                public void accept(Line line) {
-                    final LineMetrics lineMetrics = g.getFontMetrics().getLineMetrics( line.toString(),  g );
-                    final Rectangle2D stringBounds = g.getFontMetrics().getStringBounds( line.toString(),  g );
+                public void accept(Line line) 
+                {
+                    final LineMetrics lineMetrics = fm.getLineMetrics( line.toString(),  g );
+                    final Rectangle2D stringBounds = fm.getStringBounds( line.toString(),  g );
 
                     final Rectangle bounds = new Rectangle( X_OFFSET , (int) (y - lineMetrics.getAscent() ) , (int) stringBounds.getWidth() , (int) (lineMetrics.getHeight() ) );
-                    lines.add( new LineWithBounds( line , bounds ) );
+                    final LineWithBounds lwb = new LineWithBounds( line , bounds );
+                    if ( line.address == pc ) {
+                        alignmentCorrect[0]=true;
+                    }
+                    lines.add( lwb );
                     y += Debugger.LINE_HEIGHT;
                 }
             };
             dis.disassemble( memory , offset, bytesToDisassemble , lineConsumer);
-            alignmentCorrect = lines.stream().anyMatch( line -> line.line.address == pc );
             offset++;
         }
     }
@@ -276,7 +287,14 @@ public abstract class DisassemblyPanel extends BufferedView implements WindowLoc
         {
             disassemble( g );
         }
-        else if ( addressToMark != null && lines.stream().noneMatch( line -> line.line.address == addressToMark.shortValue() ) ) {
+        else if ( addressToMark != null ) 
+        {
+            for ( LineWithBounds line : lines) 
+            {
+                if ( line.line.address == addressToMark.shortValue() ) {
+                    return;
+                }
+            }
             disassemble( g );
         }
     }

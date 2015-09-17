@@ -94,7 +94,7 @@ public class DiskDrive extends IMemoryRegion
 
     private final IMemoryRegion[] memoryMap;
 
-    private final IMemoryRegion nonExistant = new IMemoryRegion("DUMMY",new AddressRange(0x800,0xb800 )) {
+    private final IMemoryRegion nonExistant = new IMemoryRegion("DUMMY",MemoryType.RAM, new AddressRange(0x800,0xb800 )) {
 
         @Override
         public void writeWord(int offset, short value) {
@@ -126,11 +126,6 @@ public class DiskDrive extends IMemoryRegion
         }
 
         @Override
-        public int readAndWriteByte(int offset) {
-            throw new RuntimeException("Read from non-existant memory location "+HexDump.toAdr( offset ) );
-        }
-
-        @Override
         public boolean isReadsReturnWrites(int offset) {
             return false;
         }
@@ -148,7 +143,7 @@ public class DiskDrive extends IMemoryRegion
 
     public DiskDrive(int driveAddress) 
     {
-        super("1541", AddressRange.range(0,0xffff) );
+        super("1541", MemoryType.RAM, AddressRange.range(0,0xffff) );
 
         for ( int i = 0 ; i < queueEntries.length ; i++ ) {
             queueEntries[i]=new JobQueue(i);
@@ -197,9 +192,9 @@ public class DiskDrive extends IMemoryRegion
         final AddressRange adrRange = new AddressRange(0,2*1024);
         if ( ! TRACK_JOBQUEUE ) 
         {
-            return new Memory( "RAM" , adrRange );
+            return new Memory( "RAM" , MemoryType.RAM, adrRange );
         }
-        return new SlowMemory( "RAM" , adrRange ) {
+        return new SlowMemory( "RAM" , MemoryType.RAM, adrRange ) {
 
             public void writeByte(int offset, byte value) 
             {
@@ -240,7 +235,7 @@ public class DiskDrive extends IMemoryRegion
                         return;
                 }
                 queueEntries[index].update( this );
-                System.out.println("JOB QUEUE #"+index+" changed: "+queueEntries[index]);
+//                System.out.println("JOB QUEUE #"+index+" changed: "+queueEntries[index]);
             };
         };
     }
@@ -291,14 +286,6 @@ public class DiskDrive extends IMemoryRegion
         final IMemoryRegion region = memoryMap[offset];
         final int translated = offset - region.getAddressRange().getStartAddress();
         return region.readByteNoSideEffects( translated );
-    }
-
-    @Override
-    public int readAndWriteByte(int offset) 
-    {
-        final IMemoryRegion region = memoryMap[offset];
-        final int translated = offset - region.getAddressRange().getStartAddress();
-        return region.readAndWriteByte( translated );
     }
 
     @Override

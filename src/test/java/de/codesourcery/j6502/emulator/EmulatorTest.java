@@ -29,6 +29,7 @@ import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.EmulatorDriver.IEmulationListener;
 import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
+import de.codesourcery.j6502.emulator.IMemoryRegion.MemoryType;
 import de.codesourcery.j6502.emulator.exceptions.HLTException;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
 import de.codesourcery.j6502.utils.HexDump;
@@ -49,7 +50,7 @@ public class EmulatorTest  extends TestCase
     {
         System.out.println("Performance 'Other CPU'");
 
-        final Memory memory = new Memory("test" , new AddressRange(0,65536));
+        final Memory memory = new Memory("test" , MemoryType.RAM , new AddressRange(0,65536));
 
         final Assembler asm = new Assembler();
         final CPU actualCPU = prepareTest( asm , memory );

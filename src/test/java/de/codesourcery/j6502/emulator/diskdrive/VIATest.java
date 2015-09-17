@@ -2,6 +2,7 @@ package de.codesourcery.j6502.emulator.diskdrive;
 
 import de.codesourcery.j6502.emulator.AddressRange;
 import de.codesourcery.j6502.emulator.CPU;
+import de.codesourcery.j6502.emulator.IMemoryRegion.MemoryType;
 import de.codesourcery.j6502.emulator.Memory;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.Port;
 import de.codesourcery.j6502.emulator.diskdrive.VIA.VIAChangeListener;
@@ -17,7 +18,7 @@ public class VIATest extends TestCase {
     {
         super.setUp();
 
-        final Memory memory = new Memory("dummy" , AddressRange.range(0, 0xffff) );
+        final Memory memory = new Memory("dummy" , MemoryType.RAM, AddressRange.range(0, 0xffff) );
         cpu = new CPU( memory);
         via = new VIA( "Test VIA" , AddressRange.range(0,16) , cpu );
 

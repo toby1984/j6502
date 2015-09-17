@@ -954,6 +954,11 @@ public abstract class AsmPanel extends JPanel implements IDebuggerView
 		info("Compilation FAILED.");
 		return false;
 	}
+	
+    @Override
+    public String getIdentifier() {
+        return "Assembly editor view";
+    }	
 
 	@Override
 	public void setLocationPeer(Component frame) {

@@ -12,8 +12,8 @@ public class SlowMemory extends IMemoryRegion
 {
 	private final byte[] data;
 
-	public SlowMemory(String identifier, AddressRange range) {
-		super(identifier, range);
+	public SlowMemory(String identifier, MemoryType type,AddressRange range) {
+		super(identifier, type , range);
 		this.data = new byte[ range.getSizeInBytes() ];
 	}
 
@@ -42,17 +42,11 @@ public class SlowMemory extends IMemoryRegion
 		return data[offset & 0xffff] & 0xff;
 	}
 	
-
     @Override
     public int readByteNoSideEffects(int offset) {
         return data[offset & 0xffff] & 0xff;
     }	
-
-	@Override
-	public int readAndWriteByte(int offset) {
-		return data[offset & 0xffff] & 0xff;
-	}
-
+    
 	@Override
 	public void writeByte(int offset, byte value) {
 		data[offset & 0xffff]=value;
