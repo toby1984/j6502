@@ -113,8 +113,10 @@ public final class MemorySubsystem extends IMemoryRegion
 	                return plaDataDirection & 0xff;
 	            case 1:
 	                int result = plaLatchBits & 0xff;
-	                if ( ! tapeDrive.playPressed ) {
+	                if ( ! tapeDrive.isKeyPressed() ) {
 	                	result |= 1<<4;
+	                } else {
+	                    result &= ~(1<<4);
 	                }
 	                return result;
 	            default:
@@ -145,7 +147,7 @@ public final class MemorySubsystem extends IMemoryRegion
 	                    setupMemoryLayout();
 	                }
 	                if ( ( plaDataDirection & 1<<5) != 0 ) {
-	                	tapeDrive.setMotor( (plaLatchBits & 1 << 5) != 0);
+	                	tapeDrive.setMotorUnlocked( (plaLatchBits & 1 << 5) == 0); // I/O line is inverted
 	                }
 	                break;
 	            default:
@@ -174,6 +176,8 @@ public final class MemorySubsystem extends IMemoryRegion
 
 	private final IMemoryRegion ram6= new Memory("RAM #6",MemoryType.RAM,Bank.BANK6.range);
 
+	private final TapeDrive tapeDrive;
+	
 	public final IMemoryRegion[] ramRegions = { ram0,ram1,ram2,ram3,ram4,ram5,ram6 };
 	
 	private final RAMView ramView = new RAMView();
@@ -182,7 +186,7 @@ public final class MemorySubsystem extends IMemoryRegion
 	public final WriteOnceMemory charROM;
 	public final WriteOnceMemory basicROM;
 	
-	public final IOArea ioArea = new IOArea("I/O area", Bank.BANK5.range , this , ram5 );
+	public final IOArea ioArea;
 	
 	private IMemoryRegion cartROMLow;
 	private IMemoryRegion cartROMHi;
@@ -199,8 +203,6 @@ public final class MemorySubsystem extends IMemoryRegion
 	// mapping from memory addresses to writeRegions
 	private final int[] writeMap = new int[65536];
 	
-	private final TapeDrive tapeDrive;
-
 	public MemorySubsystem(TapeDrive tapeDrive)
 	{
 		super("main memory" , MemoryType.RAM , new AddressRange(0,65536 ) );
@@ -217,6 +219,7 @@ public final class MemorySubsystem extends IMemoryRegion
         loadROM( "basic_v2.rom" , basicROM );   		
 		
 		this.tapeDrive = tapeDrive;
+		this.ioArea = new IOArea("I/O area", Bank.BANK5.range , this , ram5 , tapeDrive );
 
 		// setup memory from addresses to different memory banks
 		for ( final Bank bank : Bank.values() )
@@ -434,10 +437,6 @@ public final class MemorySubsystem extends IMemoryRegion
 	public void tick(Emulator emulator,CPU cpu,boolean clockHigh)
 	{
 		ioArea.tick( emulator , cpu , clockHigh );
-		if ( ! clockHigh ) 
-		{
-			tapeDrive.tick();
-		}
 	}
 	
 	private void createRegions(int index)

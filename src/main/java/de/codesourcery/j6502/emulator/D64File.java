@@ -120,17 +120,9 @@ public class D64File
 
 		public FileType getFileType()
 		{
-			switch( data[ absEntryOffset ] & 0b111 )
-			{
-				case 0: return FileType.DEL; // 000 (0) - DEL
-				case 1: return FileType.SEQ; // 001 (1) - SEQ
-				case 2: return FileType.PRG; // 010 (2) - PRG
-				case 3: return FileType.USR; // 011 (3) - USR
-				case 4: return FileType.REL; // 100 (4) - REL
-			}
-			return FileType.UNKNOWN;
+		    return toFileType( data[ absEntryOffset ] & 0b111 );
 		}
-
+		
 		public InputStream createInputStream()
 		{
 			final int track = getFirstDataTrack();
@@ -1281,4 +1273,17 @@ public class D64File
 		// not reachable, unless the block allocation bitmap handling is screwed up for some reason (bug)
 		throw new RuntimeException("Internal error, disk full ??");
 	}
+	
+    public static FileType toFileType(int value) 
+    {
+        switch( value & 0b111 )
+        {
+            case 0: return FileType.DEL; // 000 (0) - DEL
+            case 1: return FileType.SEQ; // 001 (1) - SEQ
+            case 2: return FileType.PRG; // 010 (2) - PRG
+            case 3: return FileType.USR; // 011 (3) - USR
+            case 4: return FileType.REL; // 100 (4) - REL
+        }
+        return FileType.UNKNOWN;
+    }	
 }

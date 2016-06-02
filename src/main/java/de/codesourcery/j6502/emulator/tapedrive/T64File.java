@@ -4,16 +4,17 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import de.codesourcery.j6502.emulator.D64File;
 import de.codesourcery.j6502.utils.CharsetConverter;
 
 public class T64File 
 {
-	private final byte[] data;
+	public final byte[] data;
 	
 	/*
 	 *       $ 0-20: File magic header ('C64xxxxxxx')
@@ -38,6 +39,10 @@ public class T64File
 	{
 		this( new FileInputStream(file) );
 	}
+	
+	public List<DirEntry> getDirEntries() {
+        return entries;
+    }
 	
 	public T64File(InputStream in) throws IOException 
 	{
@@ -211,6 +216,18 @@ Bytes:$20-21: Tape version number of either $0100 or $0101. I am  not  sure
 			this.petsciiName = Arrays.copyOfRange( data , offset+0x10 , offset+0x10+16 );
 		}
 		
+		public D64File.FileType getFileType() {
+		    return D64File.toFileType( this.floppyFileType );
+		}
+
+		public boolean hasFileType(D64File.FileType ft) {
+		    return ft.equals( getFileType() );
+		}
+		
+		public byte[] data() {
+		    return Arrays.copyOfRange( data , fileDataOffset , fileDataOffset+length() );
+		}
+		
 		public int length() {
 			return endAddress-loadAddress;
 		}
@@ -281,7 +298,18 @@ actual file data.
 	
 	public static void main(String[] args) throws Exception 
 	{
-	
+	    /* 
+	     * 985 Khz CPU freq =
+         * 	       1,0152285 microseconds = 1.0152285*10-6
+         * 	       => 0,0010152284264 milliseconds per CPU cycle
+         * 	       
+         * (S)hort  : 2840 Hz => 0.0003521126637 s   = 0.3521126637   ms =  346,830973743 cycles
+         * (M)edium : 1953 Hz => 0,000512032770097 s = 0.512032770097 ms =  504,352278544 cycles
+         * (L)ong   : 1488 Hz => 0,000672043010753 s = 0,672043010753 ms =  661,962365589 cycles    
+	     */
+	    float f = 1/2840f;
+	    final DecimalFormat DF = new DecimalFormat("####0.0############");
+	    System.out.println("freq: "+DF.format(f));
 		final T64File file = new T64File( new File("/home/tgierke/mars_workspace/j6502/tapes/choplifter.t64" ) );
 		System.out.println("File: "+file);
 		System.out.println("Entries: "+file.entries);
