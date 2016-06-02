@@ -4,6 +4,7 @@ import java.util.function.Consumer;
 
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.Disassembler.Line;
+import de.codesourcery.j6502.emulator.tapedrive.TapeDrive;
 
 public class Emulator
 {
@@ -17,7 +18,9 @@ public class Emulator
 
 	public static long totalCycles;
 	
-	private final MemorySubsystem memory = new MemorySubsystem();
+	public final TapeDrive tapeDrive = new TapeDrive();
+	
+	private final MemorySubsystem memory = new MemorySubsystem(tapeDrive);
 	private final CPU cpu = new CPU( this.memory );
 
 	private IMemoryProvider memoryProvider;
