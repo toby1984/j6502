@@ -727,7 +727,7 @@ ende     rts             ; back to BASIC
 	    if ( tickCounter != 0 ) 
 	    {
 	        final boolean currentSignal = getTapeSignal();
-	        final boolean isPositiveSlope = previousTapeSignal && ! currentSignal; // IRQ triggers on positive slop , input line is inverted 
+	        final boolean isPositiveSlope = !previousTapeSignal && currentSignal; // IRQ triggers on positive slop , input line is inverted 
 	        if ( isPositiveSlope ) 
 	        {
 	            // Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.	     
