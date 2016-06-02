@@ -294,6 +294,7 @@ $DD0F 	56591 	15
 CRB 	Control Timer B 	see CIA 1
 	 */
 
+	private boolean previousTapeSignal;
 	private long tickCounter = 0;
 	private boolean todRunning;
 
@@ -368,6 +369,8 @@ CRB 	Control Timer B 	see CIA 1
 	{
 		super.reset();
 
+		previousTapeSignal = false;
+		
 		tickCounter = 0;
 		initTOD();
 
@@ -643,10 +646,14 @@ ende     rts             ; back to BASIC
 
 	public void tick(CPU cpu)
 	{
+	    // call BEFORE bumping tickCounter because this method needs to know when it's called the first time after a reset
+	    handleCassette( cpu ); 
+	    
 	    /*
 	     * Method must ONLY be called when ph2 == HIGH
 	     */
 		tickCounter++;
+		
 		if ( todRunning & ( tickCounter % 100_000) == 0 ) // RTC increases in 1/10 of a second intervals = every 100 milliseconds = every 100.000 microseconds
 		{
 			increaseRTC( cpu );
@@ -711,7 +718,38 @@ ende     rts             ; back to BASIC
 		}
 	}
 
-	private void handleTimerBUnderflow(int crb,CPU cpu)
+	protected void handleCassette(CPU cpu) 
+	{
+    }
+	
+	protected final void doHandleCassette(CPU cpu) 
+	{
+	    if ( tickCounter != 0 ) 
+	    {
+	        final boolean currentSignal = getTapeSignal();
+	        final boolean isPositiveSlope = previousTapeSignal && ! currentSignal; // IRQ triggers on positive slop , input line is inverted 
+	        if ( isPositiveSlope ) 
+	        {
+	            // Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.	     
+	            icr_read |= ( (1<<7) | (1<<4) ); 
+	            if ( (irqMask & 1<<4) != 0 ) { // IRQ mask: Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.  
+	                cpu.queueInterrupt( IRQType.REGULAR  );
+	            }	    
+	        }
+	        previousTapeSignal = currentSignal;
+	    } 
+	    else 
+	    {
+	        // this is the very first CPU tick
+	        previousTapeSignal = getTapeSignal();
+	    }
+	}
+	
+	protected boolean getTapeSignal() {
+	    return false;
+	}
+
+    private void handleTimerBUnderflow(int crb,CPU cpu)
 	{
 //		System.out.println("CIA #1 timer B underflow");
 		icr_read |= ( (1<<7) | (1<<1) ); // timerB triggered underflow

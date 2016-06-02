@@ -52,6 +52,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.border.TitledBorder;
@@ -786,6 +787,7 @@ public class Debugger
         public final JButton stepOverButton = new JButton("Step over");
         public final JButton loadButton = new JButton("Load");
         public final JButton toggleSpeedButton = new JButton("Toggle speed");
+		public final JToggleButton tapePlay = new JToggleButton("Tape: Play",false);
         public final JButton refreshUIButton = new JButton("Refresh UI");
 
         private Component peer;
@@ -940,6 +942,13 @@ public class Debugger
                 trueSpeed[0] = ! trueSpeed[0];
             });
 
+            tapePlay.addActionListener( ev -> 
+            {
+                synchronized(emulator) {
+                    emulator.tapeDrive.setKeyPressed( tapePlay.isSelected() );
+                }
+            });
+			
             refreshUIButton.addActionListener( ev ->
             {
                 updateWindows( false );
@@ -958,6 +967,7 @@ public class Debugger
             add( breakOnIRQButton );
             add( loadButton );
             add( toggleSpeedButton );
+			add( tapePlay );
             add( refreshUIButton );
 
             updateButtons();

@@ -3,6 +3,7 @@ package de.codesourcery.j6502.emulator;
 import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.emulator.Keyboard.Key;
+import de.codesourcery.j6502.emulator.tapedrive.TapeDrive;
 
 /**
  * I/O area , memory bank 5 ($D000 - $DFFF).
@@ -15,6 +16,7 @@ public class IOArea extends SlowMemory
 
 	private final IMemoryRegion colorRAMBank; // RAM that covers $D000 - $DFFF
 
+	public final TapeDrive tapeDrive;
 	public final VIC vic;
 	public final IECBus iecBus;
 
@@ -36,6 +38,18 @@ public class IOArea extends SlowMemory
 
 	public final CIA cia1 = new CIA("CIA #1" , AddressRange.range( 0xdc00, 0xdd00 ) ) {
 
+	    // only CIA #1 needs to handle input from tape drive
+	    protected final void handleCassette(CPU cpu) 
+	    {
+	        tapeDrive.tick();
+	        doHandleCassette( cpu );
+	    }
+	    
+	    protected final boolean getTapeSignal() 
+	    {
+	        return tapeDrive.currentSignal();
+	    }
+	    
 	    @Override
 	    public void writeByte(int address, byte value) 
 	    {
@@ -290,10 +304,11 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 	 * @param colorRAMBank Writes/reads of color RAM @ 0d800-0dc00 will be redirected here so
 	 * that contents of color RAM are identical no matter whether the I/O area has been swapped for RAM or not
 	 */
-	public IOArea(String identifier, AddressRange range, MemorySubsystem mainMemory,IMemoryRegion colorRAMBank)
+	public IOArea(String identifier, AddressRange range, MemorySubsystem mainMemory,IMemoryRegion colorRAMBank, TapeDrive tapeDrive)
 	{
 		super(identifier, MemoryType.IOAREA ,range);
 
+		this.tapeDrive = tapeDrive;
 		this.colorRAMBank = colorRAMBank;
 
 		cpuDevice = new SerialDevice() {
@@ -442,6 +457,8 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 			keyboardColumns[i] = 0xff;
 		}
 
+		tapeDrive.reset();
+		
 		joy1Mask = 0xff;
 		joy2Mask = 0xff;
 
