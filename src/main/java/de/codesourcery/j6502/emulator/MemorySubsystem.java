@@ -3,6 +3,7 @@ package de.codesourcery.j6502.emulator;
 import java.io.IOException;
 import java.io.InputStream;
 
+import de.codesourcery.j6502.emulator.tapedrive.TapeDrive;
 import de.codesourcery.j6502.utils.HexDump;
 
 
@@ -111,7 +112,11 @@ public final class MemorySubsystem extends IMemoryRegion
 	            case 0:
 	                return plaDataDirection & 0xff;
 	            case 1:
-	                return plaLatchBits & 0xff;
+	                int result = plaLatchBits & 0xff;
+	                if ( ! tapeDrive.playPressed ) {
+	                	result |= 1<<4;
+	                }
+	                return result;
 	            default:
 	                return super.readByte( wrappedOffset );
 	        }
@@ -138,6 +143,9 @@ public final class MemorySubsystem extends IMemoryRegion
 	                plaLatchBits = value;
 	                if ( oldValue != (plaLatchBits & 0xff) ) {
 	                    setupMemoryLayout();
+	                }
+	                if ( ( plaDataDirection & 1<<5) != 0 ) {
+	                	tapeDrive.setMotor( (plaLatchBits & 1 << 5) != 0);
 	                }
 	                break;
 	            default:
@@ -190,8 +198,10 @@ public final class MemorySubsystem extends IMemoryRegion
 
 	// mapping from memory addresses to writeRegions
 	private final int[] writeMap = new int[65536];
+	
+	private final TapeDrive tapeDrive;
 
-	public MemorySubsystem()
+	public MemorySubsystem(TapeDrive tapeDrive)
 	{
 		super("main memory" , MemoryType.RAM , new AddressRange(0,65536 ) );
 		
@@ -205,6 +215,8 @@ public final class MemorySubsystem extends IMemoryRegion
         // basic ROM
         basicROM = new WriteOnceMemory("Basic ROM" , Bank.BANK3.range );
         loadROM( "basic_v2.rom" , basicROM );   		
+		
+		this.tapeDrive = tapeDrive;
 
 		// setup memory from addresses to different memory banks
 		for ( final Bank bank : Bank.values() )
@@ -422,6 +434,10 @@ public final class MemorySubsystem extends IMemoryRegion
 	public void tick(Emulator emulator,CPU cpu,boolean clockHigh)
 	{
 		ioArea.tick( emulator , cpu , clockHigh );
+		if ( ! clockHigh ) 
+		{
+			tapeDrive.tick();
+		}
 	}
 	
 	private void createRegions(int index)

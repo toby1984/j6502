@@ -85,6 +85,7 @@ import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.emulator.SerialDevice;
 import de.codesourcery.j6502.emulator.VIC;
 import de.codesourcery.j6502.emulator.diskdrive.DiskHardware;
+import de.codesourcery.j6502.emulator.tapedrive.T64File;
 import de.codesourcery.j6502.ui.KeyboardInputListener.JoystickPort;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
@@ -411,6 +412,7 @@ public class Debugger
         final JMenu menu = new JMenu("File");
         menuBar.add( menu );
 
+		// disk handling
         JMenuItem item = new JMenuItem("Insert disk...");
         item.addActionListener( event -> insertDisk() );
         menu.add( item );
@@ -418,6 +420,23 @@ public class Debugger
         item = new JMenuItem("Eject disk...");
         item.addActionListener( event -> ejectDisk() );
         menu.add( item );
+		
+		// tape handling
+		menu.addSeparator();
+		item = new JMenuItem("Insert tape...");
+		item.addActionListener( event -> 
+		{
+			try {
+				insertTape();
+			} catch(Exception e) {
+				showError("Failed to load .t64 file",e);
+			}
+		});
+		menu.add( item );
+
+		item = new JMenuItem("Eject tape...");
+		item.addActionListener( event -> ejectTape() );
+		menu.add( item );		
 
         // add 'Views' menu
         final JMenu views = new JMenu("Views");
@@ -556,7 +575,7 @@ public class Debugger
             .stream().filter( dev -> dev instanceof DiskHardware).map( dev -> (DiskHardware) dev).findFirst().ifPresent( consumer );
         }
     }
-
+	
     private <T> Optional<T> doWithFloppyAndReturn(Function<DiskHardware,Optional<T>> consumer)
     {
         synchronized(emulator)
@@ -568,6 +587,49 @@ public class Debugger
                 return consumer.apply( floppy.get() );
             }
             return Optional.empty();
+		}
+	}
+	
+	private void insertTape() throws IOException 
+	{
+		final String lastFile = loc.getConfigProperties().get("last_t64_file");
+		final JFileChooser chooser;
+		if (StringUtils.isNotBlank( lastFile ))
+		{
+			chooser = new JFileChooser(new File( lastFile ) );
+		} else {
+			chooser = new JFileChooser( new File("/home/tgierke/mars_workspace/j6502/tapes") );
+		}
+
+		chooser.setFileFilter( new FileFilter()
+		{
+            @Override
+            public boolean accept(File f) {
+                return f.isDirectory() || ( f.isFile() && ( f.getName().toLowerCase().endsWith(".t64" ) ) );
+            }
+
+            @Override
+            public String getDescription() {
+                return ".t64";
+            }
+		});
+		if ( chooser.showOpenDialog( null ) != JFileChooser.APPROVE_OPTION )
+		{
+			return;
+		}     
+		
+		final File file = chooser.getSelectedFile();
+
+		loc.getConfigProperties().put( "last_t64_file" , file.getAbsolutePath() );
+		synchronized( emulator ) {
+			emulator.tapeDrive.insert( new T64File( file ) );
+		}
+	}
+	
+	private void ejectTape() 
+	{
+		synchronized( emulator ) {
+			emulator.tapeDrive.eject();
         }
     }
 
