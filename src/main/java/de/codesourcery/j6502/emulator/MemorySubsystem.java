@@ -147,7 +147,7 @@ public final class MemorySubsystem extends IMemoryRegion
 	                    setupMemoryLayout();
 	                }
 	                if ( ( plaDataDirection & 1<<5) != 0 ) {
-	                	tapeDrive.setMotorUnlocked( (plaLatchBits & 1 << 5) == 0); // I/O line is inverted
+	                	tapeDrive.setMotorOn( (plaLatchBits & 1 << 5) == 0); // I/O line is inverted
 	                }
 	                break;
 	            default:

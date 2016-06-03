@@ -2,6 +2,15 @@ package de.codesourcery.j6502.emulator.tapedrive;
 
 import org.apache.commons.lang.Validate;
 
+/**
+ * http://c64tapes.org/dokuwiki/doku.php?id=loaders:rom_loader
+ * 
+ * http://www.pagetable.com/c64rom/c64rom_en.html#F199	 
+ * 
+ * http://www.pagetable.com/c64rom/c64rom_en.html#F875
+ * 
+ * http://wav-prg.sourceforge.net/tape.html
+ */
 public class TapeDrive 
 {
 	private static final boolean DEBUG = true;
@@ -10,21 +19,11 @@ public class TapeDrive
 	
 	private T64File tape;
 	
-	private boolean motorUnlocked;
+	private boolean motorOn;
 	private boolean keyPressed;
 	
 	private int tickCounter = 0;
 	
-	/*
-	 * Reading from tape:
-	 * 
-     * INIT: http://www.pagetable.com/c64rom/c64rom_en.html#F199	 
-     * 
-     * READ/WRITE: http://www.pagetable.com/c64rom/c64rom_en.html#F875
-     * 
-     * http://wav-prg.sourceforge.net/tape.html
-	 */
-
 	public void insert(T64File tape) 
 	{
 		Validate.notNull(tape, "tape must not be NULL");
@@ -46,11 +45,11 @@ public class TapeDrive
 	    return driver.currentSignal();
 	}
 	
-	public void setMotorUnlocked(boolean onOff) {
-		if ( DEBUG && this.motorUnlocked != onOff ) {
+	public void setMotorOn(boolean onOff) {
+		if ( DEBUG && this.motorOn != onOff ) {
 			System.out.println("TAPE MOTOR UNLOCKED: "+onOff);
 		}
-		this.motorUnlocked = onOff;
+		this.motorOn = onOff;
 	}
 	
 	public boolean isKeyPressed() {
@@ -66,12 +65,12 @@ public class TapeDrive
 	
 	public void tick() 
 	{
-	    if ( motorUnlocked && keyPressed ) 
+	    if ( motorOn && keyPressed ) 
 	    {
 	        tickCounter++;
-	        if ( DEBUG && (tickCounter%500000) == 0 ) {
+	        if ( DEBUG && (tickCounter%985000) == 0 ) {
 	            System.out.println("TAPE tick() : waves remaining - "+driver.wavesRemaining());
-	        }
+	        }	        
 	        driver.tick();
 	    }
 	}
@@ -79,7 +78,7 @@ public class TapeDrive
 	public void reset() 
 	{
 	    tickCounter = 0;
-	    motorUnlocked = false;
+	    motorOn = false;
 	    keyPressed = false;
 	    
 	    if ( this.tape != null ) 

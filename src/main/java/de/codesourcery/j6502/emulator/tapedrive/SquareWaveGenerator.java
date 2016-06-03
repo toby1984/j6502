@@ -1,8 +1,5 @@
 package de.codesourcery.j6502.emulator.tapedrive;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class SquareWaveGenerator 
 {
     public enum WavePeriod
@@ -45,7 +42,58 @@ public class SquareWaveGenerator
         }
     }
     
-    private List<WavePeriod> waves = new ArrayList<>();
+    private final WaveArray waves = new WaveArray(1024);
+    
+    protected static final class WaveArray 
+    {
+    	public int waveCount=0;
+        public int wavePtr=0;
+        public WavePeriod[] waves;
+    
+        public WaveArray(int initialSize) {
+        	this.waves = new WavePeriod[initialSize];
+        }
+        
+    	public int size() {
+    		return waveCount;
+    	}
+    	
+    	public int wavesRemaining() {
+    		return waveCount-wavePtr;
+    	}
+    	
+    	public void add(WavePeriod p) {
+    		
+    		if ( wavePtr == waves.length ) 
+    		{
+    			final WavePeriod[] newData = new WavePeriod[ waves.length + waves.length/2 ];
+    			System.arraycopy( this.waves , 0 , newData , 0 , this.waves.length );
+    			waves = newData;
+    		}
+    		waves[wavePtr++]=p;
+    		waveCount++;
+    	}
+    	
+    	public WavePeriod pop() 
+    	{
+    		if ( wavePtr == waveCount ) {
+    			return null;
+    		}
+    		return waves[wavePtr++];
+    	}
+    	
+    	public void clear() 
+    	{
+    		waveCount = 0;
+    		waves = new WavePeriod[ this.waves.length ];
+    		rewind();
+    	}    	
+    	
+    	public void rewind() {
+    		wavePtr = 0;
+    	}
+    }
+    
     private WavePeriod currentWave;
     private boolean currentSignal;
     private int currentTicks;
@@ -71,7 +119,7 @@ public class SquareWaveGenerator
     }
     
     public int wavesRemaining() {
-        return waves.size();
+        return waves.wavesRemaining();
     }
     
     public void reset() {
@@ -80,15 +128,18 @@ public class SquareWaveGenerator
         currentSignal=false;
     }
     
+    public void rewind() {
+    	waves.rewind();
+    }
+    
     public void tick() 
     {
         if ( currentWave == null ) 
         {
-            if ( waves.isEmpty() ) {
+        	currentWave = waves.pop();
+        	if ( currentWave == null ) {
                 currentWave = WavePeriod.SHORT; // pulses of SHORT length are used as a trailer by the tape format
-            } else {
-                currentWave = waves.remove(0);
-            }
+            } 
             currentWave.onEnter(this);
             return;
         }

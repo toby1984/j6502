@@ -1020,6 +1020,14 @@ public final class CPUImpl
 	public void executeInstruction()
 	{
 		final int initialPC = cpu.pc();
+		
+		// TODO: Remove tape debug code
+		
+		if ( initialPC == 0xf993 ) {
+			System.out.println("BIT: 0");
+		} else if ( initialPC == 0xf997 ) {
+			System.out.println("BIT: 1");
+		}
 
 		opcode = read6502( initialPC );
 
