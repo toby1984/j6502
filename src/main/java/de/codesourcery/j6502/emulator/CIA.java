@@ -16,7 +16,7 @@ import de.codesourcery.j6502.utils.Misc;
 public class CIA extends Memory
 {
 	private static final boolean DEBUG = true;
-	private static final boolean DEBUG_VERBOSE = false;
+	private static final boolean DEBUG_VERBOSE = true;
 
 	public static final int CIA1_PRA        = 0x00;
 	public static final int CIA1_PRB        = 0x01;
@@ -294,6 +294,7 @@ $DD0F 	56591 	15
 CRB 	Control Timer B 	see CIA 1
 	 */
 
+	private long debugPreviousTapeSignalChangeTick=-1; // TODO: Debug code, remove when done
 	private boolean previousTapeSignal;
 	private long tickCounter = 0;
 	private boolean todRunning;
@@ -369,6 +370,8 @@ CRB 	Control Timer B 	see CIA 1
 	{
 		super.reset();
 
+		debugPreviousTapeSignalChangeTick = -1;
+		
 		previousTapeSignal = false;
 		
 		tickCounter = 0;
@@ -529,6 +532,7 @@ ende     rts             ; back to BASIC
 		                           If all bits 0..4 are cleared, there will be no change to the mask.
 				 */
 				this.rtcAlarmIRQEnabled = (value & 1<<2 ) != 0;
+				final int oldMask = irqMask;
 				if ( (value & 1<<7) == 0 ) { // source bit = 0 => set bits 0...4 are clearing the bits in IRQ mask
 					int mask = ~(value & 0b11111);
 					irqMask &= mask;
@@ -536,8 +540,8 @@ ende     rts             ; back to BASIC
 					int mask = (value & 0b11111);
 					irqMask |= mask;
 				}
-				if ( DEBUG ) {
-					System.out.println( this+" ICR = "+Integer.toBinaryString( value ) );
+				if ( DEBUG && (oldMask != irqMask ) ) {
+					System.out.println( this+" ICR = "+Integer.toBinaryString( irqMask ) );
 				}
 				break;
 			case CIA1_TALO:
@@ -605,7 +609,11 @@ ende     rts             ; back to BASIC
 					}
 				}
 
-				if ( ( value & 1 << 4) != 0 ) {
+				if ( ( value & 1 << 4) != 0 ) 
+				{
+					if ( DEBUG_VERBOSE ) {
+						System.out.println( this+" , FORCED loading timer B from latch: "+timerBLatch);
+					}					
 					timerBValue = timerBLatch;
 				}
 				break;
@@ -732,9 +740,17 @@ ende     rts             ; back to BASIC
 	        {
 	            // Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.	     
 	            icr_read |= ( (1<<7) | (1<<4) ); 
-	            if ( (irqMask & 1<<4) != 0 ) { // IRQ mask: Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.  
+	            if ( (irqMask & 1<<4) != 0 ) { // IRQ mask: Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.
+	            	if ( DEBUG_VERBOSE ) {
+	            		long delta = tickCounter - debugPreviousTapeSignalChangeTick;
+		        		System.out.println("Detected positive slope on /FLAG (IRQ enabled) - tick "+tickCounter+" (delta: "+delta+")");
+		        	}	    	            	
 	                cpu.queueInterrupt( IRQType.REGULAR  );
-	            }	    
+	            } else if ( DEBUG_VERBOSE ) {
+            		long delta = tickCounter - debugPreviousTapeSignalChangeTick;	            	
+	        		System.out.println("Detected positive slope on /FLAG (IRQ disabled) - tick "+tickCounter+" (delta: "+delta+")");
+	        	}	    
+	            debugPreviousTapeSignalChangeTick = tickCounter;
 	        }
 	        previousTapeSignal = currentSignal;
 	    } 
@@ -751,17 +767,35 @@ ende     rts             ; back to BASIC
 
     private void handleTimerBUnderflow(int crb,CPU cpu)
 	{
-//		System.out.println("CIA #1 timer B underflow");
 		icr_read |= ( (1<<7) | (1<<1) ); // timerB triggered underflow
-		if ( (irqMask & 2 ) != 0 ) { // trigger interrupt on timer B underflow ?
+		
+		/*
+		        Bit 0: 1 = Interrupt release through timer A underflow
+		        Bit 1: 1 = Interrupt release through timer B underflow
+		        Bit 2: 1 = Interrupt release if clock=alarmtime
+		        Bit 3: 1 = Interrupt release if a complete byte has been received/sent.
+		        Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.
+		        Bit 5..6: unused
+		        Bit 7: Source bit. 0 = set bits 0..4 are clearing the according mask bit.
+		                           1 = set bits 0..4 are setting the according mask bit.
+		                           If all bits 0..4 are cleared, there will be no change to the mask.		 
+		 */
+		if ( (irqMask & (1<<1) ) != 0 ) { // trigger interrupt on timer B underflow ?
+			if ( DEBUG_VERBOSE ) {
+				System.out.println(this+" queueing interrupt for timer B");
+			}				
 			cpu.queueInterrupt( IRQType.REGULAR  );
 		}
-		if ( (crb & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
+		boolean timerBOneShotMode = (crb & 1<<3) != 0;
+		if ( timerBOneShotMode ) { // bit 3 = 1 => timer stops after underflow
+			if ( DEBUG_VERBOSE ) {
+				System.out.println(this+" , timer B running in one-shot mode, timer is now stopped.");
+			}			
 			timerBRunning = false;
 		}
 
 		if ( DEBUG_VERBOSE ) {
-			System.out.println(this+" , loading timer B latch = "+timerBLatch);
+			System.out.println(this+" , timer B underflow , loading timer B latch = "+timerBLatch);
 		}
 		timerBValue = timerBLatch;
 	}

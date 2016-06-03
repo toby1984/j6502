@@ -31,6 +31,8 @@ public class SquareWaveDriver
             }            
             writeFile( entry );
         }
+        
+        generator.rewind();
     }
     
     public int wavesRemaining() {
@@ -53,18 +55,18 @@ public class SquareWaveDriver
          */
         
         // first pass
-        writeSync();
+        writeSync(); // raw
         
         writeHeader( entry );
         
-        writeGap();
+        writeGap(); // short pulses
 
         // repetition
         writeSyncRepeated();
         
         writeHeader( entry );
         
-        writeTrailer();      
+        writeTrailer(); // short pulses      
         
         /*
          * === DATA ===
@@ -181,15 +183,25 @@ public class SquareWaveDriver
         if ( DEBUG ) {
             System.out.println("Generating: SYNC");
         }        
-        writeBytesNoParity( new int[] { 0x89 ,0x88 ,0x87 ,0x86 ,0x85 ,0x84 ,0x83 ,0x82 ,0x81 } );
+        writeRawBytes( new byte[] { (byte) 0x89 ,(byte) 0x88 ,(byte) 0x87 ,(byte) 0x86 ,(byte) 0x85 ,(byte) 0x84 ,(byte) 0x83 ,(byte) 0x82 ,(byte) 0x81 } );
     }
+    
+    private void writeByteLeadIn() {
+    	generator.addWave( WavePeriod.LONG );
+    	generator.addWave( WavePeriod.MEDIUM );
+    }
+    
+    private void writeEndOfDataMarker() {
+    	generator.addWave( WavePeriod.LONG );
+    	generator.addWave( WavePeriod.SHORT );
+    }    
     
     private void writeSyncRepeated() 
     {
         if ( DEBUG ) {
             System.out.println("Generating: SYNC_REPEATED");
         }   
-        writeBytesNoParity( new int[] { 0x09 ,0x08 ,0x07 ,0x06 ,0x05 ,0x04 ,0x03 ,0x02 ,0x01 } );
+        writeRawBytes( new byte[] { 0x09 ,0x08 ,0x07 ,0x06 ,0x05 ,0x04 ,0x03 ,0x02 ,0x01 } );
     }
     
     private void writeBytesWithParity(int byteValue,int count) 
@@ -204,13 +216,14 @@ public class SquareWaveDriver
         for ( int byteValue : data ) {
             writeByteWithParity( byteValue & 0xff );
         }
-    }    
+    }  
     
-    private void writeBytesNoParity(int[] data) {
+    private void writeRawBytes(byte[] data) 
+    {
         for ( int byteValue : data ) {
-            writeByteNoParity( byteValue );
+            writeRawByte( byteValue );
         }
-    }
+    }      
     
     private void writeWord(int word) {
     
@@ -227,9 +240,9 @@ public class SquareWaveDriver
         writeByte(value,false);
     }    
     
-    private void writeByte(int value,boolean withParity) {
+    private int writeRawByte(int value) {
         
-        int mask = 0b1000_0001; 
+        int mask = 0b1000_0000; 
         int oneBitCount=0;
         for ( int i = 0 ; i < 8 ; i++ ) 
         {
@@ -240,6 +253,14 @@ public class SquareWaveDriver
             generator.addBit( bitSet );
             mask >>>= 1;
         }
+        return oneBitCount;
+    }    
+    
+    private void writeByte(int value,boolean withParity) {
+        
+    	writeByteLeadIn();
+    	
+        final int oneBitCount=writeRawByte(value);
         
         if ( withParity ) {
             // write parity bit
@@ -254,6 +275,6 @@ public class SquareWaveDriver
     }
     
     public void reset() {
-        generator.reset();
+        generator.rewind();
     }
 }
