@@ -86,15 +86,15 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
         Read: Bit 7: Timer B: Toggle/Impulse output (see register 15 bit 2)
 			 */
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
-			if ( offset == CIA1_PRA )
+			if ( offset == CIA_PRA )
 			{
-				final int pra = super.readByte( CIA1_PRA );
+				final int pra = super.readByte( CIA_PRA );
 				return pra & joy2Mask;
 			}
-			if ( offset == CIA1_PRB )
+			if ( offset == CIA_PRB )
 			{
 				// rowBit / PRB , columnBit / PRA )
-				int pra = super.readByte( CIA1_PRA ); // figure out which keyboard column to read (columns to be read have a 0 bit in here)
+				int pra = super.readByte( CIA_PRA ); // figure out which keyboard column to read (columns to be read have a 0 bit in here)
 				int result2 = 0xff; // keyboard lines are low-active, so 1 = key NOT pressed , 0 = key pressed
 				for ( int col = 0 ; col < 8 ; col++ ) {
 					if ( ( pra & (1<< col ) ) == 0 ) { // got column (bit is low-active)
@@ -191,7 +191,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
             getBreakpointsContainer().write( adr );   
             
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
-			if (offset == CIA2_PRA )
+			if (offset == CIA_PRA )
 			{
 				/*
 				 Bit 0..1: Select the position of the VIC-memory
@@ -232,7 +232,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 			}
 			else
 			{
-				if ( offset == CIA2_DDRA && IECBus.DEBUG_WIRE_LEVEL )
+				if ( offset == CIA_DDRA && IECBus.DEBUG_WIRE_LEVEL )
 				{
 					System.out.println("Write to $DD02 DDRA: "+toBinaryString(value));
 				}
@@ -352,19 +352,19 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 			@Override
 			public boolean getData()
 			{
-				final int value = cia2.readByte( CIA.CIA2_PRA );
+				final int value = cia2.readByte( CIA.CIA_PRA );
 				return ( value & 0b0010_0000) == 0;
 			}
 
 			@Override
 			public boolean getClock() {
-				final int value = cia2.readByte( CIA.CIA2_PRA );
+				final int value = cia2.readByte( CIA.CIA_PRA );
 				return ( value & 0b0001_0000) == 0;
 			}
 
 			@Override
 			public boolean getATN() {
-				final int value = cia2.readByte( CIA.CIA2_PRA );
+				final int value = cia2.readByte( CIA.CIA_PRA );
 				return ( value & 0b0000_1000) == 0;
 			}
 		};
@@ -474,7 +474,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		if ( clockHigh ) {
 			keyboardBuffer.tick( this );
 	        cia1.tick( cpu );
-	        cia2.tick(cpu );
+	        cia2.tick( cpu );
 	        iecBus.tick(emulator);
 		}
 

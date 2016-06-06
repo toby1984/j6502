@@ -18,39 +18,22 @@ public class CIA extends Memory
 	private static final boolean DEBUG = true;
 	private static final boolean DEBUG_VERBOSE = true;
 
-	public static final int CIA1_PRA        = 0x00;
-	public static final int CIA1_PRB        = 0x01;
-	public static final int CIA1_DDRA       = 0x02;
-	public static final int CIA1_DDRB       = 0x03;
-	public static final int CIA1_TALO       = 0x04;
-	public static final int CIA1_TAHI       = 0x05;
-	public static final int CIA1_TBLO       = 0x06;
-	public static final int CIA1_TBHI       = 0x07;
-	public static final int CIA1_TOD_10THS  = 0x08;
-	public static final int CIA1_TOD_SECOND = 0x09;
-	public static final int CIA1_TOD_MIN    = 0x0a;
-	public static final int CIA1_TOD_HOUR   = 0x0b;
-	public static final int CIA1_SDR        = 0x0c;
-	public static final int CIA1_ICR        = 0x0d;
-	public static final int CIA1_CRA        = 0x0e;
-	public static final int CIA1_CRB        = 0x0f;
-
-	public static final int CIA2_PRA        = 0x00;
-	public static final int CIA2_PRB        = 0x01;
-	public static final int CIA2_DDRA       = 0x02;
-	public static final int CIA2_DDRB       = 0x03;
-	public static final int CIA2_TALO       = 0x04;
-	public static final int CIA2_TAHI       = 0x05;
-	public static final int CIA2_TBLO       = 0x06;
-	public static final int CIA2_TBHI       = 0x07;
-	public static final int CIA2_TOD_10THS  = 0x08;
-	public static final int CIA2_TOD_SECOND = 0x09;
-	public static final int CIA2_TOD_MIN    = 0x0a;
-	public static final int CIA2_TOD_HOUR   = 0x0b;
-	public static final int CIA2_SDR        = 0x0c;
-	public static final int CIA2_ICR        = 0x0d;
-	public static final int CIA2_CRA        = 0x0e;
-	public static final int CIA2_CRB        = 0x0f;
+	public static final int CIA_PRA        = 0x00;
+	public static final int CIA_PRB        = 0x01;
+	public static final int CIA_DDRA       = 0x02;
+	public static final int CIA_DDRB       = 0x03;
+	public static final int CIA_TALO       = 0x04;
+	public static final int CIA_TAHI       = 0x05;
+	public static final int CIA_TBLO       = 0x06;
+	public static final int CIA_TBHI       = 0x07;
+	public static final int CIA_TOD_10THS  = 0x08;
+	public static final int CIA_TOD_SECOND = 0x09;
+	public static final int CIA_TOD_MIN    = 0x0a;
+	public static final int CIA_TOD_HOUR   = 0x0b;
+	public static final int CIA_SDR        = 0x0c;
+	public static final int CIA_ICR        = 0x0d;
+	public static final int CIA_CRA        = 0x0e;
+	public static final int CIA_CRB        = 0x0f;
 
 	/*
 ----
@@ -421,7 +404,7 @@ ende     rts             ; back to BASIC
 		final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
 		switch(offset)
 		{
-			case CIA1_ICR:
+			case CIA_ICR:
 				int result = icr_read & 0xff;
 				icr_read = 0;
 				return result;
@@ -448,24 +431,24 @@ ende     rts             ; back to BASIC
         Bit 5..6: unused
         Bit 7: Source bit. 0 = set bits 0..4 are clearing the according mask bit. 1 = set bits 0..4 are setting the according mask bit. If all bits 0..4 are cleared, there will be no change to the mask.
 				 */
-			case CIA1_TALO:
+			case CIA_TALO:
 				return timerAValue & 0xff;
-			case CIA1_TAHI:
+			case CIA_TAHI:
 				return (timerAValue >>> 8 ) & 0xff;
-			case CIA1_TBLO:
+			case CIA_TBLO:
 				return timerBValue & 0xff;
-			case CIA1_TBHI:
+			case CIA_TBHI:
 				return (timerBValue >>> 8 ) & 0xff;
 				// ======== return ToD ====
-			case CIA1_TOD_10THS: //  = 0x08;
+			case CIA_TOD_10THS: //  = 0x08;
 				this.todRunning = false; //  Writing CIA1_TOD_10TS register stops TOD, until register 8 (TOD 10THS) is read.
 				todRunning = true;
 				return Misc.binaryToBCD( tod10s );
-			case CIA1_TOD_SECOND: // = 0x09;
+			case CIA_TOD_SECOND: // = 0x09;
 				return Misc.binaryToBCD( todSeconds );
-			case CIA1_TOD_MIN: //    = 0x0a;
+			case CIA_TOD_MIN: //    = 0x0a;
 				return Misc.binaryToBCD( todMinutes );
-			case CIA1_TOD_HOUR: //   = 0x0b;
+			case CIA_TOD_HOUR: //   = 0x0b;
 				int result3 = Misc.binaryToBCD( todHours );
 				// Bit 7: Differentiation AM/PM, 0=AM, 1=PM
 				if ( timeOfDay == TimeOfDay.PM ) {
@@ -486,28 +469,28 @@ ende     rts             ; back to BASIC
 		switch (offset)
 		{
 			// ============= Real time clock ==============
-			case CIA1_TOD_10THS:
+			case CIA_TOD_10THS:
 				if ( isSetRTCAlarmTime() ) {
 					this.todAlarm10s = Misc.bcdToBinary( value & 0xff );
 				} else {
 					this.tod10s = Misc.bcdToBinary( value & 0xff );
 				}
 				return;
-			case CIA1_TOD_SECOND:
+			case CIA_TOD_SECOND:
 				if ( isSetRTCAlarmTime() ) {
 					this.todAlarmSeconds =  Misc.bcdToBinary( value & 0xff );
 				} else {
 					this.todSeconds =  Misc.bcdToBinary( value & 0xff );
 				}
 				return;
-			case CIA1_TOD_MIN:
+			case CIA_TOD_MIN:
 				if ( isSetRTCAlarmTime() ) {
 					this.todAlarmMinutes = Misc.bcdToBinary( value & 0xff );
 				} else {
 					this.todMinutes = Misc.bcdToBinary( value & 0xff );
 				}
 				return;
-			case CIA1_TOD_HOUR:
+			case CIA_TOD_HOUR:
 				if ( isSetRTCAlarmTime() ) {
 					this.todAlarmTimeOfDay = (value & 1<<7) != 0 ? TimeOfDay.AM : TimeOfDay.PM;
 					this.todAlarmHours = Misc.bcdToBinary( value & 0b0111_1111 );
@@ -519,7 +502,7 @@ ende     rts             ; back to BASIC
 				this.todRunning = false;
 				return;
 				// ===============================
-			case CIA1_ICR:
+			case CIA_ICR:
 				/*
 		        Bit 0: 1 = Interrupt release through timer A underflow
 		        Bit 1: 1 = Interrupt release through timer B underflow
@@ -531,7 +514,6 @@ ende     rts             ; back to BASIC
 		                           1 = set bits 0..4 are setting the according mask bit.
 		                           If all bits 0..4 are cleared, there will be no change to the mask.
 				 */
-				this.rtcAlarmIRQEnabled = (value & 1<<2 ) != 0;
 				final int oldMask = irqMask;
 				if ( (value & 1<<7) == 0 ) { // source bit = 0 => set bits 0...4 are clearing the bits in IRQ mask
 					int mask = ~(value & 0b11111);
@@ -540,29 +522,30 @@ ende     rts             ; back to BASIC
 					int mask = (value & 0b11111);
 					irqMask |= mask;
 				}
+                this.rtcAlarmIRQEnabled = (irqMask & 1<<2 ) != 0;				
 				if ( DEBUG && (oldMask != irqMask ) ) {
 					System.out.println( this+" ICR = "+Integer.toBinaryString( irqMask ) );
 				}
 				break;
-			case CIA1_TALO:
+			case CIA_TALO:
 				timerALatch = ( timerALatch & 0xff00) | (value & 0xff);
 				break;
-			case CIA1_TAHI:
+			case CIA_TAHI:
 				timerALatch = ( timerALatch & 0x00ff) | (( value & 0xff) <<8);
 				if ( ! timerARunning ) {
 					timerAValue = ( timerAValue & 0x00ff) | (( value & 0xff) <<8);
 				}
 				break;
-			case CIA1_TBLO:
+			case CIA_TBLO:
 				timerBLatch = ( timerBLatch & 0xff00) | (value & 0xff);
 				break;
-			case CIA1_TBHI:
+			case CIA_TBHI:
 				timerBLatch = ( timerBLatch & 0x00ff) | (( value & 0xff) <<8);
 				if ( ! timerBRunning ) {
 					timerBValue = ( timerBValue & 0x00ff) | (( value & 0xff) <<8);
 				}
 				break;
-			case CIA1_CRA:
+			case CIA_CRA:
 				/* Timer control A
 				 * Bit 0: 0 = Stop timer; 1 = Start timer
 				 * Bit 1: 1 = Indicates a timer underflow at port B in bit 6.
@@ -584,7 +567,7 @@ ende     rts             ; back to BASIC
 					timerAValue = timerALatch;
 				}
 				break;
-			case CIA1_CRB:
+			case CIA_CRB:
 				/* Timer control B
 				 * 
 				 * 0b0001_1001
@@ -679,8 +662,8 @@ ende     rts             ; back to BASIC
         Bit 6: Direction of the serial shift register, 0 = SP-pin is input (read), 1 = SP-pin is output (write)
         Bit 7: Real Time Clock, 0 = 60 Hz, 1 = 50 Hz
 		 */
-		final int cra = readByte( CIA1_CRA ); // Control Register A
-		final int crb = readByte( CIA1_CRB ); // Control Register B
+		final int cra = readByte( CIA_CRA ); // Control Register A
+		final int crb = readByte( CIA_CRB ); // Control Register B
 		if ( timerARunning )
 		{
 			if ( ( cra & (1<<5) ) == 0 ) // timer counts system cycles
@@ -730,6 +713,7 @@ ende     rts             ; back to BASIC
 
 	protected void handleCassette(CPU cpu) 
 	{
+	    // empty implementation, subclass needs override & invoke doHandleCassette() 
     }
 	
 	protected final void doHandleCassette(CPU cpu) 
@@ -737,7 +721,7 @@ ende     rts             ; back to BASIC
 	    if ( tickCounter != 0 ) 
 	    {
 	        final boolean currentSignal = getTapeSignal();
-	        final boolean isPositiveSlope = !previousTapeSignal && currentSignal; // IRQ triggers on positive slop , input line is inverted 
+	        final boolean isPositiveSlope = previousTapeSignal && ! currentSignal; // IRQ triggers on positive slop , input line is inverted 
 	        if ( isPositiveSlope ) 
 	        {
 	            // Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.	     
@@ -824,6 +808,6 @@ ende     rts             ; back to BASIC
 
 	private boolean isSetRTCAlarmTime()
 	{
-		return (readByte( CIA1_CRB ) & 1<<7) != 0;
+		return (readByte( CIA_CRB ) & 1<<7) != 0;
 	}
 }

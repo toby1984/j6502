@@ -41,7 +41,7 @@ public class WavWriter
 	
     public static void main(String[] args) throws IOException 
     {
-    	final T64File file = new T64File( new File("/home/tgierke/mars_workspace/j6502/tapes/choplifter.t64") );
+    	final T64File file = new T64File( new File("/home/tobi/mars_workspace/j6502/tapes/choplifter.t64") );
     	
     	final SquareWaveDriver driver = new SquareWaveDriver();
     	driver.insert( file );
@@ -50,12 +50,15 @@ public class WavWriter
     	System.out.println("Writing "+driver.wavesRemaining()+" samples...");
     	
     	int current;
+    	long tick = 0;
     	while ( (current = driver.wavesRemaining() ) > 0 ) 
     	{
 			if ( ( current % 100000 ) == 0 ) {
 				System.out.println("Remaining: "+current);
 			}
 			driver.tick();
+			System.out.println( tick+" : "+driver.currentSignal());
+			tick++;
 			if ( driver.currentSignal() ) {
 				out.write( 0xff );
 			} else {
