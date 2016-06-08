@@ -4,9 +4,9 @@ public class SquareWaveGenerator
 {
     public enum WavePeriod
     {
-        SHORT("SHORT", 347 ),
+        SHORT("SHORT", 357 ),
         MEDIUM("MEDIUM", 504 ),
-        LONG("LONG", 662 );
+        LONG("LONG", 662 );    	
         
         private final int ticks;
         private final String name;

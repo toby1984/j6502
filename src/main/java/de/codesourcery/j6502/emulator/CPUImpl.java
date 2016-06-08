@@ -1023,10 +1023,24 @@ public final class CPUImpl
 		
 		// TODO: Remove tape debug code
 		
-		if ( initialPC == 0xf993 ) {
-			System.out.println("BIT: 0");
-		} else if ( initialPC == 0xf997 ) {
-			System.out.println("BIT: 1");
+		if ( initialPC == 0xf9aa ) {
+			System.out.println("BIT: "+cpu.getX());
+		} else if ( initialPC == 0xF9AC ) {
+			System.out.println("Cycle too short");
+		} else if ( initialPC == 0xFA42 ) {
+			System.out.println("SYNC established");
+		} else if ( initialPC == 0xF93A ) {
+			/*
+$F92C  AE  07  DC    LDX $DC07       ; X = TBHi1
+$F92F  A0  FF        LDY #$FF
+$F931  98            TYA             ; 
+$F932  ED  06  DC    SBC $DC06       ; A = complement of TBLo1 (time elapsed)
+$F935  EC  07  DC    CPX $DC07       ;if high byte not steady,
+$F938  D0  F2        BNE $F92C       ;repeat
+$F93A  86  B1        STX $B1         ;else save high byte
+$F93C  AA            TAX             ; X = $FF - TBL1			 
+			 */
+			System.out.println("TA1H = "+cpu.getX()+" , $FF - TA1L = "+cpu.getAccumulator());
 		}
 
 		opcode = read6502( initialPC );

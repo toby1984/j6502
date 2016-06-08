@@ -92,10 +92,10 @@ public class SquareWaveDriver
         }           
         int checksum=0;
         for ( int value : entry.data() ) {
-            writeByteWithParity( value );
+            writeByte( value );
             checksum ^= (value & 0xff);
         }
-        writeByteWithParity(checksum);
+        writeByte(checksum);
     }
 
     private void writeHeader(DirEntry entry) 
@@ -121,7 +121,7 @@ public class SquareWaveDriver
             throw new RuntimeException("Illegal file type "+entry.floppyFileType+": "+entry);
         }
         
-        writeByteWithParity( 0x01 ); // TODO: Hard-coded value: relocatable program
+        writeByte( 0x01 ); // TODO: Hard-coded value: relocatable program
         
         // load address
         writeWord( entry.loadAddress );
@@ -134,7 +134,7 @@ public class SquareWaveDriver
         if ( entry.petsciiName.length < 16 ) {
             // pad with blanks ( 0x20 )
             for ( int i = 0 , pad = 16 - entry.petsciiName.length ; i < pad ; i++ ) {
-                writeByteWithParity( 0x20 );
+                writeByte( 0x20 );
             }
         } else if ( entry.petsciiName.length > 16 ) {
             throw new RuntimeException("File name too long: "+entry);
@@ -183,7 +183,7 @@ public class SquareWaveDriver
         if ( DEBUG ) {
             System.out.println("Generating: SYNC");
         }        
-        writeRawBytes( new byte[] { (byte) 0x89 ,(byte) 0x88 ,(byte) 0x87 ,(byte) 0x86 ,(byte) 0x85 ,(byte) 0x84 ,(byte) 0x83 ,(byte) 0x82 ,(byte) 0x81 } );
+        writeBytesWithParity( new byte[] { (byte) 0x89 ,(byte) 0x88 ,(byte) 0x87 ,(byte) 0x86 ,(byte) 0x85 ,(byte) 0x84 ,(byte) 0x83 ,(byte) 0x82 ,(byte) 0x81 } );
     }
     
     private void writeByteLeadIn() {
@@ -201,48 +201,40 @@ public class SquareWaveDriver
         if ( DEBUG ) {
             System.out.println("Generating: SYNC_REPEATED");
         }   
-        writeRawBytes( new byte[] { 0x09 ,0x08 ,0x07 ,0x06 ,0x05 ,0x04 ,0x03 ,0x02 ,0x01 } );
+        writeBytesWithParity( new byte[] { 0x09 ,0x08 ,0x07 ,0x06 ,0x05 ,0x04 ,0x03 ,0x02 ,0x01 } );
     }
     
     private void writeBytesWithParity(int byteValue,int count) 
     {
         for ( int i = 0 ; i <count ; i++ ) {
-            writeByteWithParity( byteValue );
+            writeByte( byteValue );
         }
     }
     
     private void writeBytesWithParity(byte[] data) 
     {
         for ( int byteValue : data ) {
-            writeByteWithParity( byteValue & 0xff );
+            writeByte( byteValue & 0xff );
         }
     }  
     
-    private void writeRawBytes(byte[] data) 
-    {
-        for ( int byteValue : data ) {
-            writeRawByte( byteValue );
-        }
-    }      
+//    private void writeRawBytes(byte[] data) 
+//    {
+//        for ( int byteValue : data ) {
+//            writeRawByte( byteValue );
+//        }
+//    }      
     
     private void writeWord(int word) {
     
         // write lo first, then hi
-        writeByteWithParity( word & 0xff );
-        writeByteWithParity( (word >> 8  )& 0xff );
+        writeByte( word & 0xff );
+        writeByte( (word >> 8  )& 0xff );
     }
-    
-    private void writeByteWithParity(int value) {
-        writeByte(value,true);
-    }
-    
-    private void writeByteNoParity(int value) {
-        writeByte(value,false);
-    }    
     
     private int writeRawByte(int value) {
         
-        int mask = 0b1000_0000; 
+        int mask = 0b0000_0001; 
         int oneBitCount=0;
         for ( int i = 0 ; i < 8 ; i++ ) 
         {
@@ -251,26 +243,24 @@ public class SquareWaveDriver
                 oneBitCount++;
             }
             generator.addBit( bitSet );
-            mask >>>= 1;
+            mask <<= 1;
         }
         return oneBitCount;
     }    
     
-    private void writeByte(int value,boolean withParity) {
+    private void writeByte(int value) {
         
     	writeByteLeadIn();
     	
         final int oneBitCount=writeRawByte(value);
         
-        if ( withParity ) {
-            // write parity bit
-            // Each byte on tape ends with a parity bit, which is either 0 or 1 as required to make the total number of 1 bits in the byte odd
-            if ( (oneBitCount & 1 ) == 0 ) { // we have an even number of 1 bits, add another 1 bit to make it odd  
-                generator.addBit( true );
-            } else {  
-                // we have an odd number of 1 bits, add another 1 bit to make it odd 
-                generator.addBit( true );
-            }
+        // write parity bit
+        // Each byte on tape ends with a parity bit, which is either 0 or 1 as required to make the total number of 1 bits in the byte odd
+        if ( (oneBitCount & 1 ) == 0 ) { // we have an even number of 1 bits, add another 1 bit to make it odd  
+            generator.addBit( true );
+        } else {  
+            // we have an odd number of 1 bits, add another 1 bit to make it odd 
+            generator.addBit( true );
         }
     }
     
