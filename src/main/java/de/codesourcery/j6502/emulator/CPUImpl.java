@@ -1026,7 +1026,7 @@ public final class CPUImpl
 		if ( initialPC == 0xf9aa ) {
 			System.out.println("BIT: "+cpu.getX());
 		} else if ( initialPC == 0xF9AC ) {
-			System.out.println("Cycle too short");
+			System.out.println("Cycle too short (bit: "+memory.readByte( 0xa3 )+" , phase: "+memory.readByte( 0xa4 )+" , sync: "+memory.readByte( 0xb4 )+")" );
 		} else if ( initialPC == 0xFA42 ) {
 			System.out.println("SYNC established");
 		} else if ( initialPC == 0xF93A ) {
