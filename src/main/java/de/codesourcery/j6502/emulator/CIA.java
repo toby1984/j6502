@@ -668,7 +668,7 @@ ende     rts             ; back to BASIC
 		{
 			if ( ( cra & (1<<5) ) == 0 ) // timer counts system cycles
 			{
-				timerAValue--;
+				timerAValue = (timerAValue-1) & 0xffff;
 				if ( timerAValue == 0 )
 				{
 					if ( timerBRunning && (crb & 0b1100000) == 0b1000000) { // timerB counts timerA underflow
@@ -679,6 +679,8 @@ ende     rts             ; back to BASIC
 					}
 					handleTimerAUnderflow(cra , cpu );
 				}
+			} else {
+	             throw new RuntimeException("Unsupported timer A mode: "+cra);
 			}
 		}
 
@@ -702,11 +704,13 @@ ende     rts             ; back to BASIC
 		{
 			final int mode = (crb >>> 5) & 0b11;
 			if ( mode == 0b00 ) { // Timer B counts System cycles
-				timerBValue--;
+				timerBValue = (timerBValue-1) & 0xffff;
 				if ( timerBValue == 0 )
 				{
 					handleTimerBUnderflow(crb,cpu);
 				}
+			} else {
+			    throw new RuntimeException("Unsupported timer B mode: "+mode);
 			}
 		}
 	}
@@ -721,7 +725,7 @@ ende     rts             ; back to BASIC
 	    if ( tickCounter != 0 ) 
 	    {
 	        final boolean currentSignal = getTapeSignal();
-	        final boolean isPositiveSlope = previousTapeSignal && ! currentSignal; // IRQ triggers on positive slop , input line is inverted 
+	        final boolean isPositiveSlope = ! previousTapeSignal && currentSignal; // IRQ triggers on positive slop , input line is inverted 
 	        if ( isPositiveSlope ) 
 	        {
 	            // Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.	     
@@ -729,12 +733,12 @@ ende     rts             ; back to BASIC
 	            if ( (irqMask & 1<<4) != 0 ) { // IRQ mask: Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.
 	            	if ( DEBUG_VERBOSE ) {
 	            		long delta = tickCounter - debugPreviousTapeSignalChangeTick;
-		        		System.out.println("Detected positive slope on /FLAG (IRQ enabled) - tick "+tickCounter+" (delta: "+delta+")");
+		        		System.out.println("Detected positive slope on /FLAG (IRQ enabled) - tick "+tickCounter+" (delta: "+delta+"), timerA: "+timerAValue+" , timerB: "+timerBValue);
 		        	}	    	            	
 	                cpu.queueInterrupt( IRQType.REGULAR  );
 	            } else if ( DEBUG_VERBOSE ) {
             		long delta = tickCounter - debugPreviousTapeSignalChangeTick;	            	
-	        		System.out.println("Detected positive slope on /FLAG (IRQ disabled) - tick "+tickCounter+" (delta: "+delta+")");
+	        		System.out.println("Detected positive slope on /FLAG (IRQ disabled) - tick "+tickCounter+" (delta: "+delta+") , timerA: "+timerAValue+" , timerB: "+timerBValue);
 	        	}	    
 	            debugPreviousTapeSignalChangeTick = tickCounter;
 	        }
@@ -801,7 +805,7 @@ ende     rts             ; back to BASIC
 			timerARunning = false;
 		}
 		if ( DEBUG_VERBOSE ) {
-			System.out.println(this+" , loading timer A latch = "+timerALatch);
+			System.out.println(this+" , timer A underflow , loading timer A latch = "+timerALatch);
 		}
 		timerAValue = timerALatch;
 	}

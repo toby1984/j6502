@@ -4,16 +4,16 @@ public class SquareWaveGenerator
 {
     public enum WavePeriod
     {
-        SHORT("SHORT", 357 ),
-        MEDIUM("MEDIUM", 504 ),
-        LONG("LONG", 662 );    	
+        SHORT("SHORT", 357*1.6 ),
+        MEDIUM("MEDIUM", 504*1.6 ),
+        LONG("LONG", 662*1.6 );    	
         
         private final int ticks;
         private final String name;
         
-        private WavePeriod(String name,int ticks) {
+        private WavePeriod(String name,double ticks) {
             this.name = name;
-            this.ticks = ticks;
+            this.ticks = (int) ticks;
         }
         
         public void onEnter(SquareWaveGenerator state) {
