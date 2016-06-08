@@ -451,11 +451,11 @@ ende     rts             ; back to BASIC
 			case CIA1_TALO:
 				return timerAValue & 0xff;
 			case CIA1_TAHI:
-				return (timerAValue >> 8 ) & 0xff;
+				return (timerAValue >>> 8 ) & 0xff;
 			case CIA1_TBLO:
 				return timerBValue & 0xff;
 			case CIA1_TBHI:
-				return (timerBValue >> 8 ) & 0xff;
+				return (timerBValue >>> 8 ) & 0xff;
 				// ======== return ToD ====
 			case CIA1_TOD_10THS: //  = 0x08;
 				this.todRunning = false; //  Writing CIA1_TOD_10TS register stops TOD, until register 8 (TOD 10THS) is read.
@@ -586,6 +586,8 @@ ende     rts             ; back to BASIC
 				break;
 			case CIA1_CRB:
 				/* Timer control B
+				 * 
+				 * 0b0001_1001
 				 *
 				 * Bit 0: 0 = Stop timer; 1 = Start timer
 				 * Bit 1: 1 = Indicates a timer underflow at port B in bit 7.
@@ -715,7 +717,7 @@ ende     rts             ; back to BASIC
 		 */
 		if ( timerBRunning )
 		{
-			final int mode = (crb >> 5) & 0b11;
+			final int mode = (crb >>> 5) & 0b11;
 			if ( mode == 0b00 ) { // Timer B counts System cycles
 				timerBValue--;
 				if ( timerBValue == 0 )
