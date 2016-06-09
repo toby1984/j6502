@@ -461,7 +461,7 @@ ende     rts             ; back to BASIC
 	}
 
 	@Override
-	public void writeByte(int adr , byte value)
+	public void writeByte(int adr , final byte value)
 	{
 		final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
 		
@@ -533,7 +533,7 @@ ende     rts             ; back to BASIC
 			case CIA_TAHI:
 				timerALatch = ( timerALatch & 0x00ff) | (( value & 0xff) <<8);
 				if ( ! timerARunning ) {
-					timerAValue = ( timerAValue & 0x00ff) | (( value & 0xff) <<8);
+					timerAValue = timerALatch;
 				}
 				break;
 			case CIA_TBLO:
@@ -542,7 +542,7 @@ ende     rts             ; back to BASIC
 			case CIA_TBHI:
 				timerBLatch = ( timerBLatch & 0x00ff) | (( value & 0xff) <<8);
 				if ( ! timerBRunning ) {
-					timerBValue = ( timerBValue & 0x00ff) | (( value & 0xff) <<8);
+					timerBValue = timerBLatch;
 				}
 				break;
 			case CIA_CRA:
@@ -669,7 +669,7 @@ ende     rts             ; back to BASIC
 			if ( ( cra & (1<<5) ) == 0 ) // timer counts system cycles
 			{
 				timerAValue = (timerAValue-1) & 0xffff;
-				if ( timerAValue == 0 )
+				if ( timerAValue == 0xffff )
 				{
 					if ( timerBRunning && (crb & 0b1100000) == 0b1000000) { // timerB counts timerA underflow
 						timerBValue--;
@@ -705,7 +705,7 @@ ende     rts             ; back to BASIC
 			final int mode = (crb >>> 5) & 0b11;
 			if ( mode == 0b00 ) { // Timer B counts System cycles
 				timerBValue = (timerBValue-1) & 0xffff;
-				if ( timerBValue == 0 )
+				if ( timerBValue == 0xffff )
 				{
 					handleTimerBUnderflow(crb,cpu);
 				}
