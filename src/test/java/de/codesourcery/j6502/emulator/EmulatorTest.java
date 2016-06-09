@@ -45,29 +45,29 @@ public class EmulatorTest  extends TestCase
     public static final int PERFORMANCE_INSTRUCTIONS = 10000000;
 
     public static final boolean TEST_PERFORMANCE = false;
-
-    public void testCPUPerformance() throws IOException 
-    {
-        System.out.println("Performance 'Other CPU'");
-
-        final Memory memory = new Memory("test" , MemoryType.RAM , new AddressRange(0,65536));
-
-        final Assembler asm = new Assembler();
-        final CPU actualCPU = prepareTest( asm , memory );
-        final CPUImpl cpu = new CPUImpl( actualCPU , memory );
-
-        final Supplier<Long> toTest = () -> 
-        {
-            actualCPU.reset();
-            actualCPU.pc( asm.getOrigin() );
-            for ( int i = PERFORMANCE_INSTRUCTIONS ; i > 0 ; i-- ) {
-                cpu.executeInstruction();
-            }
-            return actualCPU.cycles;
-        };        
-
-        benchmark( toTest , 200 , 100 );
-    }
+//
+//    public void testCPUPerformance() throws IOException 
+//    {
+//        System.out.println("Performance 'Other CPU'");
+//
+//        final Memory memory = new Memory("test" , new AddressRange(0,65536));
+//
+//        final Assembler asm = new Assembler();
+//        final CPU actualCPU = prepareTest( asm , memory );
+//        final CPUImpl cpu = new CPUImpl( actualCPU , memory );
+//
+//        final Supplier<Long> toTest = () -> 
+//        {
+//            actualCPU.reset();
+//            actualCPU.pc( asm.getOrigin() );
+//            for ( int i = PERFORMANCE_INSTRUCTIONS ; i > 0 ; i-- ) {
+//                cpu.executeInstruction();
+//            }
+//            return actualCPU.cycles;
+//        };        
+//
+//        benchmark( toTest , 200 , 100 );
+//    }
 
     private CPU prepareTest(Assembler a, Memory memory) throws IOException 
     {
@@ -275,9 +275,9 @@ ADC #$92 ; After this instruction, C = 1, A = $73
 SED      ; Decimal mode (BCD subtraction: 46 - 12 = 34)
 SEC
 LDA #$46
-SBC #$12 ; After this instruction, C = 1, A = $34)         
+SBC #$12 ; After this instruction, C = 1, A = $33)         
          */
-        execute("SED\n CLC\n LDA #$46\n SBC #$12\n").assertA( 0x34 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE,CPU.Flag.OVERFLOW);
+        execute("SED\n CLC\n LDA #$46\n SBC #$12\n").assertA( 0x33 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
 
         /*
 SED      ; Decimal mode (BCD subtraction: 40 - 13 = 27)
@@ -292,7 +292,7 @@ CLC      ; Note: carry is clear, not set!
 LDA #$32
 SBC #$02 ; After this instruction, C = 1, A = $29)     
          */
-        execute("SED\n CLC\n LDA #$32\n SBC #$02\n").assertA( 0x29 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE,CPU.Flag.OVERFLOW);
+        execute("SED\n CLC\n LDA #$32\n SBC #$02\n").assertA( 0x29 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
     }
 
     public void testADC() {

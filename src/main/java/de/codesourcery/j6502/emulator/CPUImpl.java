@@ -360,6 +360,22 @@ public final class CPUImpl
 		adc( cpu.getAccumulator() , value , cpu.isSet(Flag.CARRY) ? 1 : 0 );
 	};
 
+        if ( (value & 0b1111) > 9 || ( ( value >>> 4 ) & 0b1111 ) > 9 ) {
+            throw new RuntimeException("Invalid BCD: "+Integer.toHexString( value ) );
+        }
+        
+	
+    private int binaryToBcd(int binary ) {
+
+        if ( binary < 0 || binary > 99 ) {
+            throw new RuntimeException("Binary value out of BCD range: "+Integer.toHexString( binary ) );
+        }
+        
+        int hi = binary/10;
+        int lo = binary - (hi*10);
+        return hi << 4 | lo;
+    }	
+
 	protected void adc(int a,int b,int carry)
 	{
 		int result = (a & 0xff) + (b & 0xff) + carry;
@@ -863,7 +879,34 @@ public final class CPUImpl
 		if ( cpu.isSet( Flag.DECIMAL_MODE) )
 		{
 			// TODO: Implement BCD according to http://www.6502.org/tutorials/decimal_mode.html
-			throw new RuntimeException("SBC in BCD mode not implemented yet :(");
+		    
+		    /*
+In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SBC instructions. Specifically:
+
+    When the carry is clear, SBC NUM performs the calculation A = A - NUM - 1
+    When the carry is set, SBC NUM performs the calculation A = A - NUM
+		     
+		     */
+            int valueBin = bcdToBinary( value );
+            if ( cpu.isNotSet( Flag.CARRY ) ) {
+                valueBin++;
+            }
+            int accBin = bcdToBinary( a );
+		    
+            boolean carry = true;
+            for ( int i = 0 ; i < valueBin ; i++ ) {
+                accBin--;
+                if ( accBin == -1 ) {
+                    // after a SBC, the carry is clear if the result was less than 0 and set otherwise
+                    carry = false;
+                    accBin = 99;
+                }
+            }
+	        cpu.setFlag( Flag.CARRY , carry);
+	        cpu.setFlag( Flag.ZERO , accBin == 0 );
+	        cpu.setFlag( Flag.NEGATIVE , (accBin & 1<<7) != 0 );
+		    cpu.setAccumulator( binaryToBcd( accBin ) );
+		    return;
 		}
 
 		/*
@@ -1027,6 +1070,11 @@ public final class CPUImpl
 			System.out.println("BIT: "+cpu.getX());
 		} else if ( initialPC == 0xF9AC ) {
 			System.out.println("Cycle too short (bit: "+memory.readByte( 0xa3 )+" , phase: "+memory.readByte( 0xa4 )+" , sync: "+memory.readByte( 0xb4 )+")" );
+        } else if ( initialPC == 0xF92C ) {
+            MemorySubsystem mem = (MemorySubsystem) memory;
+            final CIA cia = mem.ioArea.cia1;
+            final int value = ( cia.readByte( CIA.CIA_TBHI ) << 8 ) | cia.readByte( CIA.CIA_TBLO );
+            System.out.println("TimerB: $"+Integer.toHexString( value ));
 		} else if ( initialPC == 0xFA42 ) {
 			System.out.println("SYNC established");
 		} else if ( initialPC == 0xF93A ) {
