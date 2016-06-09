@@ -24,6 +24,8 @@ public class TapeDrive
 	
 	private int tickCounter = 0;
 	
+	private int silenceTicks = 10 * 985000;
+	
 	public void insert(T64File tape) 
 	{
 		Validate.notNull(tape, "tape must not be NULL");
@@ -67,6 +69,15 @@ public class TapeDrive
 	{
 	    if ( motorOn && keyPressed ) 
 	    {
+	        if ( silenceTicks > 0 ) 
+	        {
+	            silenceTicks--;
+	            if ( silenceTicks == 0 ) {
+	                System.out.println("Starting tape replay...");
+	            }
+	            return;
+	        }
+	        
 	        tickCounter++;
 	        if ( DEBUG && (tickCounter%985000) == 0 ) {
 	            System.out.println("TAPE tick() : waves remaining - "+driver.wavesRemaining());
@@ -77,6 +88,7 @@ public class TapeDrive
 	
 	public void reset() 
 	{
+	    silenceTicks = 10 * 985000;
 	    tickCounter = 0;
 	    motorOn = false;
 	    keyPressed = false;
