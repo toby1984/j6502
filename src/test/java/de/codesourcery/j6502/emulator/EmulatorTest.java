@@ -180,6 +180,8 @@ M7 	N7 	C6     C7 	B	S7 	V	Borrow / Overflow	                    Hex	Unsigned	  
 
         execute("SEC\n LDA #208\n SBC #112").assertA( 96 ).assertFlags(CPU.Flag.OVERFLOW, CPU.Flag.CARRY ); // carry = 0 => BORROW
         execute("SEC\n LDA #208\n SBC #48").assertA( 160 ).assertFlags(CPU.Flag.NEGATIVE, CPU.Flag.CARRY ); // carry = 0 => BORROW
+        
+        execute("SEC\n LDA #$ff\n SBC #$9d").assertA( 0x62 ).assertFlags(CPU.Flag.CARRY ); // carry = 0 => BORROW        
     }
 
     public void testADC3() {

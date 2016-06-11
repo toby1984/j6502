@@ -176,6 +176,9 @@ public class VIC extends IMemoryRegion
      *  ( )                       Bit 0: 0 => Slow-Mode (1 MHz), 1 => Fast-Mode (2 MHz)
      */
 
+    public static final boolean DEBUG_RASTER_IRQ = false;
+    protected static final boolean DEBUG_MEMORY_LAYOUT = false;
+    protected static final boolean DEBUG_SET_GRAPHICS_MODE = false;
     // VIC registers
     public  static final int VIC_SPRITE0_X_COORD = 0;
     public  static final int VIC_SPRITE0_Y_COORD = 1;
