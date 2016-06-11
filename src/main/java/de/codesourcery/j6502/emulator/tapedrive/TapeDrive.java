@@ -13,7 +13,9 @@ import org.apache.commons.lang.Validate;
  */
 public class TapeDrive 
 {
-	private static final boolean DEBUG = true;
+	private static final int SILENCE_TICKS = -1; // 985000/3;
+
+    private static final boolean DEBUG = true;
 	
 	private final SquareWaveDriver driver = new SquareWaveDriver();
 	
@@ -24,7 +26,7 @@ public class TapeDrive
 	
 	private int tickCounter = 0;
 	
-	private int silenceTicks = 10 * 985000;
+	private int silenceTicks = SILENCE_TICKS;
 	
 	public void insert(T64File tape) 
 	{
@@ -88,7 +90,7 @@ public class TapeDrive
 	
 	public void reset() 
 	{
-	    silenceTicks = 10 * 985000;
+	    silenceTicks = SILENCE_TICKS;
 	    tickCounter = 0;
 	    motorOn = false;
 	    keyPressed = false;

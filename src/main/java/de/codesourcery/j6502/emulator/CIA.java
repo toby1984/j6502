@@ -15,27 +15,29 @@ import de.codesourcery.j6502.utils.Misc;
  */
 public class CIA extends Memory
 {
-	private static final boolean DEBUG = true;
-	private static final boolean DEBUG_VERBOSE = true;
+    private static final boolean DEBUG = true;
+    private static final boolean DEBUG_VERBOSE = true;
+    private static final boolean DEBUG_TIMER_LOAD = false;
+    private static final boolean DEBUG_TAPE_SLOPE = false;
 
-	public static final int CIA_PRA        = 0x00;
-	public static final int CIA_PRB        = 0x01;
-	public static final int CIA_DDRA       = 0x02;
-	public static final int CIA_DDRB       = 0x03;
-	public static final int CIA_TALO       = 0x04;
-	public static final int CIA_TAHI       = 0x05;
-	public static final int CIA_TBLO       = 0x06;
-	public static final int CIA_TBHI       = 0x07;
-	public static final int CIA_TOD_10THS  = 0x08;
-	public static final int CIA_TOD_SECOND = 0x09;
-	public static final int CIA_TOD_MIN    = 0x0a;
-	public static final int CIA_TOD_HOUR   = 0x0b;
-	public static final int CIA_SDR        = 0x0c;
-	public static final int CIA_ICR        = 0x0d;
-	public static final int CIA_CRA        = 0x0e;
-	public static final int CIA_CRB        = 0x0f;
+    public static final int CIA_PRA        = 0x00;
+    public static final int CIA_PRB        = 0x01;
+    public static final int CIA_DDRA       = 0x02;
+    public static final int CIA_DDRB       = 0x03;
+    public static final int CIA_TALO       = 0x04;
+    public static final int CIA_TAHI       = 0x05;
+    public static final int CIA_TBLO       = 0x06;
+    public static final int CIA_TBHI       = 0x07;
+    public static final int CIA_TOD_10THS  = 0x08;
+    public static final int CIA_TOD_SECOND = 0x09;
+    public static final int CIA_TOD_MIN    = 0x0a;
+    public static final int CIA_TOD_HOUR   = 0x0b;
+    public static final int CIA_SDR        = 0x0c;
+    public static final int CIA_ICR        = 0x0d;
+    public static final int CIA_CRA        = 0x0e;
+    public static final int CIA_CRB        = 0x0f;
 
-	/*
+    /*
 ----
 $DC00
 PRA 	Data Port A 	Monitoring/control of the 8 data lines of Port A
@@ -275,103 +277,108 @@ CRA 	Control Timer A 	see CIA 1
 --------------
 $DD0F 	56591 	15
 CRB 	Control Timer B 	see CIA 1
-	 */
+     */
 
-	private long debugPreviousTapeSignalChangeTick=-1; // TODO: Debug code, remove when done
-	private boolean previousTapeSignal;
-	private long tickCounter = 0;
-	private boolean todRunning;
+    private long debugPreviousTapeSignalChangeTick=-1; // TODO: Debug code, remove when done
+    private boolean previousTapeSignal;
+    
+    public long tapeSlopeCounter = 0; // TODO: Debug code, remove when done
+    
+    public long tickCounter = 0;
+    private boolean todRunning;
 
-	// real-time clock
-	private TimeOfDay timeOfDay = TimeOfDay.AM;
-	private int tod10s = 0; // 10ths of seconds
-	private int todSeconds = 0; // seconds
-	private int todMinutes = 0; // minutes
-	private int todHours= 0; // hours
+    // real-time clock
+    private TimeOfDay timeOfDay = TimeOfDay.AM;
+    private int tod10s = 0; // 10ths of seconds
+    private int todSeconds = 0; // seconds
+    private int todMinutes = 0; // minutes
+    private int todHours= 0; // hours
 
-	// RTC alarm time
-	private boolean rtcAlarmIRQEnabled;
-	private TimeOfDay todAlarmTimeOfDay;
-	private int todAlarm10s = 0; // 10ths of seconds
-	private int todAlarmSeconds = 0; // seconds
-	private int todAlarmMinutes = 0; // minutes
-	private int todAlarmHours= 0; // hours
+    // RTC alarm time
+    private boolean rtcAlarmIRQEnabled;
+    private TimeOfDay todAlarmTimeOfDay;
+    private int todAlarm10s = 0; // 10ths of seconds
+    private int todAlarmSeconds = 0; // seconds
+    private int todAlarmMinutes = 0; // minutes
+    private int todAlarmHours= 0; // hours
 
-	protected static enum TimeOfDay
-	{
-		AM,PM;
-		public TimeOfDay flip() { return this == AM ? PM : AM; }
-	}
+    protected static enum TimeOfDay
+    {
+        AM,PM;
+        public TimeOfDay flip() { return this == AM ? PM : AM; }
+    }
 
-	private int irqMask;
-	private int icr_read;
+    private int irqMask;
+    private int icr_read;
 
-	private boolean timerARunning = false;
-	private boolean timerBRunning = false;
+    private boolean timerARunning = false;
+    private boolean timerBRunning = false;
 
-	private int timerAValue;
-	private int timerALatch;
+    public int timerAValue;
+    public int timerALatch;
 
-	private int timerBValue;
-	private int timerBLatch;
+    public int timerBValue;
+    public int timerBLatch;
 
-	public CIA(String identifier, AddressRange range)
-	{
+    public CIA(String identifier, AddressRange range)
+    {
 		super(identifier, MemoryType.IOAREA , range);
-	}
+    }
 
-	@Override
-	public boolean isReadsReturnWrites(int offset) {
+    @Override
+    public boolean isReadsReturnWrites(int offset) {
         return false; // not for all registers
     }
 
-	private void initTOD() {
+    private void initTOD() {
 
-		LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
 
-		int minute = now.get(ChronoField.MINUTE_OF_HOUR);
-		int hour = now.get(ChronoField.HOUR_OF_DAY);
-		int second = now.get(ChronoField.SECOND_OF_MINUTE);
-		int tenths= now.get(ChronoField.MILLI_OF_SECOND)/100;
+        int minute = now.get(ChronoField.MINUTE_OF_HOUR);
+        int hour = now.get(ChronoField.HOUR_OF_DAY);
+        int second = now.get(ChronoField.SECOND_OF_MINUTE);
+        int tenths= now.get(ChronoField.MILLI_OF_SECOND)/100;
 
-		this.tickCounter = 0;
+        this.tickCounter = 0;
 
-		this.rtcAlarmIRQEnabled = false;
+        this.rtcAlarmIRQEnabled = false;
 
-		this.timeOfDay = hour >= 12 ? TimeOfDay.PM : TimeOfDay.AM;
+        this.timeOfDay = hour >= 12 ? TimeOfDay.PM : TimeOfDay.AM;
 
-		this.tod10s = tenths;
-		this.todSeconds = second;
-		this.todMinutes = minute;
-		this.todHours = hour >=12 ? hour-12 : hour;
+        this.tod10s = tenths;
+        this.todSeconds = second;
+        this.todMinutes = minute;
+        this.todHours = hour >=12 ? hour-12 : hour;
 
-		this.todRunning = true;
-	}
+        this.todRunning = true;
+    }
 
-	@Override
-	public void reset()
-	{
-		super.reset();
+    @Override
+    public void reset()
+    {
+        super.reset();
+        
+        tapeSlopeCounter = 0;
 
-		debugPreviousTapeSignalChangeTick = -1;
-		
-		previousTapeSignal = false;
-		
-		tickCounter = 0;
-		initTOD();
+        debugPreviousTapeSignalChangeTick = -1;
 
-		irqMask = 0;
-		icr_read = 0;
+        previousTapeSignal = false;
 
-		timerARunning = false;
-		timerBRunning = false;
-		timerAValue = 0xffff;
-		timerBValue = 0xffff;
-		timerALatch = 0xffff;
-		timerBLatch = 0xffff;
-	}
+        tickCounter = 0;
+        initTOD();
 
-	/*
+        irqMask = 0;
+        icr_read = 0;
+
+        timerARunning = false;
+        timerBRunning = false;
+        timerAValue = 0xffff;
+        timerBValue = 0xffff;
+        timerALatch = 0xffff;
+        timerBLatch = 0xffff;
+    }
+
+    /*
 PRA  =  $dc00            ; CIA#1 (Port Register A)
 DDRA =  $dc02            ; CIA#1 (Data Direction Register A)
 
@@ -396,19 +403,19 @@ loop     lda PRB
          cli             ; interrupts activated
 
 ende     rts             ; back to BASIC
-	 */
+     */
 
-	@Override
-	public int readByte(int adr)
-	{
-		final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
-		switch(offset)
-		{
-			case CIA_ICR:
-				int result = icr_read & 0xff;
-				icr_read = 0;
-				return result;
-				/*
+    @Override
+    public int readByte(int adr)
+    {
+        final int offset = adr & 0b1111; // registers are mirrored/repeated every 16 bytes
+        switch(offset)
+        {
+            case CIA_ICR:
+                int result = icr_read & 0xff;
+                icr_read = 0;
+                return result;
+                /*
         Read: (Bit0..4 = INT DATA, Origin of the interrupt)
 
         Bit 0: 1 = Underflow Timer A
@@ -430,80 +437,80 @@ ende     rts             ; back to BASIC
         Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.
         Bit 5..6: unused
         Bit 7: Source bit. 0 = set bits 0..4 are clearing the according mask bit. 1 = set bits 0..4 are setting the according mask bit. If all bits 0..4 are cleared, there will be no change to the mask.
-				 */
-			case CIA_TALO:
-				return timerAValue & 0xff;
-			case CIA_TAHI:
-				return (timerAValue >>> 8 ) & 0xff;
-			case CIA_TBLO:
-				return timerBValue & 0xff;
-			case CIA_TBHI:
-				return (timerBValue >>> 8 ) & 0xff;
-				// ======== return ToD ====
-			case CIA_TOD_10THS: //  = 0x08;
-				this.todRunning = false; //  Writing CIA1_TOD_10TS register stops TOD, until register 8 (TOD 10THS) is read.
-				todRunning = true;
-				return Misc.binaryToBCD( tod10s );
-			case CIA_TOD_SECOND: // = 0x09;
-				return Misc.binaryToBCD( todSeconds );
-			case CIA_TOD_MIN: //    = 0x0a;
-				return Misc.binaryToBCD( todMinutes );
-			case CIA_TOD_HOUR: //   = 0x0b;
-				int result3 = Misc.binaryToBCD( todHours );
-				// Bit 7: Differentiation AM/PM, 0=AM, 1=PM
-				if ( timeOfDay == TimeOfDay.PM ) {
-					result3 |= 1<<7;
-				}
-				return result3;
-			default:
-		}
-		return super.readByte(offset);
-	}
+                 */
+            case CIA_TALO:
+                return timerAValue & 0xff;
+            case CIA_TAHI:
+                return (timerAValue >>> 8 ) & 0xff;
+            case CIA_TBLO:
+                return timerBValue & 0xff;
+            case CIA_TBHI:
+                return (timerBValue >>> 8 ) & 0xff;
+                // ======== return ToD ====
+            case CIA_TOD_10THS: //  = 0x08;
+                this.todRunning = false; //  Writing CIA1_TOD_10TS register stops TOD, until register 8 (TOD 10THS) is read.
+                todRunning = true;
+                return Misc.binaryToBCD( tod10s );
+            case CIA_TOD_SECOND: // = 0x09;
+                return Misc.binaryToBCD( todSeconds );
+            case CIA_TOD_MIN: //    = 0x0a;
+                return Misc.binaryToBCD( todMinutes );
+            case CIA_TOD_HOUR: //   = 0x0b;
+                int result3 = Misc.binaryToBCD( todHours );
+                // Bit 7: Differentiation AM/PM, 0=AM, 1=PM
+                if ( timeOfDay == TimeOfDay.PM ) {
+                    result3 |= 1<<7;
+                }
+                return result3;
+            default:
+        }
+        return super.readByte(offset);
+    }
 
-	@Override
-	public void writeByte(int adr , final byte value)
-	{
-		final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
+    @Override
+    public void writeByte(int adr , final byte value)
+    {
+        final int offset = adr & 0b1111; // registers are mirrored/repeated every 16 bytes
 		
-		// System.out.println("Write to "+this+" @ "+HexDump.toAdr( offset ) );
-		switch (offset)
-		{
-			// ============= Real time clock ==============
-			case CIA_TOD_10THS:
-				if ( isSetRTCAlarmTime() ) {
-					this.todAlarm10s = Misc.bcdToBinary( value & 0xff );
-				} else {
-					this.tod10s = Misc.bcdToBinary( value & 0xff );
-				}
-				return;
-			case CIA_TOD_SECOND:
-				if ( isSetRTCAlarmTime() ) {
-					this.todAlarmSeconds =  Misc.bcdToBinary( value & 0xff );
-				} else {
-					this.todSeconds =  Misc.bcdToBinary( value & 0xff );
-				}
-				return;
-			case CIA_TOD_MIN:
-				if ( isSetRTCAlarmTime() ) {
-					this.todAlarmMinutes = Misc.bcdToBinary( value & 0xff );
-				} else {
-					this.todMinutes = Misc.bcdToBinary( value & 0xff );
-				}
-				return;
-			case CIA_TOD_HOUR:
-				if ( isSetRTCAlarmTime() ) {
-					this.todAlarmTimeOfDay = (value & 1<<7) != 0 ? TimeOfDay.AM : TimeOfDay.PM;
-					this.todAlarmHours = Misc.bcdToBinary( value & 0b0111_1111 );
-				} else {
-					this.timeOfDay = (value & 1<<7) != 0 ? TimeOfDay.AM : TimeOfDay.PM;
-					this.todHours = Misc.bcdToBinary( value & 0b0111_1111 );
-				}
-				//  Writing into this register stops TOD, until register 8 (TOD 10THS) will be read.
-				this.todRunning = false;
-				return;
-				// ===============================
-			case CIA_ICR:
-				/*
+        // System.out.println("Write to "+this+" @ "+HexDump.toAdr( offset ) );
+        switch (offset)
+        {
+            // ============= Real time clock ==============
+            case CIA_TOD_10THS:
+                if ( isSetRTCAlarmTime() ) {
+                    this.todAlarm10s = Misc.bcdToBinary( value & 0xff );
+                } else {
+                    this.tod10s = Misc.bcdToBinary( value & 0xff );
+                }
+                return;
+            case CIA_TOD_SECOND:
+                if ( isSetRTCAlarmTime() ) {
+                    this.todAlarmSeconds =  Misc.bcdToBinary( value & 0xff );
+                } else {
+                    this.todSeconds =  Misc.bcdToBinary( value & 0xff );
+                }
+                return;
+            case CIA_TOD_MIN:
+                if ( isSetRTCAlarmTime() ) {
+                    this.todAlarmMinutes = Misc.bcdToBinary( value & 0xff );
+                } else {
+                    this.todMinutes = Misc.bcdToBinary( value & 0xff );
+                }
+                return;
+            case CIA_TOD_HOUR:
+                if ( isSetRTCAlarmTime() ) {
+                    this.todAlarmTimeOfDay = (value & 1<<7) != 0 ? TimeOfDay.AM : TimeOfDay.PM;
+                    this.todAlarmHours = Misc.bcdToBinary( value & 0b0111_1111 );
+                } else {
+                    this.timeOfDay = (value & 1<<7) != 0 ? TimeOfDay.AM : TimeOfDay.PM;
+                    this.todHours = Misc.bcdToBinary( value & 0b0111_1111 );
+                }
+                //  Writing into this register stops TOD, until register 8 (TOD 10THS) will be read.
+                this.todRunning = false;
+                return;
+                // ===============================
+            case CIA_ICR:
+                /*
 		        Bit 0: 1 = Interrupt release through timer A underflow
 		        Bit 1: 1 = Interrupt release through timer B underflow
 		        Bit 2: 1 = Interrupt release if clock=alarmtime
@@ -513,146 +520,146 @@ ende     rts             ; back to BASIC
 		        Bit 7: Source bit. 0 = set bits 0..4 are clearing the according mask bit.
 		                           1 = set bits 0..4 are setting the according mask bit.
 		                           If all bits 0..4 are cleared, there will be no change to the mask.
-				 */
-				final int oldMask = irqMask;
-				if ( (value & 1<<7) == 0 ) { // source bit = 0 => set bits 0...4 are clearing the bits in IRQ mask
-					int mask = ~(value & 0b11111);
-					irqMask &= mask;
-				} else { // source bit = 1 => 1 = set bits 0..4 are setting the according mask bit. If all bits 0..4 are cleared, there will be no change to the mask.
-					int mask = (value & 0b11111);
-					irqMask |= mask;
-				}
+                 */
+                final int oldMask = irqMask;
+                if ( (value & 1<<7) == 0 ) { // source bit = 0 => set bits 0...4 are clearing the bits in IRQ mask
+                    int mask = ~(value & 0b11111);
+                    irqMask &= mask;
+                } else { // source bit = 1 => 1 = set bits 0..4 are setting the according mask bit. If all bits 0..4 are cleared, there will be no change to the mask.
+                    int mask = (value & 0b11111);
+                    irqMask |= mask;
+                }
                 this.rtcAlarmIRQEnabled = (irqMask & 1<<2 ) != 0;				
-				if ( DEBUG && (oldMask != irqMask ) ) {
-					System.out.println( this+" ICR = "+Integer.toBinaryString( irqMask ) );
-				}
-				break;
-			case CIA_TALO:
-				timerALatch = ( timerALatch & 0xff00) | (value & 0xff);
-				break;
-			case CIA_TAHI:
-				timerALatch = ( timerALatch & 0x00ff) | (( value & 0xff) <<8);
-				if ( ! timerARunning ) {
-					timerAValue = timerALatch;
-				}
-				break;
-			case CIA_TBLO:
-				timerBLatch = ( timerBLatch & 0xff00) | (value & 0xff);
-				break;
-			case CIA_TBHI:
-				timerBLatch = ( timerBLatch & 0x00ff) | (( value & 0xff) <<8);
-				if ( ! timerBRunning ) {
-					timerBValue = timerBLatch;
-				}
-				break;
-			case CIA_CRA:
-				/* Timer control A
-				 * Bit 0: 0 = Stop timer; 1 = Start timer
-				 * Bit 1: 1 = Indicates a timer underflow at port B in bit 6.
-				 * Bit 2: 0 = Through a timer overflow, bit 6 of port B will get high for one cycle , 1 = Through a timer underflow, bit 6 of port B will be inverted
-				 * Bit 3: 0 = Timer-restart after underflow (latch will be reloaded), 1 = Timer stops after underflow.
-				 * Bit 4: 1 = Load latch into the timer once.
-				 * Bit 5: 0 = Timer counts system cycles, 1 = Timer counts positive slope at CNT-pin
-				 * Bit 6: Direction of the serial shift register, 0 = SP-pin is input (read), 1 = SP-pin is output (write)
-				 * Bit 7: Real Time Clock, 0 = 60 Hz, 1 = 50 Hz
-				 */
-				boolean oldState = timerARunning;
-				timerARunning = ( value & 1) != 0;
-				if ( DEBUG_VERBOSE ) {
-					if ( oldState != timerARunning ) {
-						System.out.println( this+" , timer A running: "+timerARunning);
-					}
-				}
-				if ( ( value & 1 << 4) != 0 ) {
-					timerAValue = timerALatch;
-				}
-				break;
-			case CIA_CRB:
-				/* Timer control B
-				 * 
-				 * 0b0001_1001
-				 *
-				 * Bit 0: 0 = Stop timer; 1 = Start timer
-				 * Bit 1: 1 = Indicates a timer underflow at port B in bit 7.
-				 * Bit 2: 0 = Through a timer overflow, bit 7 of port B will get high for one cycle , 1 = Through a timer underflow, bit 7 of port B will be inverted
-				 * Bit 3: 0 = Timer-restart after underflow (latch will be reloaded), 1 = Timer stops after underflow.
-				 * Bit 4: 1 = Load latch into the timer once.
-				 * Bit 5..6:
-				 *
-				 * %00 = Timer counts System cycle
-				 * %01 = Timer counts positive slope on CNT-pin
-				 * %10 = Timer counts underflow of timer A
-				 * %11 = Timer counts underflow of timer A if the CNT-pin is high
-				 *
-				 * Bit 7: 0 = Writing into the TOD register sets the clock time, 1 = Writing into the TOD register sets the alarm time.
-				 */
-				oldState = timerBRunning;
-				timerBRunning = ( value & 1) != 0;
-				if ( DEBUG_VERBOSE ) {
-					if ( oldState != timerBRunning ) {
-						System.out.println( this+" , timer B running: "+timerBRunning);
-					}
-				}
+                if ( DEBUG && (oldMask != irqMask ) ) {
+                    System.out.println( this+" ICR = "+Integer.toBinaryString( irqMask ) );
+                }
+                break;
+            case CIA_TALO:
+                timerALatch = ( timerALatch & 0xff00) | (value & 0xff);
+                break;
+            case CIA_TAHI:
+                timerALatch = ( timerALatch & 0x00ff) | (( value & 0xff) <<8);
+                if ( ! timerARunning ) {
+                    timerAValue = timerALatch;
+                }
+                break;
+            case CIA_TBLO:
+                timerBLatch = ( timerBLatch & 0xff00) | (value & 0xff);
+                break;
+            case CIA_TBHI:
+                timerBLatch = ( timerBLatch & 0x00ff) | (( value & 0xff) <<8);
+                if ( ! timerBRunning ) {
+                    timerBValue = timerBLatch;
+                }
+                break;
+            case CIA_CRA:
+                /* Timer control A
+                 * Bit 0: 0 = Stop timer; 1 = Start timer
+                 * Bit 1: 1 = Indicates a timer underflow at port B in bit 6.
+                 * Bit 2: 0 = Through a timer overflow, bit 6 of port B will get high for one cycle , 1 = Through a timer underflow, bit 6 of port B will be inverted
+                 * Bit 3: 0 = Timer-restart after underflow (latch will be reloaded), 1 = Timer stops after underflow.
+                 * Bit 4: 1 = Load latch into the timer once.
+                 * Bit 5: 0 = Timer counts system cycles, 1 = Timer counts positive slope at CNT-pin
+                 * Bit 6: Direction of the serial shift register, 0 = SP-pin is input (read), 1 = SP-pin is output (write)
+                 * Bit 7: Real Time Clock, 0 = 60 Hz, 1 = 50 Hz
+                 */
+                boolean oldState = timerARunning;
+                timerARunning = ( value & 1) != 0;
+                if ( DEBUG_VERBOSE ) {
+                    if ( oldState != timerARunning ) {
+                        System.out.println( this+" , timer A running: "+timerARunning);
+                    }
+                }
+                if ( ( value & 1 << 4) != 0 ) {
+                    timerAValue = timerALatch;
+                }
+                break;
+            case CIA_CRB:
+                /* Timer control B
+                 * 
+                 * 0b0001_1001
+                 *
+                 * Bit 0: 0 = Stop timer; 1 = Start timer
+                 * Bit 1: 1 = Indicates a timer underflow at port B in bit 7.
+                 * Bit 2: 0 = Through a timer overflow, bit 7 of port B will get high for one cycle , 1 = Through a timer underflow, bit 7 of port B will be inverted
+                 * Bit 3: 0 = Timer-restart after underflow (latch will be reloaded), 1 = Timer stops after underflow.
+                 * Bit 4: 1 = Load latch into the timer once.
+                 * Bit 5..6:
+                 *
+                 * %00 = Timer counts System cycle
+                 * %01 = Timer counts positive slope on CNT-pin
+                 * %10 = Timer counts underflow of timer A
+                 * %11 = Timer counts underflow of timer A if the CNT-pin is high
+                 *
+                 * Bit 7: 0 = Writing into the TOD register sets the clock time, 1 = Writing into the TOD register sets the alarm time.
+                 */
+                oldState = timerBRunning;
+                timerBRunning = ( value & 1) != 0;
+                if ( DEBUG_VERBOSE ) {
+                    if ( oldState != timerBRunning ) {
+                        System.out.println( this+" , timer B running: "+timerBRunning);
+                    }
+                }
 
-				if ( ( value & 1 << 4) != 0 ) 
-				{
-					if ( DEBUG_VERBOSE ) {
-						System.out.println( this+" , FORCED loading timer B from latch: "+timerBLatch);
-					}					
-					timerBValue = timerBLatch;
-				}
-				break;
-		}
-		super.writeByte(offset, value);
-	}
+                if ( ( value & 1 << 4) != 0 ) 
+                {
+                    if ( DEBUG_TIMER_LOAD && DEBUG_VERBOSE ) {
+                        System.out.println( this+" , FORCED loading timer B from latch: "+timerBLatch);
+                    }					
+                    timerBValue = timerBLatch;
+                }
+                break;
+        }
+        super.writeByte(offset, value);
+    }
 
-	private void increaseRTC(CPU cpu)
-	{
-		this.tod10s++;
-		if ( this.tod10s > 9 ) {
-			this.tod10s=0;
-			this.todSeconds++;
-			if ( this.todSeconds > 59 ) {
-				this.todSeconds = 0;
-				this.todMinutes++;
-				if ( this.todMinutes > 59 ) {
-					this.todMinutes = 0;
-					this.todHours++;
-					if ( this.todHours > 11 ) {
-						this.todHours = 0;
-						this.timeOfDay = this.timeOfDay.flip();
-					}
-				}
-			}
-		}
-		if ( this.rtcAlarmIRQEnabled &&
-				this.tod10s == this.todAlarm10s &&
-				this.todSeconds == this.todAlarmSeconds &&
-				this.todMinutes == this.todAlarmMinutes &&
-				this.todHours == this.todAlarmHours &&
-				this.timeOfDay == this.todAlarmTimeOfDay )
-		{
-			icr_read |= ( (1<<7)|(1<<2) ); // tod == tod alarm time
-			cpu.queueInterrupt( IRQType.REGULAR );
-		}
-	}
+    private void increaseRTC(CPU cpu)
+    {
+        this.tod10s++;
+        if ( this.tod10s > 9 ) {
+            this.tod10s=0;
+            this.todSeconds++;
+            if ( this.todSeconds > 59 ) {
+                this.todSeconds = 0;
+                this.todMinutes++;
+                if ( this.todMinutes > 59 ) {
+                    this.todMinutes = 0;
+                    this.todHours++;
+                    if ( this.todHours > 11 ) {
+                        this.todHours = 0;
+                        this.timeOfDay = this.timeOfDay.flip();
+                    }
+                }
+            }
+        }
+        if ( this.rtcAlarmIRQEnabled &&
+                this.tod10s == this.todAlarm10s &&
+                this.todSeconds == this.todAlarmSeconds &&
+                this.todMinutes == this.todAlarmMinutes &&
+                this.todHours == this.todAlarmHours &&
+                this.timeOfDay == this.todAlarmTimeOfDay )
+        {
+            icr_read |= ( (1<<7)|(1<<2) ); // tod == tod alarm time
+            cpu.queueInterrupt( IRQType.REGULAR );
+        }
+    }
 
-	public void tick(CPU cpu)
-	{
-	    // call BEFORE bumping tickCounter because this method needs to know when it's called the first time after a reset
-	    handleCassette( cpu ); 
-	    
-	    /*
-	     * Method must ONLY be called when ph2 == HIGH
-	     */
-		tickCounter++;
-		
-		if ( todRunning & ( tickCounter % 100_000) == 0 ) // RTC increases in 1/10 of a second intervals = every 100 milliseconds = every 100.000 microseconds
-		{
-			increaseRTC( cpu );
-		}
+    public void tick(CPU cpu)
+    {
+        // call BEFORE bumping tickCounter because this method needs to know when it's called the first time after a reset
+        handleCassette( cpu ); 
 
-		/* $DC0E   CRA
+        /*
+         * Method must ONLY be called when ph2 == HIGH
+         */
+        tickCounter++;
+
+        if ( todRunning & ( tickCounter % 98500) == 0 ) // RTC increases in 1/10 of a second intervals , C64 runs at ~985 Khz
+        {
+            increaseRTC( cpu );
+        }
+
+        /* $DC0E   CRA
         Bit 0: 0 = Stop timer; 1 = Start timer
         Bit 1: 1 = Indicates a timer underflow at port B in bit 6.
         Bit 2: 0 = Through a timer overflow, bit 6 of port B will get high for one cycle , 1 = Through a timer underflow, bit 6 of port B will be inverted
@@ -661,157 +668,147 @@ ende     rts             ; back to BASIC
         Bit 5: 0 = Timer counts system cycles, 1 = Timer counts positive slope at CNT-pin
         Bit 6: Direction of the serial shift register, 0 = SP-pin is input (read), 1 = SP-pin is output (write)
         Bit 7: Real Time Clock, 0 = 60 Hz, 1 = 50 Hz
-		 */
-		final int cra = readByte( CIA_CRA ); // Control Register A
-		final int crb = readByte( CIA_CRB ); // Control Register B
-		if ( timerARunning )
-		{
-			if ( ( cra & (1<<5) ) == 0 ) // timer counts system cycles
-			{
-				timerAValue = (timerAValue-1) & 0xffff;
-				if ( timerAValue == 0xffff )
-				{
-					if ( timerBRunning && (crb & 0b1100000) == 0b1000000) { // timerB counts timerA underflow
-						timerBValue--;
-						if ( timerBValue == 0 ) {
-							handleTimerBUnderflow( crb , cpu );
-						}
-					}
-					handleTimerAUnderflow(cra , cpu );
-				}
-			} else {
-	             throw new RuntimeException("Unsupported timer A mode: "+cra);
-			}
-		}
+         */
+        final int cra = readByte( CIA_CRA ); // Control Register A
+        final int crb = readByte( CIA_CRB ); // Control Register B
+        if ( timerARunning )
+        {
+            if ( ( cra & (1<<5) ) == 0 ) // timer counts system cycles
+            {
+                timerAValue = (timerAValue-1) & 0xffff;
+                if ( timerAValue == 0xffff )
+                {
+                    handleTimerAUnderflow(cra , cpu );
 
-		/* $DC0F 	CRB 	Control Timer B
-		 *
-		 * Bit 0: 0 = Stop timer; 1 = Start timer
-		 * Bit 1: 1 = Indicates a timer underflow at port B in bit 7.
-		 * Bit 2: 0 = Through a timer overflow, bit 7 of port B will get high for one cycle , 1 = Through a timer underflow, bit 7 of port B will be inverted
-		 * Bit 3: 0 = Timer-restart after underflow (latch will be reloaded), 1 = Timer stops after underflow.
-		 * Bit 4: 1 = Load latch into the timer once.
-		 * Bit 5..6:
-		 *
-		 * %00 = Timer counts System cycle
-		 * %01 = Timer counts positive slope on CNT-pin
-		 * %10 = Timer counts underflow of timer A
-		 * %11 = Timer counts underflow of timer A if the CNT-pin is high
-		 *
-		 * Bit 7: 0 = Writing into the TOD register sets the clock time, 1 = Writing into the TOD register sets the alarm time.
-		 */
-		if ( timerBRunning )
-		{
-			final int mode = (crb >>> 5) & 0b11;
-			if ( mode == 0b00 ) { // Timer B counts System cycles
-				timerBValue = (timerBValue-1) & 0xffff;
-				if ( timerBValue == 0xffff )
-				{
-					handleTimerBUnderflow(crb,cpu);
-				}
-			} else {
-			    throw new RuntimeException("Unsupported timer B mode: "+mode);
-			}
-		}
-	}
+                    if ( timerBRunning && (crb & 0b1100000) == 0b1000000) { // timerB counts timerA underflow
+                        timerBValue = (timerBValue-1) & 0xffff;
+                        if ( timerBValue == 0xffff ) {
+                            handleTimerBUnderflow( crb , cpu );
+                        }
+                        return; /* RETURN */
+                    }
+                }
+            } else {
+                throw new RuntimeException("Unsupported timer A mode: "+cra);
+            }
+        }
 
-	protected void handleCassette(CPU cpu) 
-	{
-	    // empty implementation, subclass needs override & invoke doHandleCassette() 
+        /* $DC0F 	CRB 	Control Timer B
+         *
+         * Bit 0: 0 = Stop timer; 1 = Start timer
+         * Bit 1: 1 = Indicates a timer underflow at port B in bit 7.
+         * Bit 2: 0 = Through a timer overflow, bit 7 of port B will get high for one cycle , 1 = Through a timer underflow, bit 7 of port B will be inverted
+         * Bit 3: 0 = Timer-restart after underflow (latch will be reloaded), 1 = Timer stops after underflow.
+         * Bit 4: 1 = Load latch into the timer once.
+         * Bit 5..6:
+         *
+         * %00 = Timer counts System cycle
+         * %01 = Timer counts positive slope on CNT-pin
+         * %10 = Timer counts underflow of timer A
+         * %11 = Timer counts underflow of timer A if the CNT-pin is high
+         *
+         * Bit 7: 0 = Writing into the TOD register sets the clock time, 1 = Writing into the TOD register sets the alarm time.
+         */
+        if ( timerBRunning )
+        {
+            if ( (crb & 0b1100000) == 0b0000000 ) { // Timer B counts System cycles
+                timerBValue = (timerBValue-1) & 0xffff;
+                if ( timerBValue == 0xffff )
+                {
+                    handleTimerBUnderflow(crb,cpu);
+                }
+            } else {
+                throw new RuntimeException("Unsupported timer B mode: "+crb);
+            }
+        }
     }
-	
-	protected final void doHandleCassette(CPU cpu) 
-	{
-	    if ( tickCounter != 0 ) 
-	    {
-	        final boolean currentSignal = getTapeSignal();
-	        final boolean isPositiveSlope = ! previousTapeSignal && currentSignal; // IRQ triggers on positive slop , input line is inverted 
-	        if ( isPositiveSlope ) 
-	        {
-	            // Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.	     
-	            icr_read |= ( (1<<7) | (1<<4) ); 
-	            if ( (irqMask & 1<<4) != 0 ) { // IRQ mask: Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.
-	            	if ( DEBUG_VERBOSE ) {
-	            		long delta = tickCounter - debugPreviousTapeSignalChangeTick;
-		        		System.out.println("Detected positive slope on /FLAG (IRQ enabled) - tick "+tickCounter+" (delta: "+delta+"), timerA: "+timerAValue+" , timerB: "+timerBValue);
-		        	}	    	            	
-	                cpu.queueInterrupt( IRQType.REGULAR  );
-	            } else if ( DEBUG_VERBOSE ) {
-            		long delta = tickCounter - debugPreviousTapeSignalChangeTick;	            	
-	        		System.out.println("Detected positive slope on /FLAG (IRQ disabled) - tick "+tickCounter+" (delta: "+delta+") , timerA: "+timerAValue+" , timerB: "+timerBValue);
-	        	}	    
-	            debugPreviousTapeSignalChangeTick = tickCounter;
-	        }
-	        previousTapeSignal = currentSignal;
-	    } 
-	    else 
-	    {
-	        // this is the very first CPU tick
-	        previousTapeSignal = getTapeSignal();
-	    }
-	}
-	
-	protected boolean getTapeSignal() {
-	    return false;
-	}
 
+    protected void handleCassette(CPU cpu) 
+    {
+        // empty implementation, subclass needs override & invoke doHandleCassette() 
+    }
+    
+    protected final void doHandleCassette(CPU cpu) 
+    {
+        if ( tickCounter != 0 ) 
+        {
+            final boolean currentSignal = getTapeSignal();
+            final boolean isPositiveSlope = previousTapeSignal && ! currentSignal; // IRQ triggers on positive slop , input line is inverted 
+            if ( isPositiveSlope ) 
+            {
+                tapeSlopeCounter++;
+                // Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.	     
+                icr_read |= ( (1<<7) | (1<<4) ); 
+                if ( (irqMask & 1<<4) != 0 ) { // IRQ mask: Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.
+                    if ( DEBUG_TAPE_SLOPE ) {
+                        long delta = tickCounter - debugPreviousTapeSignalChangeTick;
+                        System.out.println("Detected positive slope #"+tapeSlopeCounter+" on /FLAG (IRQ enabled) - tick "+tickCounter+" (delta: "+delta+"), timerA: "+timerAValue+" , timerB: "+timerBValue);
+                    }	    	            	
+                    cpu.queueInterrupt( IRQType.REGULAR  );
+                } else if ( DEBUG_TAPE_SLOPE ) {
+                    long delta = tickCounter - debugPreviousTapeSignalChangeTick;	            	
+                    System.out.println("Detected positive slope # "+tapeSlopeCounter+" on /FLAG (IRQ disabled) - tick "+tickCounter+" (delta: "+delta+") , timerA: "+timerAValue+" , timerB: "+timerBValue);
+                }	    
+                debugPreviousTapeSignalChangeTick = tickCounter;
+            }
+            previousTapeSignal = currentSignal;
+        } 
+        else 
+        {
+            // this is the very first CPU tick
+            previousTapeSignal = getTapeSignal();
+        }
+    }
+
+    protected boolean getTapeSignal() {
+        return false;
+    }
+
+    private void handleTimerAUnderflow(int cra,CPU cpu)
+    {
+        // ICR Bit 0: 1 = Interrupt release through timer A underflow
+        icr_read |= ( (1<<7) | (1<<0) ); // timerA underflow triggered IRQ
+        if ( (irqMask & 1) != 0 ) { // trigger interrupt on timer A underflow ?
+            cpu.queueInterrupt( IRQType.REGULAR  );
+        }
+        if ( (cra & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
+            timerARunning = false;
+            super.writeByte( CIA.CIA_CRA , (byte) (cra & 0b01111111) );
+        }
+        //		if ( DEBUG_VERBOSE ) {
+        //			System.out.println(this+" , timer A underflow , loading timer A latch = "+timerALatch);
+        //		}
+        timerAValue = timerALatch;
+    }
+    
     private void handleTimerBUnderflow(int crb,CPU cpu)
-	{
-		icr_read |= ( (1<<7) | (1<<1) ); // timerB triggered underflow
-		
-		/*
-		        Bit 0: 1 = Interrupt release through timer A underflow
-		        Bit 1: 1 = Interrupt release through timer B underflow
-		        Bit 2: 1 = Interrupt release if clock=alarmtime
-		        Bit 3: 1 = Interrupt release if a complete byte has been received/sent.
-		        Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.
-		        Bit 5..6: unused
-		        Bit 7: Source bit. 0 = set bits 0..4 are clearing the according mask bit.
-		                           1 = set bits 0..4 are setting the according mask bit.
-		                           If all bits 0..4 are cleared, there will be no change to the mask.		 
-		 */
-		if ( (irqMask & (1<<1) ) != 0 ) { // trigger interrupt on timer B underflow ?
-			if ( DEBUG_VERBOSE ) {
-				System.out.println(this+" queueing interrupt for timer B");
-			}				
-			cpu.queueInterrupt( IRQType.REGULAR  );
-		}
-		boolean timerBOneShotMode = (crb & 1<<3) != 0;
-		if ( timerBOneShotMode ) { // bit 3 = 1 => timer stops after underflow
-			if ( DEBUG_VERBOSE ) {
-				System.out.println(this+" , timer B running in one-shot mode, timer is now stopped.");
-			}			
-			timerBRunning = false;
-		}
+    {
+        // ICR Bit 1: 1 = Interrupt release through timer B underflow
+        icr_read |= ( (1<<7) | (1<<1) ); // timerB triggered underflow
 
-		if ( DEBUG_VERBOSE ) {
-			System.out.println(this+" , timer B underflow , loading timer B latch = "+timerBLatch);
-		}
-		timerBValue = timerBLatch;
-	}
+        if ( (irqMask & (1<<1) ) != 0 ) { // trigger interrupt on timer B underflow ?
+            if ( DEBUG_VERBOSE ) {
+                System.out.println(this+" queueing interrupt for timer B");
+            }               
+            cpu.queueInterrupt( IRQType.REGULAR  );
+        }
+        boolean timerBOneShotMode = (crb & 1<<3) != 0;
+        if ( timerBOneShotMode ) { // bit 3 = 1 => timer stops after underflow
+            if ( DEBUG_VERBOSE ) {
+                System.out.println(this+" , timer B running in one-shot mode, timer is now stopped.");
+            }           
+            super.writeByte( CIA.CIA_CRB , (byte) (crb & 0b01111111) );            
+            timerBRunning = false;
+        } 
 
-	private void handleTimerAUnderflow(int cra,CPU cpu)
-	{
-//		System.out.println("CIA #1 timer A underflow");
-		/*
-        Bit 0: 1 = Interrupt release through timer A underflow
-        Bit 1: 1 = Interrupt release through timer B underflow
-		 */
-	    icr_read |= ( (1<<7) | (1<<0) ); // timerA underflow triggered IRQ
-		if ( (irqMask & 1) != 0 ) { // trigger interrupt on timer A underflow ?
-			cpu.queueInterrupt( IRQType.REGULAR  );
-		}
-		if ( (cra & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
-			timerARunning = false;
-		}
-		if ( DEBUG_VERBOSE ) {
-			System.out.println(this+" , timer A underflow , loading timer A latch = "+timerALatch);
-		}
-		timerAValue = timerALatch;
-	}
+        if ( DEBUG_VERBOSE ) {
+            System.out.println(this+" , timer B underflow , loading timer B latch = "+timerBLatch);
+        }
+        timerBValue = timerBLatch;
+    }    
 
-	private boolean isSetRTCAlarmTime()
-	{
-		return (readByte( CIA_CRB ) & 1<<7) != 0;
-	}
+    private boolean isSetRTCAlarmTime()
+    {
+        return (readByte( CIA_CRB ) & 1<<7) != 0;
+    }
 }

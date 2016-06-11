@@ -22,6 +22,7 @@ public class SquareWaveDriver
             System.out.println("Loading tape: "+file);
         }
         // write tape lead
+        generator.addMarker("Lead-in");        
         writeLeader();
         
         for ( T64File.DirEntry entry : file.getDirEntries() ) 
@@ -50,38 +51,52 @@ public class SquareWaveDriver
 
     private void writeFile(DirEntry entry) 
     {
+        generator.addMarker("FileEntry");
+        
         /*
          * === HEADER ===
          */
         
         // first pass
+        generator.addMarker("Sync #1");
         writeSync(); // raw
         
+        generator.addMarker("Header #1");
         writeHeader( entry );
         
+        generator.addMarker("Gap #1");
         writeGap(); // short pulses
 
         // repetition
+        generator.addMarker("Sync #2 repeated");
         writeSyncRepeated();
         
+        generator.addMarker("Header #2 repeated");
         writeHeader( entry );
         
+        generator.addMarker("Trailer #1 repeated");
         writeTrailer(); // short pulses      
         
         /*
          * === DATA ===
          */
         
+        generator.addMarker("Sync data");        
         writeSync();
         
+        generator.addMarker("data");           
         writeData( entry );
         
+        generator.addMarker("data gap");            
         writeGap();
         
+        generator.addMarker("Sync data repeated");           
         writeSyncRepeated();        
         
+        generator.addMarker("data repeated");          
         writeData( entry );        
 
+        generator.addMarker("data trailer repeated");          
         writeTrailer();
     }
 
@@ -186,11 +201,6 @@ public class SquareWaveDriver
         writeBytesWithParity( new byte[] { (byte) 0x89 ,(byte) 0x88 ,(byte) 0x87 ,(byte) 0x86 ,(byte) 0x85 ,(byte) 0x84 ,(byte) 0x83 ,(byte) 0x82 ,(byte) 0x81 } );
     }
     
-    private void writeByteLeadIn() {
-    	generator.addWave( WavePeriod.LONG );
-    	generator.addWave( WavePeriod.MEDIUM );
-    }
-    
     private void writeEndOfDataMarker() {
     	generator.addWave( WavePeriod.LONG );
     	generator.addWave( WavePeriod.SHORT );
@@ -218,13 +228,6 @@ public class SquareWaveDriver
         }
     }  
     
-//    private void writeRawBytes(byte[] data) 
-//    {
-//        for ( int byteValue : data ) {
-//            writeRawByte( byteValue );
-//        }
-//    }      
-    
     private void writeWord(int word) {
     
         // write lo first, then hi
@@ -250,7 +253,8 @@ public class SquareWaveDriver
     
     private void writeByte(int value) {
         
-    	writeByteLeadIn();
+        generator.addWave( WavePeriod.LONG );
+        generator.addWave( WavePeriod.MEDIUM );
     	
         final int oneBitCount=writeRawByte(value);
         
@@ -259,8 +263,8 @@ public class SquareWaveDriver
         if ( (oneBitCount & 1 ) == 0 ) { // we have an even number of 1 bits, add another 1 bit to make it odd  
             generator.addBit( true );
         } else {  
-            // we have an odd number of 1 bits, add another 1 bit to make it odd 
-            generator.addBit( true );
+            // we already have an odd number of 1 bits, add another 0 bit to leave it at that 
+            generator.addBit( false );
         }
     }
     

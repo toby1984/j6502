@@ -1,13 +1,26 @@
 package de.codesourcery.j6502.emulator.tapedrive;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class SquareWaveGenerator 
 {
     public enum WavePeriod
     {
-        SHORT("SHORT", 357 ),
-        MEDIUM("MEDIUM", 504 ),
-        LONG("LONG", 662 );    	
-        
+        /*
+         * CPU freq: 985248 Hz
+         * 
+         * (S)hort  : 2840 Hz
+         * (M)edium : 1953 Hz
+         * (L)ong   : 1488 Hz         
+         */
+        SHORT("SHORT", 347*1.15 ),
+        MEDIUM("MEDIUM", 504*1.15 ),
+        LONG("LONG", 662*1.15 );  
+//        SHORT("SHORT", 357 ),
+//        MEDIUM("MEDIUM", 504 ),
+//        LONG("LONG", 662 );  
+
         private final int ticks;
         private final String name;
         
@@ -44,11 +57,29 @@ public class SquareWaveGenerator
     
     private final WaveArray waves = new WaveArray(1024);
     
+    protected static final class Marker  // TODO: class is debug only , remove when done
+    {
+        public final int count;
+        public final String label;
+        
+        public Marker(int count, String label) {
+            this.count = count;
+            this.label = label;
+        }
+        
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+    
     protected static final class WaveArray 
     {
     	public int waveCount=0;
         public int wavePtr=0;
         public WavePeriod[] waves;
+        
+        private final List<Marker> markers = new ArrayList<>(); // TODO: Remove debug code
     
         public WaveArray(int initialSize) {
         	this.waves = new WavePeriod[initialSize];
@@ -58,12 +89,16 @@ public class SquareWaveGenerator
     		return waveCount;
     	}
     	
+    	public void addMarker(String label) {
+    	    markers.add( new Marker( wavePtr , label ) );
+    	}
+    	
     	public int wavesRemaining() {
     		return waveCount-wavePtr;
     	}
     	
-    	public void add(WavePeriod p) {
-    		
+    	public void add(WavePeriod p) 
+    	{
     		if ( wavePtr == waves.length ) 
     		{
     			final WavePeriod[] newData = new WavePeriod[ waves.length + waves.length/2 ];
@@ -78,6 +113,9 @@ public class SquareWaveGenerator
     	{
     		if ( wavePtr == waveCount ) {
     			return null;
+    		}
+    		while ( ! markers.isEmpty() && markers.get(0).count <= wavePtr ) {
+    		    System.out.println("===================== Wave: "+markers.remove(0)+" =================");
     		}
     		return waves[wavePtr++];
     	}
@@ -146,6 +184,10 @@ public class SquareWaveGenerator
         if ( currentWave.tick(this) ) {
             currentWave = null;
         }
+    }
+    
+    public void addMarker(String label) {
+        waves.addMarker( label );
     }
     
     public void addWave(WavePeriod period) {
