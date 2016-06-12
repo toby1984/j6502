@@ -3,9 +3,11 @@ package de.codesourcery.j6502.ui;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -24,7 +26,6 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
 import javax.swing.JToolBar;
 import javax.swing.JViewport;
-import javax.swing.SwingUtilities;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.Style;
@@ -37,7 +38,8 @@ import de.codesourcery.j6502.emulator.Emulator;
 public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.IDebuggerView  
 {
     private final StyleContext styleContext = new StyleContext();    
-    private final JTextPane editor = new JTextPane( new DefaultStyledDocument( styleContext ) );
+    private final JTextPane editor = new JTextPane( createStyledDocument() );
+
     private final JScrollPane scrollPane = new JScrollPane(editor);
     
     private final Style defaultStyle; 
@@ -50,9 +52,25 @@ public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.
     
     private final StringBuilder text = new StringBuilder();
     private final Map<Integer,Integer> pcToTextOffset = new HashMap<>();
+    private int currentPC = -1;
     
     private Highlight currentHighlight;
     private final Map<String, String> configProperties = new HashMap<>();
+    
+    private KeyListener keyListener = new KeyAdapter() 
+    {
+        public void keyReleased(java.awt.event.KeyEvent e) 
+        {
+            if ( e.getKeyCode() == KeyEvent.VK_F5 ) {
+                try 
+                {
+                    reload();
+                } catch (IOException e1) {
+                    e1.printStackTrace();
+                }
+            }
+        };
+    };
     
     protected static final class Range 
     {
@@ -89,13 +107,17 @@ public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.
     public CommentedCodeViewer() 
     {
         editor.setEditable( false );
+        editor.setFocusable( true );
+        editor.addKeyListener( keyListener );
         
         defaultStyle = styleContext.getStyle(StyleContext.DEFAULT_STYLE);        
-        highlightStyle = createStyle("highlighted", Color.LIGHT_GRAY );
-        commentLineStyle = createStyle("comment", new Color(0f,0.8f,0f,0.5f)); 
+        highlightStyle = createStyle("highlighted", new Color(0f,0.8f,0f,0.5f));
+        commentLineStyle = createStyle("comment", Color.LIGHT_GRAY ); 
         
         final JToolBar toolbar = new JToolBar(JToolBar.HORIZONTAL);
-        toolbar.add( new AbstractAction("Set file") {
+        toolbar.setFocusable( false );
+        
+        toolbar.add( new AbstractAction("Load file...") {
 
             @Override
             public void actionPerformed(ActionEvent e) 
@@ -107,7 +129,19 @@ public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.
                 }
             }
         } );
-        editor.setDocument( new DefaultStyledDocument(styleContext) );
+        
+        toolbar.add( new AbstractAction("Reload") {
+
+            @Override
+            public void actionPerformed(ActionEvent e) 
+            {
+                try {
+                    reload();
+                } catch (IOException e1) {
+                    e1.printStackTrace();
+                }
+            }
+        } );        
         
         setLayout( new BorderLayout() );
         add( toolbar , BorderLayout.NORTH );
@@ -115,9 +149,25 @@ public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.
         add( scrollPane , BorderLayout.CENTER );
     }
     
+    private DefaultStyledDocument createStyledDocument() {
+        return new DefaultStyledDocument( styleContext );
+    }    
+    
     @Override
     public void setLocationPeer(Component frame) {
         this.peer = frame;
+    }
+    
+    public void reload() throws IOException 
+    {
+        if ( this.file != null ) 
+        {
+            setFile( this.file );
+            if ( currentPC != -1 ) 
+            {
+                highlightCurrentPC( this.currentPC );
+            }
+        }
     }
     
     public void setFile(File file) throws IOException 
@@ -130,52 +180,54 @@ public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.
     {
         this.file = file;
         
+        final List<String> lines = file == null ? new ArrayList<>() : Files.readAllLines( file.toPath() );
+        
         setHighlight( null );
         
         text.setLength(0);
         pcToTextOffset.clear();
-        if ( file != null ) 
-        {
-            final List<Pattern> patterns = new ArrayList<>();
-            
-            patterns.add( Pattern.compile("^"+Pattern.quote(adrPrefix1)+"([0-9a-fA-F]{4}).*") );
-            if ( adrPrefix2 != null ) {
-                for ( String prefix : adrPrefix2 ) {
-                    patterns.add( Pattern.compile("^"+Pattern.quote(prefix)+"([0-9a-fA-F]{4}).*") );
-                }
+
+        final List<Pattern> patterns = new ArrayList<>();
+
+        patterns.add( Pattern.compile("^"+Pattern.quote(adrPrefix1)+"([0-9a-fA-F]{4}).*") );
+        if ( adrPrefix2 != null ) {
+            for ( String prefix : adrPrefix2 ) {
+                patterns.add( Pattern.compile("^"+Pattern.quote(prefix)+"([0-9a-fA-F]{4}).*") );
             }
-            int offset = 0;
-            final List<Highlight> commentLines = new ArrayList<>();
-            for ( String line : Files.readAllLines( file.toPath() ) ) 
-            {
-                Matcher matched = null;
-                for ( Pattern pattern : patterns ) {
-                    Matcher m = pattern.matcher( line );
-                    if ( m.matches() ) {
-                        matched = m;
-                        break;
-                    }
-                }
-                if ( matched != null ) 
-                {
-                    final int adr = Integer.parseUnsignedInt( matched.group(1) , 16 );
-                    pcToTextOffset.put( adr , offset );
-                } 
-                else 
-                {
-                    if ( isCommentLine( line ) ) {
-                        commentLines.add( new Highlight( offset , line.length() , commentLineStyle ) );
-                    }
-                }
-                text.append( line ).append( '\n' );
-                offset += line.length()+1;
-            }
-            editor.setText( text.toString() );
-            editor.setCaretPosition(0);
-            commentLines.forEach( this::highlight );
-        } else {
-            editor.setText( "" );
         }
+        int offset = 0;
+        final List<Highlight> commentLines = new ArrayList<>();
+        for ( String line : lines ) 
+        {
+            Matcher matched = null;
+            for ( Pattern pattern : patterns ) {
+                Matcher m = pattern.matcher( line );
+                if ( m.matches() ) {
+                    matched = m;
+                    break;
+                }
+            }
+            if ( matched != null ) 
+            {
+                final int adr = Integer.parseUnsignedInt( matched.group(1) , 16 );
+                pcToTextOffset.put( adr , offset );
+            } 
+            else 
+            {
+                if ( isCommentLine( line ) ) {
+                    commentLines.add( new Highlight( offset , line.length() , commentLineStyle ) );
+                }
+            }
+            text.append( line ).append( '\n' );
+            offset += line.length()+1;
+        }
+        editor.setDocument( createStyledDocument() );
+        editor.setText( text.toString() );
+        if ( text.length() > 0 ) {
+            ((StyledDocument) editor.getDocument()).setCharacterAttributes( 0, text.length() , defaultStyle , true );
+        }
+        editor.setCaretPosition(0);
+        commentLines.forEach( this::highlight );
     }
     
     private boolean isCommentLine(String line) {
@@ -255,7 +307,12 @@ public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.
     @Override
     public void refresh(Emulator emulator) 
     {
-        final int pc = emulator.getCPU().pc();
+        highlightCurrentPC( emulator.getCPU().pc() );
+    }
+    
+    private void highlightCurrentPC(int pc) 
+    {
+        this.currentPC = pc;
         final Integer offset = pcToTextOffset.get( pc );
         
         highlightCurrentLine( offset );
@@ -263,8 +320,7 @@ public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.
             return;
         }
         
-        scrollToVisible( offset );
-//        editor.setCaretPosition( offset );
+        scrollToVisible( offset );        
     }
 
     @Override
@@ -324,16 +380,22 @@ public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.
             }
 
             final JViewport viewport = scrollPane.getViewport();
-            final Rectangle viewRect = viewport.getViewRect();       
+            final Rectangle viewRect = viewport.getViewRect();      
+            
+            int y0 = rectangle.y - viewRect.height/2;
+            if ( y0 < 0 ) {
+                y0 = 0;
+            }
             viewRect.x = rectangle.x ;
-            viewRect.y = rectangle.y ;
+            viewRect.y = y0 ;
             
             editor.scrollRectToVisible( viewRect );
         }
     }
     
     @Override
-    public void setConfigProperties(Map<String, String> properties) {
+    public void setConfigProperties(Map<String, String> properties) 
+    {
         this.configProperties.clear();
         this.configProperties.putAll( properties );
         

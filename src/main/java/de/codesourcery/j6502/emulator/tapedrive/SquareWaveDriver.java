@@ -231,6 +231,7 @@ public class SquareWaveDriver
         if ( DEBUG ) {
             System.out.println("Generating: SYNC");
         }        
+        generator.addMarker("SYNC");
         writeBytesWithParity( new byte[] { (byte) 0x89 ,(byte) 0x88 ,(byte) 0x87 ,(byte) 0x86 ,(byte) 0x85 ,(byte) 0x84 ,(byte) 0x83 ,(byte) 0x82 ,(byte) 0x81 } );
     }
     
@@ -243,7 +244,8 @@ public class SquareWaveDriver
     {
         if ( DEBUG ) {
             System.out.println("Generating: SYNC_REPEATED");
-        }   
+        }
+        generator.addMarker("SYNC REPEATED");
         writeBytesWithParity( new byte[] { 0x09 ,0x08 ,0x07 ,0x06 ,0x05 ,0x04 ,0x03 ,0x02 ,0x01 } );
     }
     
@@ -284,6 +286,7 @@ public class SquareWaveDriver
     
     private void writeByte(int value) {
         
+        // start of byte marker
         generator.addWave( WavePeriod.LONG );
         generator.addWave( WavePeriod.MEDIUM );
     	

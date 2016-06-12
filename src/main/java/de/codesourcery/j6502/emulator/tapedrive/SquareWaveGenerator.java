@@ -26,9 +26,9 @@ public class SquareWaveGenerator
          * => long pulse = 584-760 cycles, avg. 672 cycles .. 1296 Hz - 1687  
          * 
          */
-        SHORT("SHORT", 336 ),
-        MEDIUM("MEDIUM", 508 ),
-        LONG("LONG", 672 ),
+        SHORT("SHORT", 346 ), // 336 
+        MEDIUM("MEDIUM", 504 ), // 508
+        LONG("LONG", 662 ), // 672
         SILENCE_SHORT("SILENCE SHORT (0.33s)" , 325131) { 
 
             @Override
@@ -44,7 +44,7 @@ public class SquareWaveGenerator
                 state.currentTicks--;
                 if ( state.currentTicks <= 0 ) 
                 {
-                    return true;
+                    return true; // advance to next state
                 }
                 return false;
             }
@@ -64,7 +64,7 @@ public class SquareWaveGenerator
                 state.currentTicks--;
                 if ( state.currentTicks <= 0 ) 
                 {
-                    return true;
+                    return true; // advance to next state
                 }
                 return false;
             }
@@ -88,13 +88,13 @@ public class SquareWaveGenerator
         public boolean tick(SquareWaveGenerator state) 
         {
             state.currentTicks--;
-            if ( state.currentTicks == 0 ) 
+            if ( state.currentTicks <= 0 ) 
             {
                 state.currentSignal = ! state.currentSignal;
                 state.currentTicks = ticks/2; // square wave with 50% duty cycle
                 if ( state.currentSignal == state.signalAtStartOfWave ) 
                 {
-                    return true;
+                    return true; // advance to next state
                 }
             }
             return false;
@@ -102,7 +102,7 @@ public class SquareWaveGenerator
 
         @Override
         public String toString() {
-            return name;
+            return name+" ("+ticks+" ticks)";
         }
     }
 
@@ -165,8 +165,11 @@ public class SquareWaveGenerator
             if ( wavePtr == waveCount ) {
                 return null;
             }
-            while ( ! markers.isEmpty() && markers.get(0).count <= wavePtr ) {
-                System.out.println("===================== Wave: "+markers.remove(0)+" =================");
+            
+            while ( ! markers.isEmpty() && markers.get(0).count <= wavePtr ) 
+            {
+                System.out.flush();
+                System.err.println("********************** Wave: "+markers.remove(0)+" *****************");
             }
             return waves[wavePtr++];
         }
@@ -240,7 +243,7 @@ public class SquareWaveGenerator
         } else {
             // ==> A 0 bit is represented by a    short   wave   followed by a   medium   wave
             addWave( WavePeriod.SHORT );
-            addWave( WavePeriod.MEDIUM );
+            addWave( WavePeriod.MEDIUM );            
         }
     }
 }

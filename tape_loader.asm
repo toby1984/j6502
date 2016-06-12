@@ -44,8 +44,8 @@
 .,F962 A6 9C    LDX $9C         Anzahl empfangener Bytes laden
 .,F964 F0 03    BEQ $F969       verzweige falls Null (No kein start-of-byte marker gefunden)
 
-; mindestens ein start-of-byte marker gefunden
-.,F966 4C 60 FA JMP $FA60       ansonsten nach $FA60
+; mindestens ein start-of-byte marker gefunden und pulse kürzer als threshold #1
+.,F966 4C 60 FA JMP $FA60       
 
 ; -----
 ; $B1 contains low-byte of (elapsed cycles/4)
@@ -53,7 +53,7 @@
 .,F969 A6 A3    LDX $A3         Byte vollständig gelesen
 .,F96B 30 1B    BMI $F988       verzweige, falls ja
 
-.,F96D A2 00    LDX #$00        Angenommen es wurde ein short pulse empfangen
+.,F96D A2 00    LDX #$00        X = 0 => Angenommen es wurde ein short pulse empfangen
 
 ; Accu ist hier: ($B0) timing constant + $3C
 ; threshold check #2
@@ -63,9 +63,9 @@
 ; Accu ist jetzt: 2 * ($B0) timing constant + $3C + $30 =432 cycles
 ; threshold check #3
 .,F973 C5 B1    CMP $B1         elapsed < threshold ?
-.,F975 B0 1C    BCS $F993       ja, short pulse received (elapsed < threshold) , X = 0
+.,F975 B0 1C    BCS $F993       ja, SHORT PULSE RECEIVED (elapsed < threshold) , X = 0
 ; 
-.,F977 E8       INX             Ok, es wurde ein medium pulse empfangen
+.,F977 E8       INX             X = 1 => medium pulse empfangen
 
 ; threshold check #4
 .,F978 69 26    ADC #$26        und wieder $26 ($26*4 = +152 cycles) zu
@@ -80,7 +80,7 @@
 ; Accu ist jetzt: 4 * ($B0) timing constant + $3C + $30 + $26 + $2c =760 cycles
 .,F984 C5 B1    CMP $B1         vergangene Zeit noch länger ?
 .,F986 90 03    BCC $F98B       jump if elapsed > threshold ==> TIMEOUT ERROR
-.,F988 4C 10 FA JMP $FA10       Long pulse received , zu empfangenes Byte verarbeiten
+.,F988 4C 10 FA JMP $FA10       Long pulse (start of byte) received , zu empfangenes Byte verarbeiten
 
 
 ; --------------
@@ -104,6 +104,7 @@
 
 ; ----------------
 ; medium pulse received
+; X Register = 1
 ; carry set by calling code, accu contains 3 * ($B0) timing constant + $3C + $30 + $26
 ; ----------------
 
@@ -121,7 +122,7 @@
 .,F9A4 49 01    EOR #$01        Impulse invertieren
 .,F9A6 85 A4    STA $A4         und abspeichern
 
-.,F9A8 F0 2B    BEQ $F9D5       verzweige wenn beide Impulse empfangen
+.,F9A8 F0 2B    BEQ $F9D5       verzweige wenn zwei Impulse empfangen ($A4 is initialized with 0)
 .,F9AA 86 D7    STX $D7         empfangenes Signal ( 0 = short pulse , 1 = medium pulse) speichern
 
 
@@ -158,7 +159,8 @@
 
 ; --------------------
 ; 2 pulses received
-; X reg. contains type of latest (second pulse): 0 = short pulse, 1 = medium pulse
+; $D7 contains first pulse: 0 = short pulse, 1 = medium pulse
+; X reg. contains latest pulse: 0 = short pulse, 1 = medium pulse
 ; --------------------
 .,F9D5 A5 92    LDA $92         Timing Korrekturzeiger laden
 .,F9D7 F0 07    BEQ $F9E0       verzweige wenn Flag gelöscht
@@ -170,14 +172,14 @@
 .,F9E0 A9 00    LDA #$00        Timing
 .,F9E2 85 92    STA $92         Korrekturzeiger löschen
 .,F9E4 E4 D7    CPX $D7         Vergleiche empfangenen Impuls mit vorherigem
-.,F9E6 D0 0F    BNE $F9F7       verzweige falls ungleich
+.,F9E6 D0 0F    BNE $F9F7       => 2 verschiedene Pulse empfangen
 
 ; ---------------------------
 ; 2 gleiche pulse empfangen
 ; ---------------------------
 
-.,F9E8 8A       TXA             Prüfe ob beide impulse short (=sync/gap) 
-.,F9E9 D0 A0    BNE $F98B       => nein, medium pulse
+.,F9E8 8A       TXA             Prüfe ob beide impulse short (=0) => sync/gap 
+.,F9E9 D0 A0    BNE $F98B       => entweder (short,medium) oder (medium,short)
  
  ; ---------------------------
 ; 2 short pulses received
@@ -188,12 +190,12 @@
 .,F9ED 30 BD    BMI $F9AC       verzweige wenn negativ (=mehr medium als short empfangen)
 .,F9EF C9 10    CMP #$10        vergleiche mit $10
 .,F9F1 90 B9    BCC $F9AC       => weniger als 16 short pulses empfangen
-.,F9F3 85 96    STA $96         ACCU >= $10 , setze flag für EOB (mehr als 16 short pulses) empfangen
+.,F9F3 85 96    STA $96         ACCU >= $10 , setze flag für EOB (cassette block synchronization number) (mehr als 16 short pulses hintereinander) empfangen
 .,F9F5 B0 B5    BCS $F9AC       unbedingter Sprung
 
 ; ---------------------------
 ; 2 ungleiche pulse empfangen
-; ; X reg. contains type of latest (second pulse): 0 = short pulse, 1 = medium pulse
+; ; X register contains type of latest (second pulse): 0 = short pulse, 1 = medium pulse
 ; ---------------------------
 .,F9F7 8A       TXA             Empfangenes Bit in Akku
 .,F9F8 45 9B    EOR $9B         mit Band-Parität verknüpfen
@@ -211,7 +213,7 @@
 ; -----------------------------------------
 ; called after long pulse has been received
 ; -----------------------------------------
-.,FA10 A5 96    LDA $96         Prüfe ob EOB empfangen ( ($96) != 0 )
+.,FA10 A5 96    LDA $96         Prüfe ob EOB (cassette block synchronization number) empfangen ( ($96) != 0 )
 .,FA12 F0 04    BEQ $FA18       falls nein, verzweige
 .,FA14 A5 B4    LDA $B4         Prüfe ob Timer A freige.
 .,FA16 F0 07    BEQ $FA1F       wenn nein, überspringe Bit Zähler Test
@@ -244,7 +246,7 @@
 ; Accu != 0 
 .,FA37 85 A8    STA $A8         Flag für Lesefehler setzen
 .,FA39 A9 00    LDA #$00        Flag für
-.,FA3B 85 96    STA $96         EOB rücksetzen
+.,FA3B 85 96    STA $96         EOB (cassette block synchronization number) rücksetzen
 .,FA3D A9 81    LDA #$81        Interrupt für
 .,FA3F 8D 0D DC STA $DC0D       Timer A freigeben
 .,FA42 85 B4    STA $B4         und Flag für Timer A setzen
@@ -266,28 +268,28 @@
 ;                                 
 .,FA5D 4C BC FE JMP $FEBC       Rückkehr vom Interrupt
 
-
 ; ---------------------
 ; pulse empfangen, mindestens short pulse
 ; (elapsed größer als threshold #1)
 ; ---------------------
-.,FA60 20 97 FB JSR $FB97       Bitzähler für serielle Ausgabe setzen
-.,FA63 85 9C    STA $9C         Zeiger auf Byte empfangen rücksetzen
-.,FA65 A2 DA    LDX #$DA        Initialisierungswert Timer A
-.,FA67 20 E2 F8 JSR $F8E2       Kassettensynchronisation
-.,FA6A A5 BE    LDA $BE         Anzahl der verbliebenen Blöcke laden
-.,FA6C F0 02    BEQ $FA70       verzweige wenn Null
-.,FA6E 85 A7    STA $A7         Blockanzahl neu setzen
+;   *** # store character
+.,FA60 20 97 FB JSR $FB97       new tape byte setup
+.,FA63 85 9C    STA $9C         clear byte received flag (accu is still 0 here from $FB97 subroutine)
+.,FA65 A2 DA    LDX #$DA        set timing max byte
+.,FA67 20 E2 F8 JSR $F8E2       set timing
+.,FA6A A5 BE    LDA $BE         get copies count
+.,FA6C F0 02    BEQ $FA70       
+.,FA6E 85 A7    STA $A7         save receiver input bit temporary storage
 .,FA70 A9 0F    LDA #$0F        Maskenwert für Zählung vor dem Lesen
 
 ; $AA hat folgende werte
-;  0  =>
-; $40 =>
-; $80 =>
-; $0 - $0f => sync byte counter 
+; $0  => ???
+; $1 - $0f => sync byte counter (???) 
+; $40 => bit 6 (V flag)
+; $80 => bit 7 (N flag)
 
 .,FA72 24 AA    BIT $AA         sets ZERO flag according to 0x0f (accu) & ($AA) and N and V flags according to bits 7 and 6 of $(AA) ; prüfe Zeiger für Lesen von Band
-.,FA74 10 17    BPL $FA8D       verzweige wenn alle Zeichen empfangen (Ende)
+.,FA74 10 17    BPL $FA8D       verzweige wenn alle Zeichen empfangen (=bit 7 of $aa not set) => Ende
 
 .,FA76 A5 B5    LDA $B5         Flag für EOB laden
 .,FA78 D0 0C    BNE $FA86       verzweige wenn gültiges EOB empfangen
@@ -311,15 +313,17 @@
 .,FA88 85 AA    STA $AA         Abtastung setzen
 .,FA8A 4C BC FE JMP $FEBC       Rückkehr vom Interrupt
 
-; 
-.,FA8D 70 31    BVS $FAC0       verzweige wenn Bandzeiger auf lesen
-.,FA8F D0 18    BNE $FAA9       verzweige wenn Bandzeiger
-                                auf Zählen
+; --------------------------------
+; invoked after BIT $AA instruction
+; bit 7 of $AA is NOT set (noch nicht alle Zeichen empfangen??)
+; --------------------------------
+
+.,FA8D 70 31    BVS $FAC0       (bit 6 of $AA is set) verzweige wenn Bandzeiger auf lesen
+.,FA8F D0 18    BNE $FAA9       verzweige wenn Bandzeiger auf Zählen
 .,FA91 A5 B5    LDA $B5         Flag für EOB laden
 .,FA93 D0 F5    BNE $FA8A       verzweige wenn EOB empfangen
 .,FA95 A5 B6    LDA $B6         Flag für Lesefehler laden
-.,FA97 D0 F1    BNE $FA8A       verzweige falls Fehler
-                                aufgetreten
+.,FA97 D0 F1    BNE $FA8A       verzweige falls Fehler aufgetreten
                                 
 .,FA99 A5 A7    LDA $A7         Anzahl der noch zu lesenden Blöcke holen
 .,FA9B 4A       LSR             Bit 0 ins Carry schieben
@@ -340,9 +344,8 @@
 .,FAA9 C6 AA    DEC $AA         ein Synchronisierungsbyte empfangen
 .,FAAB D0 DD    BNE $FA8A       noch nicht alle empfangen => return from IRQ
 
-; ---------------------
 ; alle synchronisierungsbytes empfangen
-; ---------------------
+
 .,FAAD A9 40    LDA #$40        Bandzeiger auf 
 .,FAAF 85 AA    STA $AA         lesen stellen (bit 6 gesetzt => V flag true bei BIT test)
 .,FAB1 20 8E FB JSR $FB8E       Ein/Ausgabe Adresse kopieren
@@ -361,9 +364,12 @@
 .,FAC2 F0 0A    BEQ $FACE       verzweige wenn nicht gesetzt
 .,FAC4 A9 04    LDA #$04        'SHORT BLOCK’ error
 .,FAC6 20 1C FE JSR $FE1C       Status setzen
-.,FAC9 A9 00    LDA #$00        Code für Lesezeiger auf
-                                "Abtasten"
+.,FAC9 A9 00    LDA #$00        Code für Lesezeiger auf"Abtasten"
 .,FACB 4C 4A FB JMP $FB4A       setzen, unbedingter Sprung
+
+; -------------------------------
+; ??? verify ???
+
 .,FACE 20 D1 FC JSR $FCD1       Endadresse schon erreicht ?
 .,FAD1 90 03    BCC $FAD6       nein dann verzweige
 .,FAD3 4C 48 FB JMP $FB48       zu Read Ende für Block
@@ -375,8 +381,7 @@
 .,FADF A0 00    LDY #$00        Zähler auf Null setzen
 .,FAE1 A5 BD    LDA $BD         gelesenes Byte
 .,FAE3 D1 AC    CMP ($AC),Y     vergleichen
-.,FAE5 F0 04    BEQ $FAEB       verzweige wenn Übereinstim-
-                                mung
+.,FAE5 F0 04    BEQ $FAEB       verzweige wenn Übereinstimmung
 .,FAE7 A9 01    LDA #$01        Fehlerflag
 .,FAE9 85 B6    STA $B6         setzen
 .,FAEB A5 B6    LDA $B6         Fehlerflag laden
@@ -399,13 +404,10 @@
 .,FB0A E4 9E    CPX $9E         korrigiert ?
 .,FB0C F0 35    BEQ $FB43       verzweige falls ja
 .,FB0E A5 AC    LDA $AC         Adressbyte LOW laden
-.,FB10 DD 00 01 CMP $0100,X     mit fehlerhaftem Adressbyte
-                                LOW vergleichen
-.,FB13 D0 2E    BNE $FB43       verzweige falls nicht
-                                gefunden
+.,FB10 DD 00 01 CMP $0100,X     mit fehlerhaftem Adressbyte LOW vergleichen
+.,FB13 D0 2E    BNE $FB43       verzweige falls nicht gefunden
 .,FB15 A5 AD    LDA $AD         Adressbyte HIGH laden
-.,FB17 DD 01 01 CMP $0101,X     mit fehlerhaftem Adressbyte
-                                HIGH vergleichen
+.,FB17 DD 01 01 CMP $0101,X     mit fehlerhaftem Adressbyte HIGH vergleichen
 .,FB1A D0 27    BNE $FB43       verzweige wenn nicht gefunden
 .,FB1C E6 9F    INC $9F         Korrekturzähler
 .,FB1E E6 9F    INC $9F         Pass 2 um zwei erhöhen
@@ -413,10 +415,8 @@
 .,FB22 F0 0B    BEQ $FB2F       verzweige wenn nicht gesetzt
 .,FB24 A5 BD    LDA $BD         gelesenes Byte laden
 .,FB26 A0 00    LDY #$00        Zähler auf Null setzen
-.,FB28 D1 AC    CMP ($AC),Y     mit Speicherinhalt verglei-
-                                chen
-.,FB2A F0 17    BEQ $FB43       verzweige wenn gleich, dann
-                                nächstes Byte
+.,FB28 D1 AC    CMP ($AC),Y     mit Speicherinhalt vergleichen
+.,FB2A F0 17    BEQ $FB43       verzweige wenn gleich, dann nächstes Byte
 .,FB2C C8       INY             Flag für
 .,FB2D 84 B6    STY $B6         Fehler setzen
 .,FB2F A5 B6    LDA $B6         Fehlerflag testen
@@ -443,15 +443,12 @@
 .,FB5A 86 BE    STX $BE         Passzähler merken
 .,FB5C C6 A7    DEC $A7         Blockzähler vermindern
 .,FB5E F0 08    BEQ $FB68       verzweige wenn Null
-.,FB60 A5 9E    LDA $9E         Fehler in Pass 1 aufgetre-
-                                ten ?
+.,FB60 A5 9E    LDA $9E         Fehler in Pass 1 aufgetreten ?
 .,FB62 D0 27    BNE $FB8B       ja, Rückkehr vom Interrupt
-.,FB64 85 BE    STA $BE         kein Block mehr zu verarbei-
-                                ten
+.,FB64 85 BE    STA $BE         kein Block mehr zu verarbeiten
 .,FB66 F0 23    BEQ $FB8B       Rückkehr vom Interrupt
 .,FB68 20 93 FC JSR $FC93       ein Pass beendet
-.,FB6B 20 8E FB JSR $FB8E       Adresse wieder auf Programm-
-                                anfang
+.,FB6B 20 8E FB JSR $FB8E       Adresse wieder auf Programmanfang
 .,FB6E A0 00    LDY #$00        Zähler auf Null setzen
 .,FB70 84 AB    STY $AB         Checksumme löschen
 .,FB72 B1 AC    LDA ($AC),Y     Programm
@@ -467,7 +464,6 @@
 .,FB86 A9 20    LDA #$20        'CHECKSUM' error
 .,FB88 20 1C FE JSR $FE1C       Status setzen
 .,FB8B 4C BC FE JMP $FEBC       Rückkehr vom Interrupt
-
 
 ;---------------------------------
 
@@ -527,10 +523,13 @@ $F88A  20  A4  F0    JSR $F0A4       ;condition flag bit in ICR2
 $F88D  AD  11  D0    LDA $D011
 $F890  29  EF        AND #$EF
 $F892  8D  11  D0    STA $D011       ;disable the screen
-$F895  AD  14  03    LDA $0314       ;save standard IRQ vector
-$F898  8D  9F  02    STA $029F
+
+;save standard IRQ vector
+$F895  AD  14  03    LDA $0314       
+$F898  8D  9F  02    STA $029F       ; save lo
 $F89B  AD  15  03    LDA $0315
-$F89E  8D  A0  02    STA $02A0
+$F89E  8D  A0  02    STA $02A0       ; save hi
+
 $F8A1  20  BD  FC    JSR $FCBD       ;set new IRQ for cassette depending on X
 $F8A4  A9  02        LDA #$02
 $F8A6  85  BE        STA $BE         ; number of blocks to read = 0x02
@@ -572,7 +571,7 @@ $FBA5 60       RTS
 .,FB9B A9 00    LDA #$00        Akku mit $00 laden
 .,FB9D 85 A4    STA $A4         Bit-Impuls-Flag löschen
 .,FB9F 85 A8    STA $A8         Lesefehler Byte löschen
-.,FBA1 85 9B    STA $9B         Parity-Bit löschen
+.,FBA1 85 9B    STA $9B         Parity-Byte löschen
 .,FBA3 85 A9    STA $A9         Impulswechsel-Flag löschen
 .,FBA5 60       RTS             Rücksprung
 
@@ -588,7 +587,6 @@ $FCC9 60       RTS
 
 ;---------------------------------
 
-;
 ;set IRQ vector depending upon X
 ;
 $FCDB  BD  93  FD    LDA $FD9B-8,X   ;move low byte of address
@@ -599,48 +597,17 @@ $FCE7  60            RTS
 
 ;---------------------------------
 
-;
 ;IRQ vectors
-; see route @ $FCDB that sets IRQ vector depending on X register
+; see routine @ $FCDB that sets IRQ vector depending on X register
 
 $FD9B .WORD $FC6A ; X = $08 write tape leader IRQ routine
 $FD9D .WORD $FBCD ; X = $0A tape write IRQ routine
 $FD9F .WORD $EA31 ; X = $0C normal IRQ vector
 $FDA1 .WORD $F92C ; X = $0E read tape bits IRQ routine
 
-;---------------------------------
-
-.,FA60 20 97 FB JSR $FB97       setup receiving one tape byte (reset counters, etc.)
-.,FA63 85 9C    STA $9C         accu is still 0 here from $FB97 subroutine (Zeiger auf Byte empfangen rücksetzen)
-.,FA65 A2 DA    LDX #$DA        Initialisierungswert Timer A
-.,FA67 20 E2 F8 JSR $F8E2       Kassettensynchronisation
-.,FA6A A5 BE    LDA $BE         Anzahl der verbliebenen Blöcke laden
-.,FA6C F0 02    BEQ $FA70       verzweige wenn Null
-.,FA6E 85 A7    STA $A7         Blockanzahl neu setzen
-.,FA70 A9 0F    LDA #$0F        Maskenwert für Zählung vor dem Lesen
-.,FA72 24 AA    BIT $AA         sets ZERO flag according to 0x0f (accu) & ($AA) and N and V flags according to bits 7 and 6 of $(AA) , Prüfe Zeiger für Lesen von Band
-.,FA74 10 17    BPL $FA8D       verzweige wenn alle Zeichen empfangen (=bit 7 of $aa not set) => Ende
-.,FA76 A5 B5    LDA $B5         Flag für EOB laden
-.,FA78 D0 0C    BNE $FA86       verzweige wenn gültiges EOB empfangen
-.,FA7A A6 BE    LDX $BE         Anzahl der verbliebenen Blöcke laden
-.,FA7C CA       DEX             Anzahl -1
-.,FA7D D0 0B    BNE $FA8A       verzweige wenn nicht Null
-
-; 'LONG BLOCK' error
-.,FA7F A9 08    LDA #$08        'LONG BLOCK' error
-.,FA81 20 1C FE JSR $FE1C       Status setzen
-.,FA84 D0 04    BNE $FA8A       unbedingter Sprung zum normalen IRQ
-
-; EOB received
-.,FA86 A9 00    LDA #$00        Flag für Lesen vom Band auf
-.,FA88 85 AA    STA $AA         no gap detected yet (Abtastung?) setzen
-.,FA8A 4C BC FE JMP $FEBC       Rückkehr vom Interrupt
-
-; ------------------------------------
-
-;
-;schedule CIA1 Timer A depending on parameter in X
-;
+; ===========================
+; schedule CIA1 Timer A depending on parameter in X
+; ===========================
 $F8E2  86  B1        STX $B1         ;save entry parameter
 $F8E4  A5  B0        LDA $B0         ;get speed correction
 $F8E6  0A            ASL             ;* 2
@@ -650,15 +617,18 @@ $F8E9  65  B0        ADC $B0         ;add speed correction
 $F8EB  18            CLC
 $F8EC  65  B1        ADC $B1         ;and parameter
 $F8EE  85  B1        STA $B1         ;save low order
+
 $F8F0  A9  00        LDA #$00
-$F8F2  24  B0        BIT $B0         ;if speed correction is positive
-$F8F4  30  01        BMI $F8F7
-$F8F6  2A            ROL             ;set high oreder in A
+$F8F2  24  B0        BIT $B0         ; test speed correction
+$F8F4  30  01        BMI $F8F7       ; => speed correction is positive 
+$F8F6  2A            ROL             ;set high order in A
+
 $F8F7  06  B1        ASL $B1         ;* 2
 $F8F9  2A            ROL
 $F8FA  06  B1        ASL $B1         ;* 4
 $F8FC  2A            ROL
 $F8FD  AA            TAX
+
 $F8FE  AD  06  DC    LDA $DC06       ;wait until no change of
 $F901  C9  16        CMP #$16        ;TBL1 changing
 $F903  90  F9        BCC $F8FE       ;while it still must be read
@@ -670,15 +640,15 @@ $F90E  8D  05  DC    STA $DC05       ;and store in TAH1
 $F911  AD  A2  02    LDA $02A2
 $F914  8D  0E  DC    STA $DC0E       ;set CRA1 from CRB1 activity register
 $F917  8D  A4  02    STA $02A4       ;and save it
-$F91A  AD  0D  DC    LDA $DC0D
-$F91D  29  10        AND #$10
-$F91F  F0  09        BEQ $F92A       ;if Flag bit is not set
+$F91A  AD  0D  DC    LDA $DC0D       ; ICR
+$F91D  29  10        AND #$10        ; test bit 4 (~FLAG pin IRQ)
+$F91F  F0  09        BEQ $F92A       ; => no Flag pin IRQ
 $F921  A9  F9        LDA #$F9        ;set exit address on stack
 $F923  48            PHA
 $F924  A9  2A        LDA #$2A
 $F926  48            PHA
 $F927  4C  43  FF    JMP $FF43       ;and simulate an IRQ
 
-
-$F92A  58            CLI             ;else allow IRQ and exit
+; allow IRQ and return
+$F92A  58            CLI             
 $F92B  60            RTS
