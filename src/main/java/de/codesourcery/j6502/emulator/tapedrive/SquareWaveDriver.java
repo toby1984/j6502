@@ -22,8 +22,8 @@ public class SquareWaveDriver
             System.out.println("Loading tape: "+file);
         }
         // write tape lead
-        generator.addMarker("Lead-in");        
-        writeLeader();
+        generator.addMarker("Pilot");        
+        writePilotTone();
         
         for ( T64File.DirEntry entry : file.getDirEntries() ) 
         {
@@ -65,7 +65,11 @@ public class SquareWaveDriver
         writeHeader( entry );
         
         generator.addMarker("Gap #1");
+        
         writeGap(); // short pulses
+        
+        generator.addMarker("Gap short (0.33s)");
+        generator.addWave( WavePeriod.SILENCE_SHORT );          
 
         // repetition
         generator.addMarker("Sync #2 repeated");
@@ -75,7 +79,11 @@ public class SquareWaveDriver
         writeHeader( entry );
         
         generator.addMarker("Trailer #1 repeated");
-        writeTrailer(); // short pulses      
+        
+        writeTrailer(); // short pulses
+        
+        generator.addMarker("Gap short (0.33s)");
+        generator.addWave( WavePeriod.SILENCE_SHORT );        
         
         /*
          * === DATA ===
@@ -90,6 +98,9 @@ public class SquareWaveDriver
         generator.addMarker("data gap");            
         writeGap();
         
+        generator.addMarker("Gap short (0.33s)");
+        generator.addWave( WavePeriod.SILENCE_SHORT );                 
+        
         generator.addMarker("Sync data repeated");           
         writeSyncRepeated();        
         
@@ -98,19 +109,9 @@ public class SquareWaveDriver
 
         generator.addMarker("data trailer repeated");          
         writeTrailer();
-    }
-
-    private void writeData(DirEntry entry) 
-    {
-        if ( DEBUG ) {
-            System.out.println("Generating: "+entry.length()+" data bytes");
-        }           
-        int checksum=0;
-        for ( int value : entry.data() ) {
-            writeByte( value );
-            checksum ^= (value & 0xff);
-        }
-        writeByte(checksum);
+        
+        generator.addMarker("Gap long (0.33s)");
+        generator.addWave( WavePeriod.SILENCE_LONG );          
     }
 
     private void writeHeader(DirEntry entry) 
@@ -136,28 +137,60 @@ public class SquareWaveDriver
             throw new RuntimeException("Illegal file type "+entry.floppyFileType+": "+entry);
         }
         
+        int checksum = 0;
+        
         writeByte( 0x01 ); // TODO: Hard-coded value: relocatable program
+        checksum ^= 0x01;
+        
         
         // load address
         writeWord( entry.loadAddress );
+        checksum ^= (entry.loadAddress & 0xff);
+        checksum ^= ((entry.loadAddress >>> 8)& 0xff);
         
         // end address
-        writeWord( entry.endAddress );        
+        writeWord( entry.endAddress );    
+        checksum ^= (entry.endAddress & 0xff);
+        checksum ^= ((entry.endAddress >>> 8)& 0xff);        
         
         // file name
-        writeBytesWithParity( entry.petsciiName );
-        if ( entry.petsciiName.length < 16 ) {
-            // pad with blanks ( 0x20 )
-            for ( int i = 0 , pad = 16 - entry.petsciiName.length ; i < pad ; i++ ) {
-                writeByte( 0x20 );
-            }
-        } else if ( entry.petsciiName.length > 16 ) {
+        for ( int i = 0 ; i < entry.petsciiName.length ; i++ ) {
+            final byte value = entry.petsciiName[i];
+            writeByte( value );
+            checksum ^= (value & 0xff);
+        }
+
+        // pad remaining header with blanks ( 0x20 )
+        // so that total header size is 1 + 2 + 2 + 187 + 1 = 193 bytes         
+        final int padding = 187 - entry.petsciiName.length;
+        if ( padding < 0 ) {
             throw new RuntimeException("File name too long: "+entry);
         }
-        writeBytesWithParity( 0 , 171 ); // header body
+        for ( int i = 0 ; i < padding ; i++ ) 
+        {
+                writeByte( 0x20 );
+                checksum ^= 0x20;
+        } 
+        
+        // write checksum byte
+        writeByte( checksum );
     }
     
-    private void writeLeader()
+    private void writeData(DirEntry entry) 
+    {
+        if ( DEBUG ) {
+            System.out.println("Generating: "+entry.length()+" data bytes");
+        }           
+        int checksum=0;
+        for ( int value : entry.data() ) 
+        {
+            writeByte( value );
+            checksum ^= value;
+        }
+        writeByte(checksum);
+    }    
+    
+    private void writePilotTone()
     {
         if ( DEBUG ) {
             System.out.print("Generating: LEAD - ");
@@ -214,17 +247,15 @@ public class SquareWaveDriver
         writeBytesWithParity( new byte[] { 0x09 ,0x08 ,0x07 ,0x06 ,0x05 ,0x04 ,0x03 ,0x02 ,0x01 } );
     }
     
-    private void writeBytesWithParity(int byteValue,int count) 
-    {
-        for ( int i = 0 ; i <count ; i++ ) {
-            writeByte( byteValue );
-        }
-    }
-    
     private void writeBytesWithParity(byte[] data) 
     {
-        for ( int byteValue : data ) {
-            writeByte( byteValue & 0xff );
+        writeBytesWithParity( data , 0 , data.length );
+    }
+    
+    private void writeBytesWithParity(byte[] data,int offset,int count) 
+    {
+        for ( int i = 0 ; i < count ; i++ ) {
+            writeByte( data[offset+i] & 0xff );
         }
     }  
     
@@ -232,7 +263,7 @@ public class SquareWaveDriver
     
         // write lo first, then hi
         writeByte( word & 0xff );
-        writeByte( (word >> 8  )& 0xff );
+        writeByte( (word >>> 8  ) & 0xff );
     }
     
     private int writeRawByte(int value) {

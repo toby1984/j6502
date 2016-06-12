@@ -8,32 +8,83 @@ public class SquareWaveGenerator
     public enum WavePeriod
     {
         /*
+    /*
+         * http://c64tapes.org/dokuwiki/doku.php?id=loaders:rom_loader
+         * http://www.atarimagazines.com/compute/issue57/turbotape.html
+         * http://c64tapes.org/dokuwiki/doku.php?id=analyzing_loaders 
+         *         
          * CPU freq: 985248 Hz
          * 
          * (S)hort  : 2840 Hz
          * (M)edium : 1953 Hz
-         * (L)ong   : 1488 Hz         
+         * (L)ong   : 1488 Hz
+         * 
+         * Default timing thresholds at start of algorithm (speed constant $B0 contains 0)
+         * 
+         * => short pulse = 240-432 cycles , avg. 336 cycles .... 2280 Hz - 4105 Hz  
+         * => medium pulse = 432-584 cycles , avg. 508 cycles ...1687 Hz - 2280 Hz
+         * => long pulse = 584-760 cycles, avg. 672 cycles .. 1296 Hz - 1687  
+         * 
          */
-        SHORT("SHORT", 347*1.15 ),
-        MEDIUM("MEDIUM", 504*1.15 ),
-        LONG("LONG", 662*1.15 );  
-//        SHORT("SHORT", 357 ),
-//        MEDIUM("MEDIUM", 504 ),
-//        LONG("LONG", 662 );  
+        SHORT("SHORT", 336 ),
+        MEDIUM("MEDIUM", 508 ),
+        LONG("LONG", 672 ),
+        SILENCE_SHORT("SILENCE SHORT (0.33s)" , 325131) { 
 
-        private final int ticks;
-        private final String name;
+            @Override
+            public void onEnter(SquareWaveGenerator state) 
+            {
+                state.currentTicks = ticks;
+            }
+
+            @Override
+            public boolean tick(SquareWaveGenerator state)
+            {
+                // just wait without toggling signal line
+                state.currentTicks--;
+                if ( state.currentTicks <= 0 ) 
+                {
+                    return true;
+                }
+                return false;
+            }
+        },
+        SILENCE_LONG("SILENCE LONG (1.32s)" , 325131*4) { 
+
+            @Override
+            public void onEnter(SquareWaveGenerator state) 
+            {
+                state.currentTicks = ticks;
+            }
+
+            @Override
+            public boolean tick(SquareWaveGenerator state)
+            {
+                // just wait without toggling signal line
+                state.currentTicks--;
+                if ( state.currentTicks <= 0 ) 
+                {
+                    return true;
+                }
+                return false;
+            }
+        };        
         
+
+        protected final int ticks;
+        private final String name;
+
         private WavePeriod(String name,double ticks) {
             this.name = name;
             this.ticks = (int) ticks;
         }
-        
-        public void onEnter(SquareWaveGenerator state) {
+
+        public void onEnter(SquareWaveGenerator state) 
+        {
             state.currentTicks = ticks/2; // square wave with 50% duty cycle
-            state.currentSignal = false;
+            state.signalAtStartOfWave = state.currentSignal;
         }
-        
+
         public boolean tick(SquareWaveGenerator state) 
         {
             state.currentTicks--;
@@ -41,141 +92,127 @@ public class SquareWaveGenerator
             {
                 state.currentSignal = ! state.currentSignal;
                 state.currentTicks = ticks/2; // square wave with 50% duty cycle
-                if ( state.currentSignal == false ) 
+                if ( state.currentSignal == state.signalAtStartOfWave ) 
                 {
                     return true;
                 }
             }
             return false;
         }
-        
+
         @Override
         public String toString() {
             return name;
         }
     }
-    
+
     private final WaveArray waves = new WaveArray(1024);
-    
+
     protected static final class Marker  // TODO: class is debug only , remove when done
     {
         public final int count;
         public final String label;
-        
+
         public Marker(int count, String label) {
             this.count = count;
             this.label = label;
         }
-        
+
         @Override
         public String toString() {
             return label;
         }
     }
-    
+
     protected static final class WaveArray 
     {
-    	public int waveCount=0;
+        public int waveCount=0;
         public int wavePtr=0;
         public WavePeriod[] waves;
-        
+
         private final List<Marker> markers = new ArrayList<>(); // TODO: Remove debug code
-    
+
         public WaveArray(int initialSize) {
-        	this.waves = new WavePeriod[initialSize];
+            this.waves = new WavePeriod[initialSize];
         }
-        
-    	public int size() {
-    		return waveCount;
-    	}
-    	
-    	public void addMarker(String label) {
-    	    markers.add( new Marker( wavePtr , label ) );
-    	}
-    	
-    	public int wavesRemaining() {
-    		return waveCount-wavePtr;
-    	}
-    	
-    	public void add(WavePeriod p) 
-    	{
-    		if ( wavePtr == waves.length ) 
-    		{
-    			final WavePeriod[] newData = new WavePeriod[ waves.length + waves.length/2 ];
-    			System.arraycopy( this.waves , 0 , newData , 0 , this.waves.length );
-    			waves = newData;
-    		}
-    		waves[wavePtr++]=p;
-    		waveCount++;
-    	}
-    	
-    	public WavePeriod pop() 
-    	{
-    		if ( wavePtr == waveCount ) {
-    			return null;
-    		}
-    		while ( ! markers.isEmpty() && markers.get(0).count <= wavePtr ) {
-    		    System.out.println("===================== Wave: "+markers.remove(0)+" =================");
-    		}
-    		return waves[wavePtr++];
-    	}
-    	
-    	public void clear() 
-    	{
-    		waveCount = 0;
-    		waves = new WavePeriod[ this.waves.length ];
-    		rewind();
-    	}    	
-    	
-    	public void rewind() {
-    		wavePtr = 0;
-    	}
+
+        public int size() {
+            return waveCount;
+        }
+
+        public void addMarker(String label) {
+            markers.add( new Marker( wavePtr , label ) );
+        }
+
+        public int wavesRemaining() {
+            return waveCount-wavePtr;
+        }
+
+        public void add(WavePeriod p) 
+        {
+            if ( wavePtr == waves.length ) 
+            {
+                final WavePeriod[] newData = new WavePeriod[ waves.length + waves.length/2 ];
+                System.arraycopy( this.waves , 0 , newData , 0 , this.waves.length );
+                waves = newData;
+            }
+            waves[wavePtr++]=p;
+            waveCount++;
+        }
+
+        public WavePeriod pop() 
+        {
+            if ( wavePtr == waveCount ) {
+                return null;
+            }
+            while ( ! markers.isEmpty() && markers.get(0).count <= wavePtr ) {
+                System.out.println("===================== Wave: "+markers.remove(0)+" =================");
+            }
+            return waves[wavePtr++];
+        }
+
+        public void clear() 
+        {
+            waveCount = 0;
+            waves = new WavePeriod[ this.waves.length ];
+            rewind();
+        }    	
+
+        public void rewind() {
+            wavePtr = 0;
+        }
     }
-    
+
+    private boolean signalAtStartOfWave;
     private WavePeriod currentWave;
     private boolean currentSignal;
     private int currentTicks;
-    
-    /*
-; ==> A 0 bit is represented by a    short   wave   followed by a   medium   wave
-; ==> A 1 bit is represented by a   medium   wave   followed by a    short   wave 
 
-;    985 Khz CPU freq
-; = 1,0152285 microseconds = 1.0152285*10-6
-; = 0,0010152284264 milliseconds per CPU cycle
-;          
-; (S)hort  : 2840 Hz => 0.0003521126637 s   = 0.3521126637   ms =  346,830973743 cycles = 347 cycles
-; (M)edium : 1953 Hz => 0,000512032770097 s = 0.512032770097 ms =  504,352278544 cycles = 504 cycles    
-; (L)ong   : 1488 Hz => 0,000672043010753 s = 0,672043010753 ms =  661,962365589 cycles = 662 cycles
-
-; >>>>>>>>>>>> Pulse length detection triggers on DESCENDING (negative) edges ONLY <<<<<<<<<<<<<<
-     */
-    
     public boolean currentSignal() 
     {
         return currentSignal;
     }
-    
+
     public int wavesRemaining() {
         return waves.wavesRemaining();
     }
-    
+
     public void reset() {
         waves.clear();
         currentWave = null;
         currentSignal=false;
     }
-    
+
     public void rewind() {
-    	waves.rewind();
+        waves.rewind();
     }
-    
+
     public void tick() 
     {
         if ( currentWave == null ) 
         {
-        	currentWave = waves.pop();
-        	if ( currentWave == null ) {
+            currentWave = waves.pop();
+            if ( currentWave == null ) {
                 currentWave = WavePeriod.SHORT; // pulses of SHORT length are used as a trailer by the tape format
             } 
             currentWave.onEnter(this);
@@ -185,23 +222,23 @@ public class SquareWaveGenerator
             currentWave = null;
         }
     }
-    
+
     public void addMarker(String label) {
         waves.addMarker( label );
     }
-    
+
     public void addWave(WavePeriod period) {
         waves.add( period );
     }
-    
+
     public void addBit(boolean bit) 
     {
         if ( bit ) {
-// ==> A 1 bit is represented by a   medium   wave   followed by a    short   wave
+            // ==> A 1 bit is represented by a   medium   wave   followed by a    short   wave
             addWave( WavePeriod.MEDIUM );            
             addWave( WavePeriod.SHORT );
         } else {
-// ==> A 0 bit is represented by a    short   wave   followed by a   medium   wave
+            // ==> A 0 bit is represented by a    short   wave   followed by a   medium   wave
             addWave( WavePeriod.SHORT );
             addWave( WavePeriod.MEDIUM );
         }

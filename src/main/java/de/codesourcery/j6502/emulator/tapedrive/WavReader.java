@@ -47,7 +47,7 @@ public class WavReader
     
     public static void main(String[] args) throws IOException 
     {
-        new WavReader().load( new File("/home/tobi/mars_workspace/j6502/tape.wav") );
+        new WavReader().load( new File("/home/tobi/mars_workspace/j6502/tapes/choplifter.wav") );
     }
     
     /*
@@ -135,14 +135,23 @@ The "data" subchunk contains the size of the data and the actual sound:
          * Medium =  1837.4999 (24) , 1917.3914 (23) , 2100.0 (21) , 2205.0 (20)
          * Long   = 1575.0001 (28) , 1633.3334 (27)
          */
-        int lastZeroCrossing=0;
-        int previousValue=0;
         final boolean printSamples=false;
         final boolean printWave=true;
+        
+        final StateMachine stateMachine = new StateMachine();
+        
+        int lastZeroCrossing=0;
+        int previousValue=0;
         int previousGradient=0;
         int waveCount = 0;
         
-        final StateMachine stateMachine = new StateMachine();
+        WavePeriod type = null;
+        WavePeriod previousType=null;
+        
+        int repeatedSamples=0;
+        int repetitions = 0;
+        
+        int numberOfSameSamples = 0;
         
         for ( int sampleNo = 0 ; 44+sampleNo < data.length ; sampleNo++ ) 
         {
@@ -174,27 +183,60 @@ The "data" subchunk contains the size of the data and the actual sound:
             final int currentSign = sign( gradient ) ; 
             if ( prevSign != currentSign && ( ( prevSign == -1 && currentSign == 1 ) || ( prevSign == 0 && currentSign == 1 ) ) ) 
             {
-                final int period = sampleNo-lastZeroCrossing;
-                final float cycles = secondsToClockCycles( sampleCountToSeconds( period , sampleRate ) );
-                waveCount++;
-                if ( printWave ) {
-                    System.out.print(" => Wave "+waveCount+", "+sampleCountToSeconds( sampleNo ,  sampleRate )+ ": Zero crossing at sample "+sampleNo+" (samples: "+period+", cycles: "+cycles+",f="+sampleCountToFreq(period,sampleRate)+")");
-                }
-                WavePeriod type = sampleCountToPeriod( period );
-                if ( type == null && ( sampleNo > 10 &&  period < 35 ) ) 
-                {
+                if ( numberOfSameSamples > 10 ) {
                     System.out.flush();
-                    throw new RuntimeException("Unhandled cycle count: "+period);
+                    System.err.println("**** silence ("+numberOfSameSamples+" samples , "+sampleCountToSeconds(numberOfSameSamples,sampleRate)+" seconds )****");
+                } 
+                else 
+                {
+                    final int period = sampleNo-lastZeroCrossing;
+                    final float cycles = secondsToClockCycles( sampleCountToSeconds( period , sampleRate ) );
+                    type = sampleCountToPeriod( period , sampleRate );
+                    
+                    final boolean typeChanged = type != previousType;
+                    
+                    if ( typeChanged ) 
+                    {
+                        if ( printWave && repetitions > 1 ) 
+                        {
+                            final int totalCount = repetitions+1;
+                            final float time = sampleCountToSeconds( repeatedSamples , sampleRate );
+                            System.out.flush();
+                            System.err.print("Last waveform seen "+totalCount+" times ("+repeatedSamples+" samples , "+time+" s).\n");
+                        }
+                        repetitions=0;
+                        repeatedSamples=0;
+                    } else {
+                        repeatedSamples+=period; 
+                        repetitions++;
+                    }
+                    waveCount++;
+                    if ( printWave &&  typeChanged ) 
+                    {
+//                        System.out.print(" => Wave "+waveCount+", "+sampleCountToSeconds( sampleNo ,  sampleRate )+ ": Zero crossing at sample "+sampleNo+" (samples: "+period+", cycles: "+cycles+",f="+sampleCountToFreq(period,sampleRate)+")");
+//                        System.out.println( " => "+type );
+                    }
+                    
+                    if ( type == null ) 
+                    {
+                        System.out.flush();
+                        System.err.println("WARNING: Unhandled cycle count: "+period+" , freq: "+sampleCountToFreq( period , sampleRate ) );
+                    } else {
+                        previousType = type;                           
+                        stateMachine.add( type );
+                    }
                 }
-                if ( printWave ) {
-                    System.out.println( " => "+type );
-                }
-                stateMachine.add( type );
                 lastZeroCrossing = sampleNo;
             } else {
                 if ( printSamples ) {
                     System.out.println();
                 }
+            }
+            
+            if ( gradient == 0 ) {
+                numberOfSameSamples++;
+            } else {
+                numberOfSameSamples = 0;
             }
             
             previousValue = value;
@@ -245,6 +287,7 @@ The "data" subchunk contains the size of the data and the actual sound:
             if ( waveZero == WavePeriod.SHORT ) { // => 0 bit
                 
                 if ( wave != WavePeriod.MEDIUM ) {
+                    System.out.flush();
                     System.err.println("Not a valid bit wave sequence ("+waveZero+","+wave+"), assuming 0 bit");
                 }
                 value >>>= 1;
@@ -261,7 +304,8 @@ The "data" subchunk contains the size of the data and the actual sound:
             if ( bitCount == 9 ) 
             {
                 if ( (Integer.bitCount( value ) & 1) == 0 ) {
-                    throw new RuntimeException("Checksum error on "+Integer.toBinaryString( value ) );
+                    System.out.flush();
+                    System.err.println("WARNING: Checksum error on "+Integer.toBinaryString( value ) );
                 }
                 System.out.println("Byte $"+StringUtils.leftPad( Integer.toHexString( byteCount ) , 4 , "0" )+" : $"+Integer.toHexString( value & 0xff ) );
                 byteCount++;
@@ -303,7 +347,6 @@ The "data" subchunk contains the size of the data and the actual sound:
         {
             State newState = state.tick( wave );
             if ( newState != state ) {
-//                System.out.println("State transition: "+state+" -> "+newState);
                 newState.onEnter();
                 state = newState;
             }
@@ -320,19 +363,28 @@ The "data" subchunk contains the size of the data and the actual sound:
         return 0;
     }
     
-    private WavePeriod sampleCountToPeriod(int count) {
+    /*
+         * => short pulse = 240-432 cycles , avg. 336 cycles .... 2280 Hz - 4105 Hz  
+         * => medium pulse = 432-584 cycles , avg. 508 cycles ...1687 Hz - 2280 Hz
+         * => long pulse = 584-760 cycles, avg. 672 cycles .. 1296 Hz - 1687     
+     */
+    
+    private WavePeriod sampleCountToPeriod(int count,int sampleRate) {
         
-        if ( count <= 19 ) {
+        final float f = sampleCountToFreq(count, sampleRate);
+        
+        if ( f >= 2280 && f < 4105 ) {
             return WavePeriod.SHORT;
         }
-        if ( count >= 20 && count <= 26 ) {
+        
+        if ( f >= 1687 && f < 2280 ) {
             return WavePeriod.MEDIUM;
         }
-        if ( count > 26 && count <= 29 ) {
+        if ( f >= 1296 && f < 1687 ) {
             return WavePeriod.LONG;
         }
         return null;
-    }
+    }    
     
     private float secondsToClockCycles(float seconds) 
     {
