@@ -48,10 +48,10 @@
 
 ; Accu ist hier: ($B0) timing constant + $3C
 ; threshold check #2
-.,F96F 69 30    ADC #$30        zu errechneter Zeit mit $30
+.,F96F 69 30    ADC #$30        zu errechneter Zeit mit $30 
 .,F971 65 B0    ADC $B0         und mit Zeitkonstante addieren
 
-; Accu ist jetzt: 2 * ($B0) timing constant + $3C + $30
+; Accu ist jetzt: 2 * ($B0) timing constant + $3C + $30 =432 cycles
 ; threshold check #3
 .,F973 C5 B1    CMP $B1         elapsed < threshold ?
 .,F975 B0 1C    BCS $F993       ja, short pulse received (elapsed < threshold) , X = 0
@@ -61,14 +61,14 @@
 ; threshold check #4
 .,F978 69 26    ADC #$26        und wieder $26 ($26*4 = +152 cycles) zu
 .,F97A 65 B0    ADC $B0         Zeitkonstanten addieren
-; Accu ist jetzt: 3 * ($B0) timing constant + $3C + $30 + $26
+; Accu ist jetzt: 3 * ($B0) timing constant + $3C + $30 + $26 = 584 cycles
 .,F97C C5 B1    CMP $B1         elapsed < threshold ?
 .,F97E B0 17    BCS $F997       (elapsed < threshold) , medium pulse received , X = 1
 
 ;; threshold check #5
 .,F980 69 2C    ADC #$2C        sonst wieder $2C ($2c*4 = +176 cycles) zu
 .,F982 65 B0    ADC $B0         Zeitkonstante addieren
-; Accu ist jetzt: 4 * ($B0) timing constant + $3C + $30 + $26 + $2c
+; Accu ist jetzt: 4 * ($B0) timing constant + $3C + $30 + $26 + $2c =760 cycles
 .,F984 C5 B1    CMP $B1         vergangene Zeit noch länger ?
 .,F986 90 03    BCC $F98B       jump if elapsed > threshold ==> TIMEOUT ERROR
 .,F988 4C 10 FA JMP $FA10       Long pulse received , zu empfangenes Byte verarbeiten
