@@ -208,6 +208,7 @@ public class Debugger
     private final ScreenPanel screenPanel = new ScreenPanel();
     private final BlockAllocationPanel bamPanel = new BlockAllocationPanel();
     private final CalculatorPanel calculatorPanel = new CalculatorPanel();
+	private final CommentedCodeViewer codeViewer = new CommentedCodeViewer();
 
     private final AsmPanel asmPanel = new AsmPanel(desktop)
     {
@@ -286,6 +287,9 @@ public class Debugger
 
         final JInternalFrame screenPanelFrame = wrap( "Screen" , screenPanel );
         desktop.add( screenPanelFrame  );
+		
+	    final JInternalFrame codeViewerFrame = wrap( "Code viewer" , codeViewer );
+	    desktop.add( codeViewerFrame  );
 
         final JInternalFrame calculatorPanelFrame = wrap( "Calculator" , calculatorPanel );
         desktop.add( calculatorPanelFrame  );

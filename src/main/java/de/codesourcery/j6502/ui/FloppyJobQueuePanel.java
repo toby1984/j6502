@@ -52,7 +52,7 @@ public final class FloppyJobQueuePanel extends JPanel implements IDebuggerView {
 
     @Override
     public void setDisplayed(boolean yesNo) {
-        this.isDisplayed = true;
+        this.isDisplayed = yesNo;
     }
 
     @Override

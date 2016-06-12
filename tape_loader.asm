@@ -25,6 +25,15 @@
 .,F956 4A       LSR             geteilt
 .,F957 66 B1    ROR $B1         durch vier
 
+; Default timing thresholds at start of algorithm (speed constant $B0 contains 0)
+; no. 1 => 240 cycles
+;       => short pulse = 336 cycles
+; no. 2 => 432 cycles
+        => medium pulse = 508 cycles
+; no. 3 => 584 cycles
+        => long pulse = 672 cycles
+; no. 4 => 760 cycles
+;
 ; threshold check #1
 .,F959 A5 B0    LDA $B0         Timingkonstante laden
 .,F95B 18       CLC             und mit
