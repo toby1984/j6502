@@ -1,5 +1,8 @@
 package de.codesourcery.j6502.emulator.tapedrive;
 
+import java.io.File;
+import java.io.IOException;
+
 import org.apache.commons.lang.Validate;
 
 /**
@@ -13,7 +16,7 @@ import org.apache.commons.lang.Validate;
  */
 public class TapeDrive 
 {
-	private static final int SILENCE_TICKS = -1; // 985000/3;
+	private static final int SILENCE_TICKS = 985000/3;
 
     private static final boolean DEBUG = true;
 	
@@ -105,5 +108,34 @@ public class TapeDrive
 	        this.driver.reset();
             System.out.println("Tape inserted: <NONE> , waves: "+this.driver.wavesRemaining());	        
 	    }
+	}
+	
+	public static void main(String[] args) throws IOException {
+        
+	    TapeDrive drive = new TapeDrive();
+	    drive.insert( new T64File(new File("/home/tobi/mars_workspace/j6502/tapes/choplifter.t64")) );
+	    drive.setKeyPressed( true );
+	    drive.setMotorOn( true );
+	    
+	    int previousCycle=-1;
+	    boolean previousSignal=false;
+	    int cycle = 0;
+	    while ( drive.driver.wavesRemaining() > 0 ) 
+	    {
+	        drive.tick();
+	        final boolean signal = drive.currentSignal();
+	        if ( cycle > 0 && ! previousSignal && signal ) 
+	        {
+	            int delta = cycle - previousCycle;
+	            System.out.println(cycleToTime(cycle)+" -"+cycle+" - "+signal+" - length: "+delta);
+	            previousCycle = cycle;
+	        }
+	        cycle++;
+	        previousSignal = signal;
+	    }
+    }
+	
+	private static float cycleToTime(int cycle) {
+	   return 1f / (985248f / (float) cycle);
 	}
 }

@@ -18,7 +18,7 @@ public class CIA extends Memory
     private static final boolean DEBUG = true;
     private static final boolean DEBUG_VERBOSE = true;
     private static final boolean DEBUG_TIMER_LOAD = false;
-    private static final boolean DEBUG_TAPE_SLOPE = false;
+    private static final boolean DEBUG_TAPE_SLOPE = true;
 
     public static final int CIA_PRA        = 0x00;
     public static final int CIA_PRB        = 0x01;
@@ -733,7 +733,7 @@ ende     rts             ; back to BASIC
         if ( tickCounter != 0 ) 
         {
             final boolean currentSignal = getTapeSignal();
-            final boolean isPositiveSlope = previousTapeSignal && ! currentSignal; // IRQ triggers on positive slop , input line is inverted 
+            final boolean isPositiveSlope = ! previousTapeSignal && currentSignal; // IRQ triggers on positive slop , input line is inverted 
             if ( isPositiveSlope ) 
             {
                 tapeSlopeCounter++;

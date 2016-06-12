@@ -12,6 +12,7 @@ import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.exceptions.HLTException;
+import de.codesourcery.j6502.emulator.tapedrive.SquareWaveGenerator.WavePeriod;
 import de.codesourcery.j6502.utils.HexDump;
 
 /**
@@ -1076,7 +1077,22 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
         // TODO: Remove tape debug code
 
         // FA57
-        if ( initialPC == 0xF98B ) 
+        
+        /*
+; $D7 contains first pulse: 0 = short pulse, 1 = medium pulse
+; X reg. contains latest pulse: 0 = short pulse, 1 = medium pulse         
+         */
+        if ( initialPC == 0xF9D5) 
+        {
+            final WavePeriod first = memory.readByte( 0xd7 ) == 0 ? WavePeriod.SHORT : WavePeriod.MEDIUM;
+            final WavePeriod second = cpu.getX() == 0 ? WavePeriod.SHORT : WavePeriod.MEDIUM;
+            System.out.println("Received pair ("+first+","+second+")");
+        } 
+        else if ( initialPC == 0xFA10 ) 
+        {
+            System.out.println("Long pulse received");
+        } 
+        else if ( initialPC == 0xF98B ) 
         {
             System.out.println("parity error");
         } 
@@ -1105,41 +1121,6 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
             final int value = memory.readByte( 0xbf ); 
             final int bit = memory.readByte( 0xa3 ); 
             System.out.println("Byte is now: %"+StringUtils.leftPad( Integer.toBinaryString( value ) , 8 , "0" )+" , bit "+bit+" , ($"+Integer.toHexString(value) );
-        } else if ( DEBUG_TAPE && initialPC == 0xf9aa ) 
-        {
-            if ( cpu.getX() != 0 ) {
-                System.out.println("BIT: "+cpu.getX());
-            }
-        } else if ( DEBUG_TAPE && initialPC == 0xF9AC ) {
-            System.out.println("Cycle too short (bit: "+memory.readByte( 0xa3 )+" , phase: "+memory.readByte( 0xa4 )+" , sync: "+memory.readByte( 0xb4 )+")" );
-        } else if ( DEBUG_TAPE && initialPC == 0xF92C ) {
-            MemorySubsystem mem = (MemorySubsystem) memory;
-            final CIA cia = mem.ioArea.cia1;
-            final int value = ( cia.readByte( CIA.CIA_TBHI ) << 8 ) | cia.readByte( CIA.CIA_TBLO );
-            System.out.println("TimerB: $"+Integer.toHexString( value )+" @ tick "+cia.tickCounter);
-            //		} else if ( initialPC == 0xF9F3 ) {
-            //			System.out.println("SYNC detected");
-        } else if ( DEBUG_TAPE && initialPC == 0xF932 ) {
-            MemorySubsystem mem = (MemorySubsystem) memory;
-            final CIA cia = mem.ioArea.cia1;
-            System.out.println("cia #1 TimerB = $"+Integer.toHexString( cia.timerBValue) );
-
-            final int lo = cia.readByte( CIA.CIA_TBLO );
-            final int hi = cia.readByte( CIA.CIA_TBHI );
-            final int value = hi << 8 | lo;
-            System.out.println("cia #1 TimerB = $"+Integer.toHexString( cia.timerBValue)+" <-> $"+Integer.toHexString( value ));
-        } else if ( DEBUG_TAPE && initialPC == 0xF93A ) {
-            /*
-$F92C  AE  07  DC    LDX $DC07       ; X = TBHi1
-$F92F  A0  FF        LDY #$FF
-$F931  98            TYA             ; 
-$F932  ED  06  DC    SBC $DC06       ; A = complement of TBLo1 (time elapsed)
-$F935  EC  07  DC    CPX $DC07       ;if high byte not steady,
-$F938  D0  F2        BNE $F92C       ;repeat
-$F93A  86  B1        STX $B1         ;else save high byte
-$F93C  AA            TAX             ; X = $FF - TBL1			 
-             */
-            System.out.println("Tb1HI = "+cpu.getX()+" , $FF - TB1Lo = "+cpu.getAccumulator());
         }
 
         opcode = read6502( initialPC );
