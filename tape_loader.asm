@@ -2,6 +2,7 @@
  
  ; $B1 => speed correction factor
  ; $A3 => Bit counter
+ ; $B4 => Aktuelle IRQ mask für Timer A , entweder $81 (=> Timer A Underflow IRQ enabled) oder 0 (Timer A IRQ disabled)
 
 .,F92C AE 07 DC LDX $DC07       Timer B HIGH laden
 .,F92F A0 FF    LDY #$FF        Y-Register mit $FF laden (um verstrichene Cycles zu berechnen)
@@ -63,6 +64,9 @@
 ; Accu ist jetzt: 2 * ($B0) timing constant + $3C + $30 =432 cycles
 ; threshold check #3
 .,F973 C5 B1    CMP $B1         elapsed < threshold ?
+; --------------
+; SHORT PULSE DETECTED
+; --------------
 .,F975 B0 1C    BCS $F993       ja, SHORT PULSE RECEIVED (elapsed < threshold) , X = 0
 ; 
 .,F977 E8       INX             X = 1 => medium pulse empfangen
@@ -72,7 +76,10 @@
 .,F97A 65 B0    ADC $B0         Zeitkonstanten addieren
 ; Accu ist jetzt: 3 * ($B0) timing constant + $3C + $30 + $26 = 584 cycles
 .,F97C C5 B1    CMP $B1         elapsed < threshold ?
-.,F97E B0 17    BCS $F997       (elapsed < threshold) , medium pulse received , X = 1
+; --------------
+; MEDIUM PULSE DETECTED
+; --------------
+.,F97E B0 17    BCS $F997       (elapsed < threshold) , MEDIUM PULSE RECEIVED , X = 1
 
 ;; threshold check #5
 .,F980 69 2C    ADC #$2C        sonst wieder $2C ($2c*4 = +176 cycles) zu
@@ -80,7 +87,11 @@
 ; Accu ist jetzt: 4 * ($B0) timing constant + $3C + $30 + $26 + $2c =760 cycles
 .,F984 C5 B1    CMP $B1         vergangene Zeit noch länger ?
 .,F986 90 03    BCC $F98B       jump if elapsed > threshold ==> TIMEOUT ERROR
-.,F988 4C 10 FA JMP $FA10       Long pulse (start of byte) received , zu empfangenes Byte verarbeiten
+
+; --------------
+; LONG PULSE DETECTED
+; --------------
+.,F988 4C 10 FA JMP $FA10       LONG PULSE RECEIVED (start of byte) , zu empfangenes Byte verarbeiten
 
 
 ; --------------
@@ -88,11 +99,9 @@
 ; TIMEOUT ERROR:    LOW(elapsed cycles/4)  >  3* ($B0) + $3C + $30 + $26
 ; PARITY ERROR
 ; -------------- 
-.,F98B A5 B4    LDA $B4         Flag für Timer A laden
-.,F98D F0 1D    BEQ $F9AC       verzweige, wenn Timer A nicht
-                                freigegeben
-.,F98F 85 A8    STA $A8         Zeiger auf 'READ ERROR'
-                                setzen
+.,F98B A5 B4    LDA $B4         Timer A Underflow IRQ enabled?
+.,F98D F0 1D    BEQ $F9AC       => IRQ disabled 
+.,F98F 85 A8    STA $A8         Zeiger auf 'READ ERROR' setzen
 .,F991 D0 19    BNE $F9AC       unbedingter Sprung
 
 ; ----------------
@@ -129,8 +138,8 @@
 ; ----------------------------------
 
 ; pulse length is too short (below ($b0) + $3c (=$3c*4 = 240 cycles))
-.,F9AC A5 B4    LDA $B4         Flag für Timer A laden
-.,F9AE F0 22    BEQ $F9D2       verzweige wenn Timer gesperrt
+.,F9AC A5 B4    LDA $B4         Timer A Underflow IRQ enabled?
+.,F9AE F0 22    BEQ $F9D2       => IRQ disabled
 .,F9B0 AD A3 02 LDA $02A3       ICR in Akku
 .,F9B3 29 01    AND #$01        Bit 0 isolieren
 .,F9B5 D0 05    BNE $F9BC       verzweige wenn Interrupt von Timer A
@@ -200,8 +209,8 @@
 .,F9F7 8A       TXA             Empfangenes Bit in Akku
 .,F9F8 45 9B    EOR $9B         mit Band-Parität verknüpfen
 .,F9FA 85 9B    STA $9B         in Band-Parität speichern
-.,F9FC A5 B4    LDA $B4         Flag für Timer A laden
-.,F9FE F0 D2    BEQ $F9D2       verzweige wenn nicht frei gegeben
+.,F9FC A5 B4    LDA $B4         Timer A Underflow IRQ enabled?
+.,F9FE F0 D2    BEQ $F9D2       => IRQ disabled
 .,FA00 C6 A3    DEC $A3         Speicher für Bitzähler -1
 .,FA02 30 C5    BMI $F9C9       verzweige wenn Paritätsbit empfangen
 .,FA04 46 D7    LSR $D7         gelesenes Bit ins Carry und
@@ -213,10 +222,10 @@
 ; -----------------------------------------
 ; called after long pulse has been received
 ; -----------------------------------------
-.,FA10 A5 96    LDA $96         Prüfe ob EOB (cassette block synchronization number) empfangen ( ($96) != 0 )
+.,FA10 A5 96    LDA $96         Prüfe ob EOB ( ( >16 short pulses) , cassette block synchronization number) empfangen ( ($96) != 0 )
 .,FA12 F0 04    BEQ $FA18       falls nein, verzweige
-.,FA14 A5 B4    LDA $B4         Prüfe ob Timer A freige.
-.,FA16 F0 07    BEQ $FA1F       wenn nein, überspringe Bit Zähler Test
+.,FA14 A5 B4    LDA $B4         Timer A Underflow IRQ enabled flag
+.,FA16 F0 07    BEQ $FA1F       IRQ disabled => überspringe Bit Zähler Test
                                 
 ; ---------------                               
 ; long pulse has been received , no EOB received
@@ -237,8 +246,8 @@
 .,FA29 AA       TAX             Ergebnis ins X-Register
 .,FA2A 20 E2 F8 JSR $F8E2       Timing initialisieren
 .,FA2D E6 9C    INC $9C         Flag für Byte empfangen setzen
-.,FA2F A5 B4    LDA $B4         Flag für Timer A laden
-.,FA31 D0 11    BNE $FA44       verzweige falls freigegeben
+.,FA2F A5 B4    LDA $B4         Timer A Underflow IRQ enabled?
+.,FA31 D0 11    BNE $FA44       IRQ enabled => Timer A läuft
 .,FA33 A5 96    LDA $96         wurde EOB emfangen ?
 .,FA35 F0 26    BEQ $FA5D       return from interrupt
 
@@ -247,15 +256,19 @@
 .,FA37 85 A8    STA $A8         Flag für Lesefehler setzen
 .,FA39 A9 00    LDA #$00        Flag für
 .,FA3B 85 96    STA $96         EOB (cassette block synchronization number) rücksetzen
-.,FA3D A9 81    LDA #$81        Interrupt für
+
+; enable Timer A underflow IRQ
+.,FA3D A9 81    LDA #$81        Underflow Interrupt für
 .,FA3F 8D 0D DC STA $DC0D       Timer A freigeben
-.,FA42 85 B4    STA $B4         und Flag für Timer A setzen
+.,FA42 85 B4    STA $B4         remember Timer A underflow IRQ enabled
+
 .,FA44 A5 96    LDA $96         Flag für EOB laden
 .,FA46 85 B5    STA $B5         und nach $B5 kopieren
 .,FA48 F0 09    BEQ $FA53       verzweige wenn kein EOB
 
+; disable Timer A underflow IRQ
 .,FA4A A9 00    LDA #$00        Flag für Timer A
-.,FA4C 85 B4    STA $B4         löschen und auch
+.,FA4C 85 B4    STA $B4         remember TimerA underflow IRQ disabled
 .,FA4E A9 01    LDA #$01        Interruptflag
 .,FA50 8D 0D DC STA $DC0D       wieder löschen
 
@@ -272,7 +285,8 @@
 ; pulse empfangen, mindestens short pulse
 ; (elapsed größer als threshold #1)
 ; ---------------------
-;   *** # store character
+
+; *** # store character
 .,FA60 20 97 FB JSR $FB97       new tape byte setup
 .,FA63 85 9C    STA $9C         clear byte received flag (accu is still 0 here from $FB97 subroutine)
 .,FA65 A2 DA    LDX #$DA        set timing max byte
@@ -282,7 +296,7 @@
 .,FA6E 85 A7    STA $A7         save receiver input bit temporary storage
 .,FA70 A9 0F    LDA #$0F        Maskenwert für Zählung vor dem Lesen
 
-; $AA hat folgende werte
+; $AA kann folgende Werte annehmen:
 ; $0  => ???
 ; $1 - $0f => sync byte counter (???) 
 ; $40 => bit 6 (V flag)
@@ -304,7 +318,7 @@
 .,FA81 20 1C FE JSR $FE1C       Status setzen
 .,FA84 D0 04    BNE $FA8A       unbedingter Sprung zum normalen IRQ
 
-; --------
+; ----------
 ; pulse empfangen, mindestens short pulse
 ; (elapsed größer als threshold #1) 
 ; EOB empfangen
@@ -433,14 +447,18 @@
 .,FB46 D0 43    BNE $FB8B       Rückkehr vom Interrupt
 .,FB48 A9 80    LDA #$80        Flag für Lesen
 .,FB4A 85 AA    STA $AA         auf Ende
+
+;
 .,FB4C 78       SEI             Interrupt verhindern
 .,FB4D A2 01    LDX #$01        IRQ vom
 .,FB4F 8E 0D DC STX $DC0D       Timer A verhindern
-.,FB52 AE 0D DC LDX $DC0D       IRQ-Flag löschen
+.,FB52 AE 0D DC LDX $DC0D       IRQ request flags löschen
 .,FB55 A6 BE    LDX $BE         Pass-Zähler
 .,FB57 CA       DEX             erniedrigen
 .,FB58 30 02    BMI $FB5C       verzweige wenn Null gewesen
 .,FB5A 86 BE    STX $BE         Passzähler merken
+
+;
 .,FB5C C6 A7    DEC $A7         Blockzähler vermindern
 .,FB5E F0 08    BEQ $FB68       verzweige wenn Null
 .,FB60 A5 9E    LDA $9E         Fehler in Pass 1 aufgetreten ?
@@ -458,8 +476,7 @@
 .,FB7B 20 D1 FC JSR $FCD1       Endadresse schon erreicht ?
 .,FB7E 90 F2    BCC $FB72       nein, weiter vergleichen
 .,FB80 A5 AB    LDA $AB         berechnete Checksumme
-.,FB82 45 BD    EOR $BD         mit Checksumme vom Band
-                                vergleichen
+.,FB82 45 BD    EOR $BD         mit Checksumme vom Band vergleichen
 .,FB84 F0 05    BEQ $FB8B       Checksumme gleich , dann ok
 .,FB86 A9 20    LDA #$20        'CHECKSUM' error
 .,FB88 20 1C FE JSR $FE1C       Status setzen
@@ -515,9 +532,9 @@ $F875  A0  7F        LDY #$7F
 $F877  8C  0D  DC    STY $DC0D       ;clear any pending mask in ICR1
 $F87A  8D  0D  DC    STA $DC0D       ;then set mask for TB1
 $F87D  AD  0E  DC    LDA $DC0E
-$F880  09  19        ORA #$19        ;+force load, one shot and TB1 to CRA1
+$F880  09  19        ORA #$19        ; 0b0001_1001 , +force load, one shot and TB1 to CRA1
 $F882  8D  0F  DC    STA $DC0F       ;to form CRB1
-$F885  29  91        AND #$91
+$F885  29  91        AND #$91        ; 0b1001_0001 , only keep TOD register handling , force-load and timer enable/disable
 $F887  8D  A2  02    STA $02A2       ;and CRB1 activity register
 $F88A  20  A4  F0    JSR $F0A4       ;condition flag bit in ICR2
 $F88D  AD  11  D0    LDA $D011
@@ -608,47 +625,70 @@ $FDA1 .WORD $F92C ; X = $0E read tape bits IRQ routine
 ; ===========================
 ; schedule CIA1 Timer A depending on parameter in X
 ; ===========================
+
+; >>> $B1 is just temporary storage <<<
+
+; Possible values for X are:
+;
+; X = $DA
+; X = $A6
+; 
+; X = 2 * ( $93 - (elapsed_cycles/4 / 2) + $B0 ) 
+;
 $F8E2  86  B1        STX $B1         ;save entry parameter
+
+; $B1 = ($B0) * 4 + ($B0) + ($B1)
+
 $F8E4  A5  B0        LDA $B0         ;get speed correction
 $F8E6  0A            ASL             ;* 2
 $F8E7  0A            ASL             ;* 4
 $F8E8  18            CLC
 $F8E9  65  B0        ADC $B0         ;add speed correction
 $F8EB  18            CLC
-$F8EC  65  B1        ADC $B1         ;and parameter
+$F8EC  65  B1        ADC $B1         ;add parameter from X register
+
+; Carry flag now holds MSB
 $F8EE  85  B1        STA $B1         ;save low order
+
 
 $F8F0  A9  00        LDA #$00
 $F8F2  24  B0        BIT $B0         ; test speed correction
-$F8F4  30  01        BMI $F8F7       ; => speed correction is positive 
-$F8F6  2A            ROL             ;set high order in A
+$F8F4  30  01        BMI $F8F7       ; => MSB is already set
+ 
+$F8F6  2A            ROL             ; shift MSB from $B1 into accumulator
 
-$F8F7  06  B1        ASL $B1         ;* 2
-$F8F9  2A            ROL
-$F8FA  06  B1        ASL $B1         ;* 4
-$F8FC  2A            ROL
-$F8FD  AA            TAX
+$F8F7  06  B1        ASL $B1         ; shift bit 7 into CARRY
+$F8F9  2A            ROL             ; shift carry into accumulator
+$F8FA  06  B1        ASL $B1         ; shift bit 7 into carry
+$F8FC  2A            ROL             ; shift carry into accumulator
+$F8FD  AA            TAX             ; Accu contains (2/3) MSB bits from $B1 , save to X
 
-$F8FE  AD  06  DC    LDA $DC06       ;wait until no change of
-$F901  C9  16        CMP #$16        ;TBL1 changing
-$F903  90  F9        BCC $F8FE       ;while it still must be read
-$F905  65  B1        ADC $B1         :add low order offset to TBL1
+; wait until TBL1 >= $16 (22)
+$F8FE  AD  06  DC    LDA $DC06       ; fetch TBL1
+$F901  C9  16        CMP #$16        ; 
+$F903  90  F9        BCC $F8FE       ; loop while TBl1 < $16 (22)
+
+$F905  65  B1        ADC $B1         : ACCU = TBL1 + $B1 ; add low order offset to TBL1
 $F907  8D  04  DC    STA $DC04       ;and store in TAL1
-$F90A  8A            TXA
+$F90A  8A            TXA             ; (2/3) high-order bits to Accumulator
 $F90B  6D  07  DC    ADC $DC07       ;add high order offset to TBH1
 $F90E  8D  05  DC    STA $DC05       ;and store in TAH1
+
 $F911  AD  A2  02    LDA $02A2
-$F914  8D  0E  DC    STA $DC0E       ;set CRA1 from CRB1 activity register
+$F914  8D  0E  DC    STA $DC0E       ;set CRA1 from CRB1 activity register (%10001)
 $F917  8D  A4  02    STA $02A4       ;and save it
+
 $F91A  AD  0D  DC    LDA $DC0D       ; ICR
 $F91D  29  10        AND #$10        ; test bit 4 (~FLAG pin IRQ)
 $F91F  F0  09        BEQ $F92A       ; => no Flag pin IRQ
+
+; FLAG pin IRQ detected
 $F921  A9  F9        LDA #$F9        ;set exit address on stack
 $F923  48            PHA
 $F924  A9  2A        LDA #$2A
 $F926  48            PHA
 $F927  4C  43  FF    JMP $FF43       ;and simulate an IRQ
 
-; allow IRQ and return
+; allow IRQs and return
 $F92A  58            CLI             
 $F92B  60            RTS

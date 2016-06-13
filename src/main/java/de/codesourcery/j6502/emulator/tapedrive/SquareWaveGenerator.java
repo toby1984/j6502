@@ -8,7 +8,6 @@ public class SquareWaveGenerator
     public enum WavePeriod
     {
         /*
-    /*
          * http://c64tapes.org/dokuwiki/doku.php?id=loaders:rom_loader
          * http://www.atarimagazines.com/compute/issue57/turbotape.html
          * http://c64tapes.org/dokuwiki/doku.php?id=analyzing_loaders 
@@ -25,10 +24,19 @@ public class SquareWaveGenerator
          * => medium pulse = 432-584 cycles , avg. 508 cycles ...1687 Hz - 2280 Hz
          * => long pulse = 584-760 cycles, avg. 672 cycles .. 1296 Hz - 1687  
          * 
+         * C64 TAP files:
+         * 
+         * (S)hort  : TAP value $30 (48)
+         * (M)edium : TAP value $42 (66)
+         * (L)ong   : TAP value $56 (86)
+         * 
+         *  (48 * 8) / 985248 =  2565,75 Hz   =  384 cycles
+         *  (66 * 8) / 985248 =  1866 Hz      =  528 cycles
+         *  (86 * 8) / 985248 =  1432,0465 Hz =  688 cycles
          */
-        SHORT("SHORT", 346 ), // 336 
-        MEDIUM("MEDIUM", 504 ), // 508
-        LONG("LONG", 662 ), // 672
+        SHORT("SHORT", 336 ), // 336 
+        MEDIUM("MEDIUM", 508 ), // 508
+        LONG("LONG", 672 ), // 672
         SILENCE_SHORT("SILENCE SHORT (0.33s)" , 325131) { 
 
             @Override
@@ -62,7 +70,7 @@ public class SquareWaveGenerator
             {
                 // just wait without toggling signal line
                 state.currentTicks--;
-                if ( state.currentTicks <= 0 ) 
+                if ( state.currentTicks == 0 ) 
                 {
                     return true; // advance to next state
                 }
@@ -88,7 +96,7 @@ public class SquareWaveGenerator
         public boolean tick(SquareWaveGenerator state) 
         {
             state.currentTicks--;
-            if ( state.currentTicks <= 0 ) 
+            if ( state.currentTicks == 0 ) 
             {
                 state.currentSignal = ! state.currentSignal;
                 state.currentTicks = ticks/2; // square wave with 50% duty cycle
@@ -233,7 +241,7 @@ public class SquareWaveGenerator
     public void addWave(WavePeriod period) {
         waves.add( period );
     }
-
+    
     public void addBit(boolean bit) 
     {
         if ( bit ) {

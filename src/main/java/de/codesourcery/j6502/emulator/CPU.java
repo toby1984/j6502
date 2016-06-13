@@ -9,6 +9,8 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class CPU
 {
+	public static final boolean MEMORY_BREAKPOINTS_SUPPORTED = true;
+	
 	public static final int RESET_VECTOR_LOCATION = 0xfffc;
 	public static final int BRK_VECTOR_LOCATION = 0xfffe; // same as IRQ_VECTOR_LOCATION
 	public static final int IRQ_VECTOR_LOCATION = 0xfffe; // same as BRK_VECTOR_LOCATION
@@ -20,6 +22,8 @@ public class CPU
 
 	private IRQType interruptQueued = IRQType.NONE;
 
+    public final MemoryBreakpointHelper mbph = new MemoryBreakpointHelper( AddressRange.range( 0 , 65535 ) );
+    
 	public long cycles = 0;
 	public short previousPC;
 
@@ -171,6 +175,9 @@ public class CPU
 
 	public void pushByte(byte value,IMemoryRegion region)
 	{
+		if ( MEMORY_BREAKPOINTS_SUPPORTED ) {
+			mbph.checkWriteBreakpoint( pc );
+		}
 		region.writeByte( sp , value );
 		decSP();
 	}
@@ -178,6 +185,9 @@ public class CPU
 	public int pop(IMemoryRegion region)
 	{
 		incSP();
+		if ( MEMORY_BREAKPOINTS_SUPPORTED ) {
+			mbph.checkReadBreakpoint( pc );
+		}		
 		return region.readByte( sp );
 	}
 
@@ -207,6 +217,10 @@ public class CPU
 
 	public void reset()
 	{
+		if ( MEMORY_BREAKPOINTS_SUPPORTED ) {
+			mbph.reset();
+		}
+		
 	    lastInsDuration = 0;
 	    
 	    breakOnInterrupt = false;
@@ -406,5 +420,9 @@ public class CPU
 
     public boolean isBreakOnIRQ() {
         return breakOnInterrupt;
+    }
+    
+    public MemoryBreakpointHelper getMemoryBreakpointHelper() {
+    	return mbph;
     }
 }

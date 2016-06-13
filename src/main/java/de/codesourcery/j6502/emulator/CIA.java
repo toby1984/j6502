@@ -372,38 +372,13 @@ CRB 	Control Timer B 	see CIA 1
 
         timerARunning = false;
         timerBRunning = false;
-        timerAValue = 0xffff;
-        timerBValue = 0xffff;
+        
+        timerAValue = 0x0;
         timerALatch = 0xffff;
+        
+        timerBValue = 0x0;
         timerBLatch = 0xffff;
     }
-
-    /*
-PRA  =  $dc00            ; CIA#1 (Port Register A)
-DDRA =  $dc02            ; CIA#1 (Data Direction Register A)
-
-PRB  =  $dc01            ; CIA#1 (Port Register B)
-DDRB =  $dc03            ; CIA#1 (Data Direction Register B)
-
-start    sei             ; interrupts deactivated
-
-         lda #%11111111  ; CIA#1 port A = outputs  ==> Bits in PRA can be read and written
-         sta DDRA
-
-         lda #%11111101  ; select keyboard matrix column 1 (COL1)
-         sta PRA
-
-         lda #%00000000  ; CIA#1 port B = inputs
-         sta DDRB        ; Bits in PRB can only be read
-
-loop     lda PRB
-         and #%00100000  ; masking row 5 (ROW5) , row is LOW active
-         bne loop        ; wait until key "S"
-
-         cli             ; interrupts activated
-
-ende     rts             ; back to BASIC
-     */
 
     @Override
     public int readByte(int adr)
@@ -411,8 +386,54 @@ ende     rts             ; back to BASIC
         final int offset = adr & 0b1111; // registers are mirrored/repeated every 16 bytes
         switch(offset)
         {
+        	/*
+        	 CRA 	Control Timer A
+
+        Bit 0: 0 = Stop timer; 1 = Start timer
+        Bit 1: 1 = Indicates a timer underflow at port B in bit 6.
+        Bit 2: 0 = Through a timer overflow, bit 6 of port B will get high for one cycle , 1 = Through a timer underflow, bit 6 of port B will be inverted
+        Bit 3: 0 = Timer-restart after underflow (latch will be reloaded), 1 = Timer stops after underflow.
+        Bit 4: 1 = Load latch into the timer once.
+        Bit 5: 0 = Timer counts system cycles, 1 = Timer counts positive slope at CNT-pin
+        Bit 6: Direction of the serial shift register, 0 = SP-pin is input (read), 1 = SP-pin is output (write)
+        Bit 7: Real Time Clock, 0 = 60 Hz, 1 = 50 Hz
+-----------------
+CRB 	Control Timer B
+
+        Bit 0: 0 = Stop timer; 1 = Start timer
+        Bit 1: 1 = Indicates a timer underflow at port B in bit 7.
+        Bit 2: 0 = Through a timer overflow, bit 7 of port B will get high for one cycle , 1 = Through a timer underflow, bit 7 of port B will be inverted
+        Bit 3: 0 = Timer-restart after underflow (latch will be reloaded), 1 = Timer stops after underflow.
+        Bit 4: 1 = Load latch into the timer once.
+        Bit 5..6:
+
+        %00 = Timer counts System cycle
+        %01 = Timer counts positive slope on CNT-pin
+        %10 = Timer counts underflow of timer A
+        %11 = Timer counts underflow of timer A if the CNT-pin is high
+
+        Bit 7: 0 = Writing into the TOD register sets the clock time, 1 = Writing into the TOD register sets the alarm time.
+        	 */
+        	case CIA_CRA:
+        		int result = super.readByte(offset);
+        		if ( timerARunning ) {
+        			result |=  (1<<0);
+        		} else {
+        			result &= ~(1<<0);
+        		}
+        		result &= ~(1<<4); // clear strobe bit
+        		return result;
+        	case CIA_CRB:
+                result = super.readByte(offset);
+        		if ( timerBRunning ) {
+        			result |=  (1<<0);
+        		} else {
+        			result &= ~(1<<0);
+        		}                
+        		result &= ~(1<<4); // clear strobe bit
+                return result;
             case CIA_ICR:
-                int result = icr_read & 0xff;
+                result = icr_read & 0xff;
                 icr_read = 0;
                 return result;
                 /*
@@ -563,6 +584,10 @@ ende     rts             ; back to BASIC
                  * Bit 6: Direction of the serial shift register, 0 = SP-pin is input (read), 1 = SP-pin is output (write)
                  * Bit 7: Real Time Clock, 0 = 60 Hz, 1 = 50 Hz
                  */
+            	if ( (value & 1<<5 ) != 0 )
+            	{
+            		throw new RuntimeException("Counting CNT slopes is not supported for "+this+" , Timer A");
+            	}
                 boolean oldState = timerARunning;
                 timerARunning = ( value & 1) != 0;
                 if ( DEBUG_VERBOSE ) {
@@ -593,6 +618,15 @@ ende     rts             ; back to BASIC
                  *
                  * Bit 7: 0 = Writing into the TOD register sets the clock time, 1 = Writing into the TOD register sets the alarm time.
                  */
+            	switch( (value >> 5) & 0b11 ) 
+            	{
+            		case 0b00: // Timer counts System cycle
+            		case 0b10: // Timer counts underflow of timer A
+            			break;
+            		case 0b01: // Timer counts positive slope on CNT-pin
+            		case 0b11: // Timer counts underflow of timer A if the CNT-pin is high
+            			throw new RuntimeException("Unsupported timer mode for "+this+", timer B: %"+Integer.toBinaryString( value) );
+            	}
                 oldState = timerBRunning;
                 timerBRunning = ( value & 1) != 0;
                 if ( DEBUG_VERBOSE ) {
@@ -676,13 +710,13 @@ ende     rts             ; back to BASIC
             if ( ( cra & (1<<5) ) == 0 ) // timer counts system cycles
             {
                 timerAValue = (timerAValue-1) & 0xffff;
-                if ( timerAValue == 0xffff )
+                if ( timerAValue == 0 )
                 {
                     handleTimerAUnderflow(cra , cpu );
 
                     if ( timerBRunning && (crb & 0b1100000) == 0b1000000) { // timerB counts timerA underflow
                         timerBValue = (timerBValue-1) & 0xffff;
-                        if ( timerBValue == 0xffff ) {
+                        if ( timerBValue == 0 ) {
                             handleTimerBUnderflow( crb , cpu );
                         }
                         return; /* RETURN */
@@ -713,7 +747,7 @@ ende     rts             ; back to BASIC
         {
             if ( (crb & 0b1100000) == 0b0000000 ) { // Timer B counts System cycles
                 timerBValue = (timerBValue-1) & 0xffff;
-                if ( timerBValue == 0xffff )
+                if ( timerBValue == 0 )
                 {
                     handleTimerBUnderflow(crb,cpu);
                 }
@@ -733,8 +767,8 @@ ende     rts             ; back to BASIC
         if ( tickCounter != 0 ) 
         {
             final boolean currentSignal = getTapeSignal();
-            final boolean isPositiveSlope = ! previousTapeSignal && currentSignal; // IRQ triggers on positive slop , input line is inverted 
-            if ( isPositiveSlope ) 
+            final boolean isSlope = previousTapeSignal && ! currentSignal;
+            if ( isSlope ) 
             {
                 tapeSlopeCounter++;
                 // Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.	     
@@ -773,7 +807,6 @@ ende     rts             ; back to BASIC
         }
         if ( (cra & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
             timerARunning = false;
-            super.writeByte( CIA.CIA_CRA , (byte) (cra & 0b01111111) );
         }
         //		if ( DEBUG_VERBOSE ) {
         //			System.out.println(this+" , timer A underflow , loading timer A latch = "+timerALatch);
@@ -797,7 +830,6 @@ ende     rts             ; back to BASIC
             if ( DEBUG_VERBOSE ) {
                 System.out.println(this+" , timer B running in one-shot mode, timer is now stopped.");
             }           
-            super.writeByte( CIA.CIA_CRB , (byte) (crb & 0b01111111) );            
             timerBRunning = false;
         } 
 

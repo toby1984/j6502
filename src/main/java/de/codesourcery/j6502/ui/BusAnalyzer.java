@@ -201,7 +201,6 @@ public class BusAnalyzer extends JPanel implements IDebuggerView
     {
         setBackground( Color.BLACK );
         setForeground( Color.GREEN );
-//        setPreferredSize( new Dimension(400,200 ) );
         setPreferredSize( new Dimension(10 , 10 ) );
         setFocusable(true);
         setRequestFocusEnabled( true );
