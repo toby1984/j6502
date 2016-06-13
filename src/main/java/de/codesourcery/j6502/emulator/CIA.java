@@ -710,13 +710,13 @@ CRB 	Control Timer B
             if ( ( cra & (1<<5) ) == 0 ) // timer counts system cycles
             {
                 timerAValue = (timerAValue-1) & 0xffff;
-                if ( timerAValue == 0 )
+                if ( timerAValue == 0xffff )
                 {
                     handleTimerAUnderflow(cra , cpu );
 
                     if ( timerBRunning && (crb & 0b1100000) == 0b1000000) { // timerB counts timerA underflow
                         timerBValue = (timerBValue-1) & 0xffff;
-                        if ( timerBValue == 0 ) {
+                        if ( timerBValue == 0xffff ) {
                             handleTimerBUnderflow( crb , cpu );
                         }
                         return; /* RETURN */
@@ -747,7 +747,7 @@ CRB 	Control Timer B
         {
             if ( (crb & 0b1100000) == 0b0000000 ) { // Timer B counts System cycles
                 timerBValue = (timerBValue-1) & 0xffff;
-                if ( timerBValue == 0 )
+                if ( timerBValue == 0xffff )
                 {
                     handleTimerBUnderflow(crb,cpu);
                 }
