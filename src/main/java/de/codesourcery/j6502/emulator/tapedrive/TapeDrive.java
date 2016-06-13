@@ -16,7 +16,7 @@ import org.apache.commons.lang.Validate;
  */
 public class TapeDrive 
 {
-	private static final int SILENCE_TICKS = 985000/3;
+	private static final int SILENCE_TICKS = 985000;
 
     private static final boolean DEBUG = true;
 	
@@ -113,7 +113,7 @@ public class TapeDrive
 	public static void main(String[] args) throws IOException {
         
 	    TapeDrive drive = new TapeDrive();
-	    drive.insert( new T64File(new File("/home/tobi/mars_workspace/j6502/tapes/choplifter.t64")) );
+	    drive.insert( new T64File(new File("/home/tgierke/mars_develop_workspace/j6502/tapes/choplifter.t64")) );
 	    drive.setKeyPressed( true );
 	    drive.setMotorOn( true );
 	    
@@ -124,7 +124,7 @@ public class TapeDrive
 	    {
 	        drive.tick();
 	        final boolean signal = drive.currentSignal();
-	        if ( cycle > 0 && ! previousSignal && signal ) 
+	        if ( cycle > 0 && previousSignal && ! signal ) 
 	        {
 	            int delta = cycle - previousCycle;
 	            System.out.println(cycleToTime(cycle)+" -"+cycle+" - "+signal+" - length: "+delta);

@@ -16,7 +16,8 @@ import de.codesourcery.j6502.emulator.tapedrive.SquareWaveGenerator.WavePeriod;
 import de.codesourcery.j6502.utils.HexDump;
 
 /**
- * Ported from C code in http://codegolf.stackexchange.com/questions/12844/emulate-a-mos-6502-cpu
+ * Ported from C code in http://codegolf.stackexchange.com/questions/12844/emulate-a-mos-6502-cpu 
+ * & heavily modified.
  *
  * @author tobias.gierke@code-sourcery.de
  */
@@ -34,6 +35,8 @@ public final class CPUImpl
     protected int ea, reladdr, value, result;
     protected int opcode;
     protected byte oldstatus;
+    
+
 
     public CPUImpl(CPU cpu,IMemoryRegion region)
     {
@@ -53,16 +56,20 @@ public final class CPUImpl
     protected void clearcarry() {
         cpu.clearFlag( Flag.CARRY );
     }
+    
     protected void setzero() {
         cpu.setFlag( Flag.ZERO );
     }
+    
     protected void clearzero() {
         cpu.clearFlag(Flag.ZERO);
     }
+    
     protected void setinterrupt()
     {
         cpu.setFlag( Flag.IRQ_DISABLE );
     }
+    
     protected void clearinterrupt()
     {
         cpu.clearFlag( Flag.IRQ_DISABLE );
@@ -71,24 +78,17 @@ public final class CPUImpl
     protected void setdecimal() {
         cpu.setFlag(Flag.DECIMAL_MODE);
     }
+    
     protected void cleardecimal() {
         cpu.clearFlag(Flag.DECIMAL_MODE);
     }
 
-    protected void setoverflow() { cpu.setFlag(Flag.OVERFLOW); }
+    protected void setoverflow() { 
+    	cpu.setFlag(Flag.OVERFLOW); 
+    }
 
-    protected void clearoverflow() { cpu.clearFlag(Flag.OVERFLOW); }
-
-    protected void setsign() { cpu.setFlag(Flag.NEGATIVE); }
-
-    protected void clearsign() { cpu.clearFlag(Flag.NEGATIVE); }
-
-    protected int read6502(int address)
-    {
-        //	    if ( (address & 0xffff) == 0xd019) {
-        //	        System.out.println("Read from PC "+HexDump.toAdr( cpu.pc() ) );
-        //	    }
-        return memory.readByte( address );
+    protected void clearoverflow() { 
+    	cpu.clearFlag(Flag.OVERFLOW); 
     }
 
     protected int readAndWrite6502(int address) {
@@ -96,10 +96,18 @@ public final class CPUImpl
 	    memory.writeByte( address , (byte) value );
 		return value;
     }
+    protected void setsign() { 
+    	cpu.setFlag(Flag.NEGATIVE); 
+    }
 
     protected void write6502(int address,int value)
     {
         memory.writeByte( address , (byte) value );
+    }
+
+
+    protected void clearsign() { 
+    	cpu.clearFlag(Flag.NEGATIVE); 
     }
 
     //flag calculation macros
@@ -206,7 +214,7 @@ public final class CPUImpl
         final int startpage = ea & 0xFF00;
         ea += cpu.getX();
 
-        if (startpage != (ea & 0xFF00)) { //one cycle penlty for page-crossing on some opcodes
+        if (startpage != (ea & 0xFF00)) { //one cycle penalty for page-crossing
             penaltyaddr = true;
         }
 
@@ -218,7 +226,7 @@ public final class CPUImpl
         final int startpage = ea & 0xFF00;
         ea += cpu.getY();
 
-        if (startpage != (ea & 0xFF00)) { //one cycle penlty for page-crossing on some opcodes
+        if (startpage != (ea & 0xFF00)) { //one cycle penalty for page-crossing
             penaltyaddr = true;
         }
         cpu.incPC(2);
@@ -257,7 +265,7 @@ public final class CPUImpl
         final int startpage = ea & 0xFF00;
         ea += cpu.getY();
 
-        if (startpage != (ea & 0xFF00)) { //one cycle penalty for page-crossing on some opcodes
+        if (startpage != (ea & 0xFF00)) { //one cycle penalty for page-crossing
             penaltyaddr = true;
         }
     };
@@ -286,6 +294,33 @@ public final class CPUImpl
             write6502(ea, saveval);
         }
     }
+    
+    protected int read6502(int address)
+    {
+        //	    if ( (address & 0xffff) == 0xd019) {
+        //	        System.out.println("Read from PC "+HexDump.toAdr( cpu.pc() ) );
+        //	    }
+    	if ( CPU.MEMORY_BREAKPOINTS_SUPPORTED ) {
+    		cpu.mbph.checkReadBreakpoint( address );
+    	}
+        return memory.readByte( address );
+    }
+
+    protected int readAndWrite6502(int address) 
+    {
+    	if ( CPU.MEMORY_BREAKPOINTS_SUPPORTED ) {
+    		cpu.mbph.checkReadWriteBreakpoint( address );
+    	}    	
+        return memory.readAndWriteByte( address );
+    }
+
+    protected void write6502(int address,int value)
+    {
+    	if ( CPU.MEMORY_BREAKPOINTS_SUPPORTED ) {
+    		cpu.mbph.checkWriteBreakpoint( address );
+    	}     	
+        memory.writeByte( address , (byte) value );
+    }    
 
     //instruction handler functions
     protected final Runnable adc = () ->
