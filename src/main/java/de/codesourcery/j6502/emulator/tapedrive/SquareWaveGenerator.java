@@ -34,9 +34,9 @@ public class SquareWaveGenerator
          *  (66 * 8) / 985248 =  1866 Hz      =  528 cycles
          *  (86 * 8) / 985248 =  1432,0465 Hz =  688 cycles
          */
-        SHORT("SHORT", 336 ), // 336 
-        MEDIUM("MEDIUM", 508 ), // 508
-        LONG("LONG", 672 ), // 672
+        SHORT("SHORT", 384 ), // 336 
+        MEDIUM("MEDIUM", 528 ), // 508
+        LONG("LONG", 688 ), // 672
         SILENCE_SHORT("SILENCE SHORT (0.33s)" , 325131) { 
 
             @Override

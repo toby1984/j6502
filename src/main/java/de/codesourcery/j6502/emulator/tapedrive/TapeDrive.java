@@ -112,6 +112,12 @@ public class TapeDrive
 	
 	public static void main(String[] args) throws IOException {
         
+	    int a=0;
+	    int b=1;
+	    int c=1;
+	    System.out.println("a^b="+(a^b^c));
+	    System.exit(0);
+	    
 	    TapeDrive drive = new TapeDrive();
 	    drive.insert( new T64File(new File("/home/tgierke/mars_develop_workspace/j6502/tapes/choplifter.t64")) );
 	    drive.setKeyPressed( true );

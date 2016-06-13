@@ -3,6 +3,11 @@
  ; $B1 => speed correction factor
  ; $A3 => Bit counter
  ; $B4 => Aktuelle IRQ mask für Timer A , entweder $81 (=> Timer A Underflow IRQ enabled) oder 0 (Timer A IRQ disabled)
+ 
+ 
+ ; $02A2 = CRB1
+ ; $02A3 = ICR
+ ; $02A4 = CRA1
 
 .,F92C AE 07 DC LDX $DC07       Timer B HIGH laden
 .,F92F A0 FF    LDY #$FF        Y-Register mit $FF laden (um verstrichene Cycles zu berechnen)
@@ -143,7 +148,7 @@
 .,F9B0 AD A3 02 LDA $02A3       ICR in Akku
 .,F9B3 29 01    AND #$01        Bit 0 isolieren
 .,F9B5 D0 05    BNE $F9BC       verzweige wenn Interrupt von Timer A
-.,F9B7 AD A4 02 LDA $02A4       Timer A abgelaufen
+.,F9B7 AD A4 02 LDA $02A4       Load CRB1 Timer A abgelaufen
 .,F9BA D0 16    BNE $F9D2       nein, dann zum Interruptende
 
 ; EOB empfangen
@@ -674,7 +679,7 @@ $F90A  8A            TXA             ; (2/3) high-order bits to Accumulator
 $F90B  6D  07  DC    ADC $DC07       ;add high order offset to TBH1
 $F90E  8D  05  DC    STA $DC05       ;and store in TAH1
 
-$F911  AD  A2  02    LDA $02A2
+$F911  AD  A2  02    LDA $02A2       ; CRB1
 $F914  8D  0E  DC    STA $DC0E       ;set CRA1 from CRB1 activity register (%10001)
 $F917  8D  A4  02    STA $02A4       ;and save it
 
