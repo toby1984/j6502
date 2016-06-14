@@ -33,7 +33,7 @@ import de.codesourcery.j6502.emulator.EmulatorDriver.IEmulationListener;
 import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
 import de.codesourcery.j6502.emulator.VIC;
 import de.codesourcery.j6502.emulator.diskdrive.DiskHardware;
-import de.codesourcery.j6502.emulator.tapedrive.T64File;
+import de.codesourcery.j6502.emulator.tapedrive.TapeFile;
 import de.codesourcery.j6502.ui.KeyboardInputListener.JoystickPort;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
@@ -560,13 +560,15 @@ public class Debugger
 		chooser.setFileFilter( new FileFilter()
 		{
             @Override
-            public boolean accept(File f) {
-                return f.isDirectory() || ( f.isFile() && ( f.getName().toLowerCase().endsWith(".t64" ) ) );
+            public boolean accept(File f) 
+            {
+                return f.isDirectory() || ( f.isFile() && ( f.getName().toLowerCase().endsWith(".t64" )
+                        || f.getName().toLowerCase().endsWith(".tap" )) );
             }
 
             @Override
             public String getDescription() {
-                return ".t64";
+                return ".t64 / .tap";
             }
 		});
 		if ( chooser.showOpenDialog( null ) != JFileChooser.APPROVE_OPTION )
@@ -577,8 +579,9 @@ public class Debugger
 		final File file = chooser.getSelectedFile();
 
 		loc.getConfigProperties().put( "last_t64_file" , file.getAbsolutePath() );
-		synchronized( emulator ) {
-			emulator.tapeDrive.insert( new T64File( file ) );
+		synchronized( emulator ) 
+		{
+			emulator.tapeDrive.insert( TapeFile.load( file ) );
 		}
 	}
 	

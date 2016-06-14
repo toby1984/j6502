@@ -12,7 +12,7 @@ import java.util.List;
 import de.codesourcery.j6502.emulator.D64File;
 import de.codesourcery.j6502.utils.CharsetConverter;
 
-public class T64File 
+public class T64File implements TapeFile
 {
 	public final byte[] data;
 	
@@ -92,7 +92,13 @@ public class T64File
 		containerName = getASCIIString( 0x28 , 24 ).trim();
 		
 		for (int i = 0 ; i < usedEntries ; i++ ) {
-			this.entries.add( new DirEntry( 64 + i*32 ) );
+			final DirEntry entry = new DirEntry( 64 + i*32 );
+            this.entries.add( entry );
+			System.out.println("Found dir entry: "+entry);
+			
+			if ( entry.endAddress == 0xC3C6) {
+			    throw new RuntimeException("Probably a bad T64 archive created by CONV64 (end address is $c3c6)");
+			}
 		}
 	}
 	
