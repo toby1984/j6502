@@ -12,7 +12,7 @@ import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.exceptions.HLTException;
-import de.codesourcery.j6502.emulator.tapedrive.SquareWaveGenerator.WavePeriod;
+import de.codesourcery.j6502.emulator.tapedrive.WavePeriod;
 import de.codesourcery.j6502.utils.HexDump;
 
 /**

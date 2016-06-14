@@ -6,8 +6,6 @@ import java.nio.file.Files;
 
 import org.apache.commons.lang.StringUtils;
 
-import de.codesourcery.j6502.emulator.tapedrive.SquareWaveGenerator.WavePeriod;
-
 public class WavReader 
 {
     private byte[] data;
@@ -99,6 +97,7 @@ The "data" subchunk contains the size of the data and the actual sound:
 44        *   Data             The actual sound data.     
      */    
     
+    private final Map<WavePeriod.Type,MinMaxAvg> statistics = new HashMap<>();
     public void load(File file) throws IOException 
     {
         data = Files.readAllBytes( file.toPath() );
@@ -107,6 +106,7 @@ The "data" subchunk contains the size of the data and the actual sound:
         assertMatches(8 , 0x57415645 , "Not a WAVE file");
         
         final int chunkSize = read32Bit( 4 );
+        @SuppressWarnings("unused")
         final int fileSize = chunkSize+8;
 //        assertEquals(fileSize,data.length, "Filesize does not match chunkSize");
         
@@ -120,10 +120,12 @@ The "data" subchunk contains the size of the data and the actual sound:
         final int numChannels = read16Bit( 22 );
         assertEquals( 1 , numChannels , "Unsupported channel count");
         final int sampleRate = read32Bit( 24 );
+        @SuppressWarnings("unused")
         final int byteRate = read32Bit( 28 );
         final int bitsPerSample = read16Bit( 34 );
         
         assertMatches( 36 , 0x64617461 , "'data' chunk missing" );
+        @SuppressWarnings("unused")
         final int dataChunkSize = read32Bit( 40 );
         
         System.out.println("File parsed ok.");
@@ -136,7 +138,7 @@ The "data" subchunk contains the size of the data and the actual sound:
          * Long   = 1575.0001 (28) , 1633.3334 (27)
          */
         final boolean printSamples=false;
-        final boolean printWave=true;
+        final boolean printWave=false;
         
         final StateMachine stateMachine = new StateMachine();
         
@@ -193,16 +195,17 @@ The "data" subchunk contains the size of the data and the actual sound:
                     final float cycles = secondsToClockCycles( sampleCountToSeconds( period , sampleRate ) );
                     type = sampleCountToPeriod( period , sampleRate );
                     
+                        final MinMaxAvg existing = statistics.computeIfAbsent( type.type , t -> new MinMaxAvg() );
                     final boolean typeChanged = type != previousType;
                     
                     if ( typeChanged ) 
                     {
-                        if ( printWave && repetitions > 1 ) 
+                        if ( repetitions > 1 ) 
                         {
                             final int totalCount = repetitions+1;
                             final float time = sampleCountToSeconds( repeatedSamples , sampleRate );
                             System.out.flush();
-                            System.err.print("Last waveform seen "+totalCount+" times ("+repeatedSamples+" samples , "+time+" s).\n");
+                            System.err.print("Last waveform "+previousType+" seen "+totalCount+" times ("+repeatedSamples+" samples , "+time+" s) , now got "+type+" \n");
                         }
                         repetitions=0;
                         repeatedSamples=0;
@@ -289,6 +292,7 @@ The "data" subchunk contains the size of the data and the actual sound:
                 if ( wave != WavePeriod.MEDIUM ) {
                     System.out.flush();
                     System.err.println("Not a valid bit wave sequence ("+waveZero+","+wave+"), assuming 0 bit");
+                    byteCount = 0;
                 }
                 value >>>= 1;
             } else if ( waveZero == WavePeriod.MEDIUM && wave == WavePeriod.SHORT ) { // 1 bit

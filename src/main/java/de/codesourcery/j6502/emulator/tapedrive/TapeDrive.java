@@ -22,7 +22,7 @@ public class TapeDrive
 	
 	private final SquareWaveDriver driver = new SquareWaveDriver();
 	
-	private T64File tape;
+	private TapeFile tape;
 	
 	private boolean motorOn;
 	private boolean keyPressed;
@@ -31,7 +31,7 @@ public class TapeDrive
 	
 	private int silenceTicks = SILENCE_TICKS;
 	
-	public void insert(T64File tape) 
+	public void insert(TapeFile tape) 
 	{
 		Validate.notNull(tape, "tape must not be NULL");
 		this.tape = tape;
@@ -43,7 +43,7 @@ public class TapeDrive
 		this.driver.reset();
 	}
 
-	public T64File getTape() {
+	public TapeFile getTape() {
 	    return tape;
 	}
 	

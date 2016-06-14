@@ -5,115 +5,6 @@ import java.util.List;
 
 public class SquareWaveGenerator 
 {
-    public enum WavePeriod
-    {
-        /*
-         * http://c64tapes.org/dokuwiki/doku.php?id=loaders:rom_loader
-         * http://www.atarimagazines.com/compute/issue57/turbotape.html
-         * http://c64tapes.org/dokuwiki/doku.php?id=analyzing_loaders 
-         *         
-         * CPU freq: 985248 Hz
-         * 
-         * (S)hort  : 2840 Hz
-         * (M)edium : 1953 Hz
-         * (L)ong   : 1488 Hz
-         * 
-         * Default timing thresholds at start of algorithm (speed constant $B0 contains 0)
-         * 
-         * => short pulse = 240-432 cycles , avg. 336 cycles .... 2280 Hz - 4105 Hz  
-         * => medium pulse = 432-584 cycles , avg. 508 cycles ...1687 Hz - 2280 Hz
-         * => long pulse = 584-760 cycles, avg. 672 cycles .. 1296 Hz - 1687  
-         * 
-         * C64 TAP files:
-         * 
-         * (S)hort  : TAP value $30 (48)
-         * (M)edium : TAP value $42 (66)
-         * (L)ong   : TAP value $56 (86)
-         * 
-         *  (48 * 8) / 985248 =  2565,75 Hz   =  384 cycles
-         *  (66 * 8) / 985248 =  1866 Hz      =  528 cycles
-         *  (86 * 8) / 985248 =  1432,0465 Hz =  688 cycles
-         */
-        SHORT("SHORT", 384 ), // 336 
-        MEDIUM("MEDIUM", 528 ), // 508
-        LONG("LONG", 688 ), // 672
-        SILENCE_SHORT("SILENCE SHORT (0.33s)" , 325131) { 
-
-            @Override
-            public void onEnter(SquareWaveGenerator state) 
-            {
-                state.currentTicks = ticks;
-            }
-
-            @Override
-            public boolean tick(SquareWaveGenerator state)
-            {
-                // just wait without toggling signal line
-                state.currentTicks--;
-                if ( state.currentTicks <= 0 ) 
-                {
-                    return true; // advance to next state
-                }
-                return false;
-            }
-        },
-        SILENCE_LONG("SILENCE LONG (1.32s)" , 325131*4) { 
-
-            @Override
-            public void onEnter(SquareWaveGenerator state) 
-            {
-                state.currentTicks = ticks;
-            }
-
-            @Override
-            public boolean tick(SquareWaveGenerator state)
-            {
-                // just wait without toggling signal line
-                state.currentTicks--;
-                if ( state.currentTicks == 0 ) 
-                {
-                    return true; // advance to next state
-                }
-                return false;
-            }
-        };        
-        
-
-        protected final int ticks;
-        private final String name;
-
-        private WavePeriod(String name,double ticks) {
-            this.name = name;
-            this.ticks = (int) ticks;
-        }
-
-        public void onEnter(SquareWaveGenerator state) 
-        {
-            state.currentTicks = ticks/2; // square wave with 50% duty cycle
-            state.signalAtStartOfWave = state.currentSignal;
-        }
-
-        public boolean tick(SquareWaveGenerator state) 
-        {
-            state.currentTicks--;
-            if ( state.currentTicks == 0 ) 
-            {
-                state.currentSignal = ! state.currentSignal;
-                state.currentTicks = ticks/2; // square wave with 50% duty cycle
-                if ( state.currentSignal == state.signalAtStartOfWave ) 
-                {
-                    return true; // advance to next state
-                }
-            }
-            return false;
-        }
-
-        @Override
-        public String toString() {
-            return name+" ("+ticks+" ticks)";
-        }
-    }
-
     private final WaveArray waves = new WaveArray(1024);
 
     protected static final class Marker  // TODO: class is debug only , remove when done
@@ -194,10 +85,10 @@ public class SquareWaveGenerator
         }
     }
 
-    private boolean signalAtStartOfWave;
+    public boolean signalAtStartOfWave;
     private WavePeriod currentWave;
-    private boolean currentSignal;
-    private int currentTicks;
+    public boolean currentSignal;
+    public int currentTicks;
 
     public boolean currentSignal() 
     {

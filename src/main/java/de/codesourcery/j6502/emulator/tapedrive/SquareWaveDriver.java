@@ -1,7 +1,8 @@
 package de.codesourcery.j6502.emulator.tapedrive;
 
+import org.apache.commons.lang.Validate;
+
 import de.codesourcery.j6502.emulator.D64File.FileType;
-import de.codesourcery.j6502.emulator.tapedrive.SquareWaveGenerator.WavePeriod;
 import de.codesourcery.j6502.emulator.tapedrive.T64File.DirEntry;
 
 public class SquareWaveDriver 
@@ -14,7 +15,19 @@ public class SquareWaveDriver
     private static final boolean DEBUG = true;
     private final SquareWaveGenerator generator = new SquareWaveGenerator();
     
-    public void insert(T64File file) 
+    public void insert(TapeFile file) 
+    {
+        Validate.notNull(file, "file must not be NULL");
+        if ( file instanceof T64File ) {
+            insert( (T64File) file);
+        } else if ( file instanceof TAPFile ) {
+            insert( (TAPFile) file);
+        } else {
+            throw new IllegalArgumentException("Unhandled file type: "+file.getClass().getName());
+        }
+    }
+    
+    private void insert(T64File file) 
     {
         generator.reset();
         
@@ -35,6 +48,21 @@ public class SquareWaveDriver
         
         generator.rewind();
     }
+    
+    private void insert(TAPFile file) 
+    {
+        generator.reset();
+        
+        if ( DEBUG ) {
+            System.out.println("Loading tape: "+file);
+        }
+        
+        for ( WavePeriod p : file.getData() ) {
+            generator.addWave( p );
+        }
+        
+        generator.rewind();
+    }    
     
     public int wavesRemaining() {
         return generator.wavesRemaining();
@@ -66,11 +94,8 @@ public class SquareWaveDriver
         
         generator.addMarker("Gap #1");
         
-        writeGap(); // short pulses
+        writeShortPulses( 79 );
         
-        generator.addMarker("Gap short (0.33s)");
-        generator.addWave( WavePeriod.SILENCE_SHORT );          
-
         // repetition
         generator.addMarker("Sync #2 repeated");
         writeSyncRepeated();
@@ -96,7 +121,7 @@ public class SquareWaveDriver
         writeData( entry );
         
         generator.addMarker("data gap");            
-        writeGap();
+        writeShortPulses( 79 );
         
         generator.addMarker("Gap short (0.33s)");
         generator.addWave( WavePeriod.SILENCE_SHORT );                 
@@ -197,14 +222,6 @@ public class SquareWaveDriver
         }         
         // write leader: $6A00 short pulses (10 seconds) 
         writeShortPulses( 0x6a00 );
-    }
-    
-    private void writeGap() {
-        if ( DEBUG ) {
-            System.out.print("Generating: GAP - ");
-        } 
-        //  $4F   before HEADER REPEATED and DATA REPEATED
-        writeShortPulses( 0x4f );
     }
     
     private void writeTrailer() 
