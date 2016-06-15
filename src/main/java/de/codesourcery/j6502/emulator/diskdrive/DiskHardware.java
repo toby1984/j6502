@@ -715,7 +715,7 @@ public class DiskHardware implements SerialDevice
         this.via2.tick();
 
         if ( ! diskDrive.executeOneCPUCycle() ) {
-            emulator.hardwareBreakpointReached();
+            emulator.setExternalHwBreakpointReached();
         }        
     }
 

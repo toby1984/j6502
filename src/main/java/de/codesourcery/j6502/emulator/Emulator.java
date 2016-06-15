@@ -25,7 +25,7 @@ public class Emulator
 
 	private IMemoryProvider memoryProvider;
 
-	private boolean hwBreakpointReached;
+	private boolean externalHwBreakpointReached;
 	
 	private final CPUImpl cpuImpl;
 
@@ -66,7 +66,7 @@ public class Emulator
 
 	public void reset()
 	{
-	    hwBreakpointReached = false;
+	    externalHwBreakpointReached = false;
 	    
 		memory.reset();
 
@@ -86,64 +86,71 @@ public class Emulator
 
 	public void doOneCycle(EmulatorDriver driver)
 	{
-		/* First (low) half of clock cycle.
-		 *
-		 * One period of this signal corresponds to one clock cycle consisting
+        /* First (low) half of clock cycle.
+         *
+         * One period of this signal corresponds to one clock cycle consisting
          * of two phases: ph2 is low in the first phase and high in the second
          * phase (hence the name 'ph2' for "phase 2"). The 6510 only accesses
          * the bus in the second (HIGH) clock phase, the VIC normally only in the
          * first (LOW) phase.
-		 */
+         */
 
-		memory.tick( this , this.cpu , false ); // clock == LOW
+        memory.tick( this , this.cpu , false ); // clock == LOW
 
-		/*
-		 * Second (high) half of clock cycle.
-		 */
-		if ( --this.cpu.cycles == 0 ) // wait until current command has 'finished' executing
-		{
-			this.cpu.handleInterrupt();
-			
-			if ( PRINT_DISASSEMBLY )
-			{
-				System.out.println("=====================");
-				final Disassembler dis = new Disassembler();
-				dis.setAnnotate( true );
-				dis.setWriteAddresses( true );
-				dis.disassemble( memory , cpu.pc() , 3 , new Consumer<Line>()
-				{
-					private boolean linePrinted = false;
-
-					@Override
-					public void accept(Line line)
-					{
-						if ( ! linePrinted ) {
-							System.out.println( line );
-							linePrinted = true;
-						}
-					}
-				});
-			}
-
-		    cpuImpl.executeInstruction();
-
-			if ( PRINT_DISASSEMBLY ) {
-				System.out.println( cpu );
-			}
-		}
-
-		memory.tick( this , cpu , true ); // clock == HIGH
-		
-        if ( cpu.isHardwareBreakpointReached() || hwBreakpointReached ) 
+        /*
+         * Second (high) half of clock cycle.
+         */
+        boolean internalHwBreakpointReached = false;
+        if ( --this.cpu.cycles == 0 ) // wait until current command has 'finished' executing
         {
-            hwBreakpointReached = false;
+            internalHwBreakpointReached = cpu.isHardwareBreakpointReached(); 
+            
+            if ( this.cpu.handleInterrupt() ) {
+                this.cpu.cycles+=7; // delay executing first IRQ routine instruction by 7 clock cycles , that's how long the 6510 takes to jump to an IRQ
+            } 
+            else
+            {
+                if ( PRINT_DISASSEMBLY )
+                {
+                    System.out.println("=====================");
+                    final Disassembler dis = new Disassembler();
+                    dis.setAnnotate( true );
+                    dis.setWriteAddresses( true );
+                    dis.disassemble( memory , cpu.pc() , 3 , new Consumer<Line>()
+                    {
+                        private boolean linePrinted = false;
+    
+                        @Override
+                        public void accept(Line line)
+                        {
+                            if ( ! linePrinted ) {
+                                System.out.println( line );
+                                linePrinted = true;
+                            }
+                        }
+                    });
+                }
+    
+                cpuImpl.executeInstruction();
+    
+                if ( PRINT_DISASSEMBLY ) {
+                    System.out.println( cpu );
+                }
+            }
+        }
+
+        memory.tick( this , cpu , true ); // clock == HIGH
+        
+        if ( internalHwBreakpointReached || externalHwBreakpointReached ) 
+        {
+            externalHwBreakpointReached = false;
             driver.hardwareBreakpointReached();
-        }		
+        }       
         
         if ( TRACK_TOTAL_CYCLES ) {
             totalCycles++;
         }
-	}
+    }	
 
 	public KeyboardBuffer getKeyboardBuffer() {
 		return memory.ioArea.keyboardBuffer;
@@ -153,7 +160,7 @@ public class Emulator
 		return memory.ioArea.iecBus;
 	}
 
-    public void hardwareBreakpointReached() {
-        hwBreakpointReached = true;
+    public void setExternalHwBreakpointReached() {
+        externalHwBreakpointReached = true;
     }
 }

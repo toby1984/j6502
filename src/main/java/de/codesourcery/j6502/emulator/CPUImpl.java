@@ -35,7 +35,6 @@ public final class CPUImpl
     protected int ea, reladdr, value, result;
     protected int opcode;
     protected byte oldstatus;
-    
 
 
     public CPUImpl(CPU cpu,IMemoryRegion region)
@@ -297,9 +296,6 @@ public final class CPUImpl
     
     protected int read6502(int address)
     {
-        //	    if ( (address & 0xffff) == 0xd019) {
-        //	        System.out.println("Read from PC "+HexDump.toAdr( cpu.pc() ) );
-        //	    }
     	if ( CPU.MEMORY_BREAKPOINTS_SUPPORTED ) {
     		cpu.mbph.checkReadBreakpoint( address );
     	}
@@ -800,7 +796,7 @@ public final class CPUImpl
     protected final Runnable lsr = () ->
     {
         value = getvaluereadwrite();
-        result = value >> 1;
+        result = value >>> 1;
 
         if ( (value & 1) != 0 ) {
             setcarry();
@@ -883,9 +879,9 @@ public final class CPUImpl
     {
         value = getvaluereadwrite();
         if (  cpu.isSet(Flag.CARRY ) ) {
-            result = (value >> 1) | 1 << 7;
+            result = (value >>> 1) | 1 << 7;
         } else {
-            result = (value >> 1);
+            result = (value >>> 1);
         }
 
         if ((value & 1) != 0 ) {
@@ -1111,17 +1107,16 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
 
         // TODO: Remove tape debug code
 
-        // FA57
-        
-        /*
-; $D7 contains first pulse: 0 = short pulse, 1 = medium pulse
-; X reg. contains latest pulse: 0 = short pulse, 1 = medium pulse         
-         */
-        if ( initialPC == 0xF9D5) 
+        if ( initialPC == 0xF92C) 
+        {
+            final int correction = memory.readByte( 0xb0 );
+            System.out.println("Speed correction: "+correction+" (%"+StringUtils.leftPad( Integer.toBinaryString(correction ) , 8 , '0' )+")" );
+        } 
+        else if ( initialPC == 0xF9D5) 
         {
             final WavePeriod first = memory.readByte( 0xd7 ) == 0 ? WavePeriod.SHORT : WavePeriod.MEDIUM;
             final WavePeriod second = cpu.getX() == 0 ? WavePeriod.SHORT : WavePeriod.MEDIUM;
-            System.out.println("Received pair ("+first+","+second+")");
+            System.out.println("Detected pair ("+first+","+second+")");
         } 
         else if ( initialPC == 0xFA10 ) 
         {
@@ -1139,20 +1134,15 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
         {
             System.out.println("Read error");
         } 
+        else if ( initialPC == 0xF959 ) 
+        {
+            final int elapsedLo = memory.readByte( 0xb1 ) & 0xff;
+            final int elapsedHi = cpu.getAccumulator() & 0xff;
+            final int elapsedCycles = (elapsedHi << 8 | elapsedLo)*4;
+            System.out.println("Elapsed cycles: "+elapsedCycles);
+        }
         else if ( initialPC == 0xFA08 ) 
         {
-            /*
-.,F9FC A5 B4    LDA $B4         Flag für Timer A laden
-.,F9FE F0 D2    BEQ $F9D2       verzweige wenn nicht frei ge-
-                                geben
-.,FA00 C6 A3    DEC $A3         Speicher für Bitzähler -1
-.,FA02 30 C5    BMI $F9C9       verzweige wenn Paritätsbit
-                                empfangen
-.,FA04 46 D7    LSR $D7         gelesenes Bit ins Carry und
-.,FA06 66 BF    ROR $BF         dann in $BF rollen
-.,FA08 A2 DA    LDX #$DA        Initialisierungswert für
-                                Timer A ins X-Register		     
-             */
             final int value = memory.readByte( 0xbf ); 
             final int bit = memory.readByte( 0xa3 ); 
             System.out.println("Byte is now: %"+StringUtils.leftPad( Integer.toBinaryString( value ) , 8 , "0" )+" , bit "+bit+" , ($"+Integer.toHexString(value) );

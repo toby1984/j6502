@@ -148,7 +148,7 @@ public final class BreakpointsController
     {
         if ( canStepOver(memory,cpu) ) // check whether PC is at a JSR $xxxx instruction
         {
-            addBreakpoint( new Breakpoint( cpu.pc()+3 , true , true ) ); // JSR $xxxx occupies 3 bytes
+            addBreakpoint( Breakpoint.oneShotBreakpoint( cpu.pc()+3 ) ); // JSR $xxxx occupies 3 bytes
             return true;
         }
         return false;

@@ -12,24 +12,24 @@
 .,F92C AE 07 DC LDX $DC07       Timer B HIGH laden
 .,F92F A0 FF    LDY #$FF        Y-Register mit $FF laden (um verstrichene Cycles zu berechnen)
 .,F931 98       TYA             in Akku schieben
-.,F932 ED 06 DC SBC $DC06       Timer B von $FF abziehen
-.,F935 EC 07 DC CPX $DC07       Timer B mit altem Wert vergleichen
+.,F932 ED 06 DC SBC $DC06       Accu = $FF - Timer B LO
+.,F935 EC 07 DC CPX $DC07       Timer B HI mit altem Wert vergleichen
 .,F938 D0 F2    BNE $F92C       verzweige, falls vermindert
-.,F93A 86 B1    STX $B1         Timer B HIGH ablegen
-.,F93C AA       TAX             und in Akku schieben
+.,F93A 86 B1    STX $B1         $B1 = Timer B HIGH
+.,F93C AA       TAX             X = $FF - Timer B Lo
 .,F93D 8C 06 DC STY $DC06       Timer B LOW und
 .,F940 8C 07 DC STY $DC07       Timer B HIGH auf $FF setzen
 .,F943 A9 19    LDA #$19        One-shot mode für Timer B
 .,F945 8D 0F DC STA $DC0F       festlegen und starten
 .,F948 AD 0D DC LDA $DC0D       Interrupt Control Register
 .,F94B 8D A3 02 STA $02A3       laden und nach $02A3
-.,F94E 98       TYA             Y-REG in Akku ($FF)
-.,F94F E5 B1    SBC $B1         Errechnung von vergangener Zeit seit letzter Flanke
-.,F951 86 B1    STX $B1         vergangene Zeit LOW nach $B1
-.,F953 4A       LSR             vergangene Zeit
-.,F954 66 B1    ROR $B1         (lo & hi)
-.,F956 4A       LSR             geteilt
-.,F957 66 B1    ROR $B1         durch vier
+.,F94E 98       TYA             Accu = $FF
+.,F94F E5 B1    SBC $B1         Accu = $FF - Timer B High
+.,F951 86 B1    STX $B1         $B1 = $$ - Timer B Lo
+.,F953 4A       LSR             HI/2
+.,F954 66 B1    ROR $B1         LO/2
+.,F956 4A       LSR             HI/2
+.,F957 66 B1    ROR $B1         LO/2
 
 ; Default timing thresholds at start of algorithm (speed constant $B0 contains 0)
 ; no. 1 => 240 cycles
@@ -147,7 +147,7 @@
 .,F9AE F0 22    BEQ $F9D2       => IRQ disabled
 .,F9B0 AD A3 02 LDA $02A3       ICR in Akku
 .,F9B3 29 01    AND #$01        Bit 0 isolieren
-.,F9B5 D0 05    BNE $F9BC       verzweige wenn Interrupt von Timer A
+.,F9B5 D0 05    BNE $F9BC       verzweige wenn Underflow Interrupt von Timer A
 .,F9B7 AD A4 02 LDA $02A4       Load CRB1 Timer A abgelaufen
 .,F9BA D0 16    BNE $F9D2       nein, dann zum Interruptende
 
@@ -228,7 +228,7 @@
 ; called after long pulse has been received
 ; -----------------------------------------
 .,FA10 A5 96    LDA $96         Prüfe ob EOB ( ( >16 short pulses) , cassette block synchronization number) empfangen ( ($96) != 0 )
-.,FA12 F0 04    BEQ $FA18       falls nein, verzweige
+.,FA12 F0 04    BEQ $FA18       => kein EOB
 .,FA14 A5 B4    LDA $B4         Timer A Underflow IRQ enabled flag
 .,FA16 F0 07    BEQ $FA1F       IRQ disabled => überspringe Bit Zähler Test
                                 
