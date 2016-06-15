@@ -28,7 +28,6 @@ import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
 import de.codesourcery.j6502.emulator.*;
 import de.codesourcery.j6502.emulator.BreakpointsController.IBreakpointLister;
-import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.EmulatorDriver.IEmulationListener;
 import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
 import de.codesourcery.j6502.emulator.VIC;
@@ -830,8 +829,8 @@ public class Debugger
 
             final BreakpointsController bpController = getBreakPointsController();
             bpController.removeAllBreakpoints();
-            bpController.addBreakpoint( new Breakpoint( (short) 0x45bf , false , true ) );
-            bpController.addBreakpoint( new Breakpoint( (short) 0x40cb , false , true ) );
+			bpController.addBreakpoint( Breakpoint.unconditionalBreakpoint( (short) 0x45bf ) );
+			bpController.addBreakpoint( Breakpoint.unconditionalBreakpoint( (short) 0x40cb ) );
             hexPanel.setAddress( (short) 0x210 );
             updateWindows(false);
         }

@@ -188,7 +188,7 @@ public abstract class DisassemblyPanel extends BufferedView implements WindowLoc
                         if ( breakpoint != null ) {
                             controller.removeBreakpoint( breakpoint );
                         } else {
-                            controller.addBreakpoint( new Breakpoint( adr , false , true ) );
+                            controller.addBreakpoint( Breakpoint.unconditionalBreakpoint( adr ) );
                         }
                         refresh(null);
                     }

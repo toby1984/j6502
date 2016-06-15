@@ -79,6 +79,17 @@ public class CPU
 			}
 			return (byte) result;
 		}
+		
+		public static Flag fromSymbol(char c) 
+		{
+		    final char reg = Character.toLowerCase( c );
+		    for ( int i = 0 ; i < values().length ; i++ ) {
+		        if ( values()[i].symbol == reg ) {
+		            return values()[i];
+		        }
+		    }
+		    throw new RuntimeException("Unknown register symbol: "+c);
+		}
 	}
 
 	public void populateFrom(CPU other) {
@@ -334,7 +345,11 @@ public class CPU
 		return Arrays.stream( Flag.values() ).filter( f -> f.isSet( this.flags ) ).collect(Collectors.toSet());
 	}
 
-    public void handleInterrupt()
+	/**
+	 * 
+	 * @return <code>true</code> if PC was changed to an IRQ routine, otherwise <code>false</code>
+	 */
+    public boolean handleInterrupt()
 	{
 	    switch( interruptQueued )
 	    {
@@ -344,22 +359,25 @@ public class CPU
 	                hwBreakpointReached = true;
 	                breakOnInterrupt = false;
 	            }
-	            break;
+	            return true;
 	        case NONE:
 	            break;
 	        case REGULAR:
             case BRK:
-                if ( isCleared( Flag.IRQ_DISABLE ) ) {
+                if ( isCleared( Flag.IRQ_DISABLE ) ) 
+                {
                     performInterrupt();
                     if ( breakOnInterrupt ) {
                         hwBreakpointReached = true;
                         breakOnInterrupt = false;
-                    }                    
+                    }
+                    return true;
                 }
                 break;
             default:
                 throw new RuntimeException("Unreachable code reached");
 	    }
+	    return false;
 	}
 
 	public boolean isInterruptQueued() {

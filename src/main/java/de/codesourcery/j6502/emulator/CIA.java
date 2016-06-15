@@ -36,6 +36,10 @@ public class CIA extends Memory
     public static final int CIA_ICR        = 0x0d;
     public static final int CIA_CRA        = 0x0e;
     public static final int CIA_CRB        = 0x0f;
+    
+    public static final int IRQ_UNDERFLOW_TIMER_A = 1<<0;
+    public static final int IRQ_UNDERFLOW_TIMER_B = 1<<1;
+    public static final int IRQ_FLAG_PIN = 1<<4;    
 
     /*
 ----
@@ -308,6 +312,10 @@ CRB 	Control Timer B 	see CIA 1
         public TimeOfDay flip() { return this == AM ? PM : AM; }
     }
 
+    private boolean reloadTimerA = false;
+    private boolean reloadTimerB = false;
+    
+    private int raiseIRQ;
     private int irqMask;
     private int icr_read;
 
@@ -358,6 +366,11 @@ CRB 	Control Timer B 	see CIA 1
     {
         super.reset();
         
+        reloadTimerA = false;
+        reloadTimerB = false;
+        
+        raiseIRQ = 0;
+        
         tapeSlopeCounter = 0;
 
         debugPreviousTapeSignalChangeTick = -1;
@@ -379,7 +392,7 @@ CRB 	Control Timer B 	see CIA 1
         timerBValue = 0x0;
         timerBLatch = 0xffff;
     }
-
+    
     @Override
     public int readByte(int adr)
     {
@@ -434,6 +447,7 @@ CRB 	Control Timer B
                 return result;
             case CIA_ICR:
                 result = icr_read & 0xff;
+                raiseIRQ = 0;
                 icr_read = 0;
                 return result;
                 /*
@@ -550,7 +564,13 @@ CRB 	Control Timer B
                     int mask = (value & 0b11111);
                     irqMask |= mask;
                 }
-                this.rtcAlarmIRQEnabled = (irqMask & 1<<2 ) != 0;				
+                this.rtcAlarmIRQEnabled = (irqMask & 1<<2 ) != 0;	
+                
+                if ( raiseIRQ == 0 && ( icr_read & irqMask ) != 0 ) 
+                {
+                    raiseIRQ = icr_read & irqMask;
+                }
+                
                 if ( DEBUG && (oldMask != irqMask ) ) {
                     System.out.println( this+" ICR = "+Integer.toBinaryString( irqMask ) );
                 }
@@ -560,8 +580,9 @@ CRB 	Control Timer B
                 break;
             case CIA_TAHI:
                 timerALatch = ( timerALatch & 0x00ff) | (( value & 0xff) <<8);
-                if ( ! timerARunning ) {
-                    timerAValue = timerALatch;
+                if ( ! timerARunning ) 
+                {
+                    reloadTimerA = true;
                 }
                 break;
             case CIA_TBLO:
@@ -570,7 +591,7 @@ CRB 	Control Timer B
             case CIA_TBHI:
                 timerBLatch = ( timerBLatch & 0x00ff) | (( value & 0xff) <<8);
                 if ( ! timerBRunning ) {
-                    timerBValue = timerBLatch;
+                    reloadTimerB = true;
                 }
                 break;
             case CIA_CRA:
@@ -680,6 +701,29 @@ CRB 	Control Timer B
 
     public void tick(CPU cpu)
     {
+        
+        if ( raiseIRQ != 0 ) 
+        {
+            final boolean timerAUnder = (raiseIRQ & IRQ_UNDERFLOW_TIMER_A) != 0 ;
+            final boolean timerBUnder = (raiseIRQ & IRQ_UNDERFLOW_TIMER_B) != 0;
+            final boolean flagChange = (raiseIRQ & IRQ_FLAG_PIN) != 0;
+            // System.out.println("IRQ raised "+this+" , mask = "+(timerAUnder ? "TIMER_A" : "" )+" | "+(timerBUnder? "TIMER_B" : "")+" | "+(flagChange?"FLAG":""));
+            cpu.queueInterrupt( IRQType.REGULAR );
+            raiseIRQ = 0;
+        }
+        
+        if ( reloadTimerA ) {
+            // System.out.println("Reloading "+this+" , timer A = "+timerALatch);
+            timerAValue = timerALatch;
+            reloadTimerA = false;
+        }
+        
+        if ( reloadTimerB ) {
+            // System.out.println("Reloading "+this+" , timer B = "+timerBLatch);
+            timerBValue = timerBLatch;
+            reloadTimerB = false;
+        }
+        
         // call BEFORE bumping tickCounter because this method needs to know when it's called the first time after a reset
         handleCassette( cpu ); 
 
@@ -710,16 +754,15 @@ CRB 	Control Timer B
             if ( ( cra & (1<<5) ) == 0 ) // timer counts system cycles
             {
                 timerAValue = (timerAValue-1) & 0xffff;
-                if ( timerAValue == 0xffff )
+                if ( timerAValue == 0 )
                 {
                     handleTimerAUnderflow(cra , cpu );
 
                     if ( timerBRunning && (crb & 0b1100000) == 0b1000000) { // timerB counts timerA underflow
                         timerBValue = (timerBValue-1) & 0xffff;
-                        if ( timerBValue == 0xffff ) {
+                        if ( timerBValue == 0 ) {
                             handleTimerBUnderflow( crb , cpu );
                         }
-                        return; /* RETURN */
                     }
                 }
             } else {
@@ -747,11 +790,15 @@ CRB 	Control Timer B
         {
             if ( (crb & 0b1100000) == 0b0000000 ) { // Timer B counts System cycles
                 timerBValue = (timerBValue-1) & 0xffff;
-                if ( timerBValue == 0xffff )
+                if ( timerBValue == 0 )
                 {
                     handleTimerBUnderflow(crb,cpu);
                 }
-            } else {
+            }  
+            else if ( (crb & 0b0110_0000) == 0b0100_0000 ) {
+                // ok, counts Timer A underflows
+            }
+            else {
                 throw new RuntimeException("Unsupported timer B mode: "+crb);
             }
         }
@@ -777,10 +824,10 @@ CRB 	Control Timer B
                     if ( DEBUG_TAPE_SLOPE ) {
                         long delta = tickCounter - debugPreviousTapeSignalChangeTick;
                         System.out.println("Detected positive slope #"+tapeSlopeCounter+" on /FLAG (IRQ enabled) - tick "+tickCounter+" (delta: "+delta+"), timerA: "+timerAValue+" , timerB: "+timerBValue);
-                    }	    	            	
-                    cpu.queueInterrupt( IRQType.REGULAR  );
+                    }	    	        
+                    raiseIRQ |= IRQ_FLAG_PIN;
                 } else if ( DEBUG_TAPE_SLOPE ) {
-                    long delta = tickCounter - debugPreviousTapeSignalChangeTick;	            	
+                    final long delta = tickCounter - debugPreviousTapeSignalChangeTick;	            	
                     System.out.println("Detected positive slope # "+tapeSlopeCounter+" on /FLAG (IRQ disabled) - tick "+tickCounter+" (delta: "+delta+") , timerA: "+timerAValue+" , timerB: "+timerBValue);
                 }	    
                 debugPreviousTapeSignalChangeTick = tickCounter;
@@ -803,15 +850,12 @@ CRB 	Control Timer B
         // ICR Bit 0: 1 = Interrupt release through timer A underflow
         icr_read |= ( (1<<7) | (1<<0) ); // timerA underflow triggered IRQ
         if ( (irqMask & 1) != 0 ) { // trigger interrupt on timer A underflow ?
-            cpu.queueInterrupt( IRQType.REGULAR  );
+            raiseIRQ |= IRQ_UNDERFLOW_TIMER_A;
         }
         if ( (cra & 1<<3) != 0 ) { // bit 3 = 1 => timer stops after underflow
             timerARunning = false;
         }
-        //		if ( DEBUG_VERBOSE ) {
-        //			System.out.println(this+" , timer A underflow , loading timer A latch = "+timerALatch);
-        //		}
-        timerAValue = timerALatch;
+        reloadTimerA = true;
     }
     
     private void handleTimerBUnderflow(int crb,CPU cpu)
@@ -822,8 +866,8 @@ CRB 	Control Timer B
         if ( (irqMask & (1<<1) ) != 0 ) { // trigger interrupt on timer B underflow ?
             if ( DEBUG_VERBOSE ) {
                 System.out.println(this+" queueing interrupt for timer B");
-            }               
-            cpu.queueInterrupt( IRQType.REGULAR  );
+            }              
+            raiseIRQ |= IRQ_UNDERFLOW_TIMER_B;
         }
         boolean timerBOneShotMode = (crb & 1<<3) != 0;
         if ( timerBOneShotMode ) { // bit 3 = 1 => timer stops after underflow
@@ -836,11 +880,18 @@ CRB 	Control Timer B
         if ( DEBUG_VERBOSE ) {
             System.out.println(this+" , timer B underflow , loading timer B latch = "+timerBLatch);
         }
-        timerBValue = timerBLatch;
+        reloadTimerB = true;
     }    
 
     private boolean isSetRTCAlarmTime()
     {
         return (readByte( CIA_CRB ) & 1<<7) != 0;
+    }
+    
+    @Override
+    public int readAndWriteByte(int offset) {
+        final int result = readByte( offset );
+        writeByte(offset,(byte) result);
+        return result;
     }
 }
