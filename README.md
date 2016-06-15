@@ -6,7 +6,7 @@ I initially had the foolish idea that I could get away with a crude emulation th
 
 Since the emulator is constantly under development, I added quite a lot of tooling around it to ease in debugging stuff...this screenshot should explain it :)
 
-<img src="https://github.com/toby1984/j6502/blob/master/screenshot.png?raw=true" width="640" height="480" />
+<img src="https://github.com/toby1984/j6502/blob/t64_support/screenshot.png?raw=true" width="640" height="480" />
 
 What's working:
 
