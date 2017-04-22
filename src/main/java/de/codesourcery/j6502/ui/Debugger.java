@@ -1,16 +1,60 @@
 package de.codesourcery.j6502.ui;
 
-import java.awt.*;
-import java.awt.event.*;
-import java.io.*;
-import java.util.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Rectangle;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
 import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import javax.swing.*;
+import javax.swing.AbstractButton;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComponent;
+import javax.swing.JDesktopPane;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JInternalFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextField;
+import javax.swing.JToggleButton;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.border.TitledBorder;
 import javax.swing.filechooser.FileFilter;
@@ -26,10 +70,20 @@ import de.codesourcery.j6502.assembler.parser.Scanner;
 import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
-import de.codesourcery.j6502.emulator.*;
+import de.codesourcery.j6502.emulator.Breakpoint;
+import de.codesourcery.j6502.emulator.BreakpointsController;
 import de.codesourcery.j6502.emulator.BreakpointsController.IBreakpointLister;
+import de.codesourcery.j6502.emulator.CPU;
+import de.codesourcery.j6502.emulator.D64File;
+import de.codesourcery.j6502.emulator.Emulator;
+import de.codesourcery.j6502.emulator.EmulatorDriver;
 import de.codesourcery.j6502.emulator.EmulatorDriver.IEmulationListener;
 import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
+import de.codesourcery.j6502.emulator.EmulatorTest;
+import de.codesourcery.j6502.emulator.G64File;
+import de.codesourcery.j6502.emulator.IMemoryProvider;
+import de.codesourcery.j6502.emulator.IMemoryRegion;
+import de.codesourcery.j6502.emulator.SerialDevice;
 import de.codesourcery.j6502.emulator.VIC;
 import de.codesourcery.j6502.emulator.diskdrive.DiskHardware;
 import de.codesourcery.j6502.emulator.tapedrive.TapeFile;
@@ -155,7 +209,6 @@ public class Debugger
     private final BlockAllocationPanel bamPanel = new BlockAllocationPanel();
     private final CalculatorPanel calculatorPanel = new CalculatorPanel();
 	private final CommentedCodeViewer codeViewer = new CommentedCodeViewer();
-	private final MemoryBreakpointPanel memoryBreakpoints = new MemoryBreakpointPanel(emulator);
 
     private final AsmPanel asmPanel = new AsmPanel(desktop)
     {
@@ -1415,7 +1468,7 @@ public class Debugger
                         final Integer address = MemoryBreakpointsPanel.parseHexAddress( sAddress );
                         if ( address != null ) 
                         {
-                            getBreakPointsController().addBreakpoint( new Breakpoint( address , false , true ) );
+                            getBreakPointsController().addBreakpoint( Breakpoint.unconditionalBreakpoint( address ));
                         }
                     }
                 }
@@ -1551,16 +1604,7 @@ public class Debugger
                     throw new IllegalArgumentException("No valid processor flags: "+aValue);
                 }
                 final String flagString = ((String) aValue).trim();
-                final Set<CPU.Flag> flags = new HashSet<>();
-                for ( char c : flagString.toCharArray() )
-                {
-                    Optional<Flag> flagToSet = Arrays.stream( CPU.Flag.values() ).filter( flag -> flag.symbol == c ).findFirst();
-                    if ( ! flagToSet.isPresent() ) {
-                        throw new IllegalArgumentException("No valid processor flags: '"+c+"'");
-                    }
-                    flags.add( flagToSet.get() );
-                }
-                newBP = new Breakpoint( currentBP.address , false , CPU.Flag.toBitMask( flags ) , true );
+                newBP = Breakpoint.toBreakpoint(currentBP.address , false , flagString  , true );
             }
             getBreakPointsController().addBreakpoint( newBP );
         }
@@ -1575,8 +1619,8 @@ public class Debugger
                 case 1:
                     return bp.isEnabled;
                 case 2:
-                    if ( bp.checkCPUFlags ) {
-                        return CPU.Flag.toFlagString( bp.cpuFlagsMask );
+                    if ( StringUtils.isNotBlank( bp.pattern ) ) {
+                        return bp.pattern;
                     }
                     return "<unconditional breakpoint>";
                 default:
