@@ -3,7 +3,9 @@ package de.codesourcery.j6502.emulator.tapedrive;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.lang.StringUtils;
@@ -47,7 +49,8 @@ public class WavReader
     
     public static void main(String[] args) throws IOException 
     {
-        new WavReader().load( new File("/home/tobi/mars_workspace/j6502/tapes/choplifter.wav") );
+//        new WavReader().load( new File("/home/tobi/mars_workspace/j6502/tapes/choplifter.wav") );
+        new WavReader().load( new File("/home/tobi/mars_workspace/j6502/tapes/vice.wav") );
     }
     
     /*
@@ -99,7 +102,87 @@ The "data" subchunk contains the size of the data and the actual sound:
 44        *   Data             The actual sound data.     
      */    
     
+    protected static final class MinMaxAvg 
+    {
+        public final List<Double> values = new ArrayList<>();
+        
+        public void add(double value) {
+            values.add( value );
+        }
+        
+        public double min() 
+        {
+            return values.stream().mapToDouble( d -> d.doubleValue() ).min().orElse( 0 );
+        }
+        
+        public double max() 
+        {
+            return values.stream().mapToDouble( d -> d.doubleValue() ).max().orElse( 0 );
+        }
+        
+        public double avg() 
+        {
+            return values.stream().mapToDouble( d -> d.doubleValue() ).average().orElse( 0 );
+        }
+        
+        public double stdDeviation() 
+        {
+            final double avg = avg();
+            return Math.sqrt( (1f/values.size()) * values.stream().mapToDouble( Double::doubleValue ).map( x -> (x - avg)*( x - avg ) ).sum() );
+        }
+        
+        @Override
+        public String toString() {
+            return "min/max/avg = "+min()+" / "+avg()+" / "+max()+" , std. deviation: "+stdDeviation()+" , count = "+values.size();
+        }
+    }
+    
     private final Map<WavePeriod.Type,MinMaxAvg> statistics = new HashMap<>();
+    private final MinMaxAvg statisticsUnclassified = new MinMaxAvg();
+    
+    protected static final class RingBuffer 
+    {
+        public int[] buffer;
+        public int ptr;
+        public int count;
+        
+        public RingBuffer(int size) {
+            this.buffer = new int[size];
+        }
+        
+        public void add(int value) 
+        {
+            ptr = (ptr+1) % buffer.length;
+            buffer[ ptr ] = value;
+            count++;
+        }
+        
+        public boolean isFull() {
+            return count >= buffer.length;
+        }
+        
+        public float gradient() 
+        {
+            return buffer[ ptr ] - getValue(-1);
+        }
+        
+        public float getValue(int offset) 
+        {
+            if ( offset > 0 || -offset > buffer.length) {
+                throw new IllegalArgumentException("Invalid offset: "+offset);
+            }
+            int idx = ptr+offset;
+            if ( idx < 0 ) {
+                idx += buffer.length;
+            }
+            return buffer[ idx ];
+        }
+        
+        public float previousGradient() 
+        {
+            return getValue(-1) - getValue(-2);
+        }        
+    }
     
     public void load(File file) throws IOException 
     {
@@ -145,9 +228,7 @@ The "data" subchunk contains the size of the data and the actual sound:
         
         final StateMachine stateMachine = new StateMachine();
         
-        int lastZeroCrossing=0;
-        int previousValue=0;
-        int previousGradient=0;
+        float lastZeroCrossing=0;
         int waveCount = 0;
         
         WavePeriod type = null;
@@ -158,33 +239,25 @@ The "data" subchunk contains the size of the data and the actual sound:
         
         int numberOfSameSamples = 0;
         
+        final RingBuffer ringBuffer = new RingBuffer(3);
+        
         for ( int sampleNo = 0 ; 44+sampleNo < data.length ; sampleNo++ ) 
         {
             final int value = data[44+sampleNo] & 0xff;
 
-            if ( sampleNo == 0 ) {
-                previousValue = value;
-                if ( printSamples ) {
-                    System.out.println();
-                }
+            ringBuffer.add( value );
+            
+            if ( ! ringBuffer.isFull() ) {
                 continue;
             }
-            final int gradient = value - previousValue;
-            if ( sampleNo == 1 ) 
-            {
-                previousValue = value;
-                previousGradient = gradient;
-                if ( printSamples ) {
-                System.out.println();
-                }
-                continue;
-            }
+            
+            final float gradient = ringBuffer.gradient();
             
             if ( printSamples ) {
                 System.out.print( value +" ("+sign(gradient)+")");
             }
             
-            final int prevSign = sign( previousGradient ) ; 
+            final int prevSign = sign( ringBuffer.previousGradient() ) ; 
             final int currentSign = sign( gradient ) ; 
             if ( prevSign != currentSign && ( ( prevSign == -1 && currentSign == 1 ) || ( prevSign == 0 && currentSign == 1 ) ) ) 
             {
@@ -194,11 +267,19 @@ The "data" subchunk contains the size of the data and the actual sound:
                 } 
                 else 
                 {
-                    final int period = sampleNo-lastZeroCrossing;
+                    
+                    float period = sampleNo-lastZeroCrossing;
+
                     final float cycles = secondsToClockCycles( sampleCountToSeconds( period , sampleRate ) );
                     type = sampleCountToPeriod( period , sampleRate );
                     
+                    if ( type == null ) {
+                        statisticsUnclassified.add( period );
+                    } else {
                         final MinMaxAvg existing = statistics.computeIfAbsent( type.type , t -> new MinMaxAvg() );
+                        existing.add( period );
+                    }
+                    
                     final boolean typeChanged = type != previousType;
                     
                     if ( typeChanged ) 
@@ -219,8 +300,8 @@ The "data" subchunk contains the size of the data and the actual sound:
                     waveCount++;
                     if ( printWave &&  typeChanged ) 
                     {
-//                        System.out.print(" => Wave "+waveCount+", "+sampleCountToSeconds( sampleNo ,  sampleRate )+ ": Zero crossing at sample "+sampleNo+" (samples: "+period+", cycles: "+cycles+",f="+sampleCountToFreq(period,sampleRate)+")");
-//                        System.out.println( " => "+type );
+                        System.out.print(" => Wave "+waveCount+", "+sampleCountToSeconds( sampleNo ,  sampleRate )+ ": Zero crossing at sample "+sampleNo+" (samples: "+period+", cycles: "+cycles+",f="+sampleCountToFreq(period,sampleRate)+")");
+                        System.out.println( " => "+type );
                     }
                     
                     if ( type == null ) 
@@ -244,10 +325,12 @@ The "data" subchunk contains the size of the data and the actual sound:
             } else {
                 numberOfSameSamples = 0;
             }
-            
-            previousValue = value;
-            previousGradient = gradient;
         }
+        
+        statistics.forEach( (period,minMax) -> {
+            System.out.println( period+" waves: "+minMax);
+        });
+        System.out.println("UNCLASSIFIED waves: "+statisticsUnclassified);
     }
     
     protected static abstract class State 
@@ -294,8 +377,9 @@ The "data" subchunk contains the size of the data and the actual sound:
                 
                 if ( wave != WavePeriod.MEDIUM ) {
                     System.out.flush();
-                    System.err.println("Not a valid bit wave sequence ("+waveZero+","+wave+"), assuming 0 bit");
+                    System.err.println("Not a valid bit wave sequence ("+waveZero+","+wave+"), assuming SYNC follows");
                     byteCount = 0;
+                    return WAIT_FOR_DATA_MARKER;
                 }
                 value >>>= 1;
             } else if ( waveZero == WavePeriod.MEDIUM && wave == WavePeriod.SHORT ) { // 1 bit
@@ -360,7 +444,7 @@ The "data" subchunk contains the size of the data and the actual sound:
         }
     }
     
-    private int sign(int value) {
+    private int sign(float value) {
         if ( value < 0 ) {
             return -1;
         }
@@ -376,7 +460,7 @@ The "data" subchunk contains the size of the data and the actual sound:
          * => long pulse = 584-760 cycles, avg. 672 cycles .. 1296 Hz - 1687     
      */
     
-    private WavePeriod sampleCountToPeriod(int count,int sampleRate) {
+    private WavePeriod sampleCountToPeriod(float count,int sampleRate) {
         
         final float f = sampleCountToFreq(count, sampleRate);
         
@@ -398,11 +482,11 @@ The "data" subchunk contains the size of the data and the actual sound:
         return (float) CLOCK_CYCLES_PER_SECOND/(1f/seconds);
     }
     
-    private float sampleCountToSeconds(int count,int sampleRate)  {
+    private float sampleCountToSeconds(float count,int sampleRate)  {
         return 1f / ((float) sampleRate/count);
     }
     
-    private float sampleCountToFreq(int count,int sampleRate) {
+    private float sampleCountToFreq(float count,int sampleRate) {
         float period =  1f / ((float) sampleRate/count);
         return 1f/period;
     }
