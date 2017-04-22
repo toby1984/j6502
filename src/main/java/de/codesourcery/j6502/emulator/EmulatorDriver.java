@@ -311,7 +311,6 @@ public abstract class EmulatorDriver extends Thread
 				onStart();
 			}
 
-			boolean breakpointReached = false;
 			synchronized( emulator )
 			{
 				try
@@ -330,8 +329,6 @@ public abstract class EmulatorDriver extends Thread
 					emulator.doOneCycle(this);
 
 					cyclesUntilNextTick--;
-					
-					breakpointReached = CPU.MEMORY_BREAKPOINTS_SUPPORTED && emulator.getCPU().getMemoryBreakpointHelper().isBreakpointHit();
 				}
 				catch(final Throwable e)
 				{
@@ -343,11 +340,8 @@ public abstract class EmulatorDriver extends Thread
 				}
 			}
 			
-            if ( (CPU.MEMORY_BREAKPOINTS_SUPPORTED && breakpointReached ) || getBreakPointsController().isAtBreakpoint() )
+            if ( emulator.getCPU().isHardwareBreakpointReached() )
             {
-            	if ( (CPU.MEMORY_BREAKPOINTS_SUPPORTED && breakpointReached ) ) {
-            		System.out.println("Memory breakpoint hit.");
-            	}
                 isRunnable = false;
                 cmd = stopCommand( false , true ); // assign to cmd so that next loop iteration will know why we stopped execution
                 sendCmd( cmd );

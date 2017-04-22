@@ -449,26 +449,6 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 	}
 	
 	@Override
-	public int readAndWriteByte(int adr) 
-	{
-        final int offset = adr & 0xffff;
-
-        if ( offset >= 0x800 && offset < 0x800+1024) {
-            return colorRAMBank.readByte( adr );
-        }
-        if ( offset >= 0xc00 && offset <= 0xcff) { // CIA #1 $DC00-$DCFF
-            return cia1.readByte( offset );
-        }
-        if ( offset >= 0xd00 && offset <= 0xdff ) { // CIA #2 $DD10-$DDFF
-            return cia2.readByte( offset );
-        }
-        if ( offset < 0x002f ) { // $D000 - $D02F ... VIC
-            return vic.readAndWriteByte( adr );
-        }
-        return super.readAndWriteByte(adr);
-	}
-
-	@Override
 	public void reset()
 	{
 		super.reset();

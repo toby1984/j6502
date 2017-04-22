@@ -886,12 +886,5 @@ CRB 	Control Timer B
     private boolean isSetRTCAlarmTime()
     {
         return (readByte( CIA_CRB ) & 1<<7) != 0;
-    }
-    
-    @Override
-    public int readAndWriteByte(int offset) {
-        final int result = readByte( offset );
-        writeByte(offset,(byte) result);
-        return result;
-    }
+    }    
 }

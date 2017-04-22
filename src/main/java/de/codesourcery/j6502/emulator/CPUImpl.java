@@ -99,12 +99,6 @@ public final class CPUImpl
     	cpu.setFlag(Flag.NEGATIVE); 
     }
 
-    protected void write6502(int address,int value)
-    {
-        memory.writeByte( address , (byte) value );
-    }
-
-
     protected void clearsign() { 
     	cpu.clearFlag(Flag.NEGATIVE); 
     }
@@ -296,25 +290,11 @@ public final class CPUImpl
     
     protected int read6502(int address)
     {
-    	if ( CPU.MEMORY_BREAKPOINTS_SUPPORTED ) {
-    		cpu.mbph.checkReadBreakpoint( address );
-    	}
         return memory.readByte( address );
-    }
-
-    protected int readAndWrite6502(int address) 
-    {
-    	if ( CPU.MEMORY_BREAKPOINTS_SUPPORTED ) {
-    		cpu.mbph.checkReadWriteBreakpoint( address );
-    	}    	
-        return memory.readAndWriteByte( address );
     }
 
     protected void write6502(int address,int value)
     {
-    	if ( CPU.MEMORY_BREAKPOINTS_SUPPORTED ) {
-    		cpu.mbph.checkWriteBreakpoint( address );
-    	}     	
         memory.writeByte( address , (byte) value );
     }    
 

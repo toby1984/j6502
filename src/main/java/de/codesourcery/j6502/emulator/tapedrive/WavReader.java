@@ -3,6 +3,8 @@ package de.codesourcery.j6502.emulator.tapedrive;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.commons.lang.StringUtils;
 
@@ -98,6 +100,7 @@ The "data" subchunk contains the size of the data and the actual sound:
      */    
     
     private final Map<WavePeriod.Type,MinMaxAvg> statistics = new HashMap<>();
+    
     public void load(File file) throws IOException 
     {
         data = Files.readAllBytes( file.toPath() );

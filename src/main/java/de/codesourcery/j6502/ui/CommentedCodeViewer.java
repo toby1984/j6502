@@ -608,4 +608,9 @@ public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.
         }
 
     }
+
+    @Override
+    public String getIdentifier() {
+        return "commentedCodeViewer";
+    }
 }
