@@ -31,6 +31,63 @@ public class TapeDrive
 	
 	private int silenceTicks = SILENCE_TICKS;
 	
+	private final TapeRecording tapeRecording = new TapeRecording();
+	
+	protected final class TapeRecording 
+	{
+	    public int[] transitions = new int[10];
+	    public int writePtr = 0;
+	    
+	    private boolean signal;
+	    private long lastSignalChange=-1;
+	    
+	    public int size() 
+	    {
+	        return writePtr;
+	    }
+	    
+	    private void recordChange(long tickDelta) 
+	    {
+	        if ( writePtr == transitions.length ) 
+	        {
+	            final int[] tmp = new int[ transitions.length + transitions.length/2 ];
+	            System.arraycopy( this.transitions , 0 ,tmp , 0 , writePtr );
+	            transitions= tmp;
+	        }
+	        System.out.println("RECORDED PULSE , len: "+tickDelta);
+	        transitions[writePtr++]=(int) tickDelta;
+	    }
+	    
+	    public void reset() 
+	    {
+	        writePtr = 0;
+	        lastSignalChange=-1;
+	    }
+	    
+	    public void record(boolean signal) 
+	    {
+	        if ( lastSignalChange == -1 || lastSignalChange == tickCounter ) 
+	        {
+	            this.lastSignalChange = tickCounter;
+	            this.signal = signal;
+	            return;
+	        }
+	        if ( this.signal != signal ) 
+	        {
+	            recordChange( tickCounter - lastSignalChange );
+	            this.signal = signal;
+	            lastSignalChange = tickCounter;
+	        }
+	    }
+
+        public int[] getRecording() 
+        {
+            final int[] result = new int[ writePtr ];
+            System.arraycopy( this.transitions , 0 , result , 0 , writePtr );
+            return result;
+        }
+	}
+	
 	public void insert(TapeFile tape) 
 	{
 		Validate.notNull(tape, "tape must not be NULL");
@@ -38,9 +95,23 @@ public class TapeDrive
 		reset();
 	}
 	
+    public void setTapeOut(boolean signal) 
+    {
+        if ( !( motorOn && keyPressed ) ) 
+        {
+            System.err.println("Trying to write to TAPE_OUT while motor is off and/or no key pressed ?");
+        }
+        tapeRecording.record( signal );
+    }
+    
+    public int[] getRecording() {
+        return tapeRecording.getRecording();
+    }
+	
 	public void eject() {
 		this.tape = null;
 		this.driver.reset();
+		this.tapeRecording.reset();
 	}
 
 	public TapeFile getTape() {
@@ -93,10 +164,12 @@ public class TapeDrive
 	
 	public void reset() 
 	{
-	    silenceTicks = SILENCE_TICKS;
-	    tickCounter = 0;
-	    motorOn = false;
-	    keyPressed = false;
+	    this.silenceTicks = SILENCE_TICKS;
+	    this.tickCounter = 0;
+	    this.motorOn = false;
+	    this.keyPressed = false;
+	    
+        this.tapeRecording.reset();	    
 	    
 	    if ( this.tape != null ) 
 	    {
