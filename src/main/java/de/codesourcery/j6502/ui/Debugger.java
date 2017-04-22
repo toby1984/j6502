@@ -208,7 +208,6 @@ public class Debugger
     private final BlockAllocationPanel bamPanel = new BlockAllocationPanel();
     private final CalculatorPanel calculatorPanel = new CalculatorPanel();
     private final CommentedCodeViewer codeViewer = new CommentedCodeViewer();
-    private final SpriteViewer spriteView = new SpriteViewer(emulator);
 
     private final AsmPanel asmPanel = new AsmPanel(desktop)
     {
@@ -299,9 +298,6 @@ public class Debugger
 
         final JInternalFrame memoryBreakpointsFrame = wrap( "Memory Breakpoints" , memoryBreakpoints );
         desktop.add( memoryBreakpointsFrame  );
-
-        final JInternalFrame spriteViewerFrame = wrap( "Sprite view" , spriteView );
-        desktop.add( spriteViewerFrame  );
 
         final JInternalFrame asmPanelFrame = wrap( AsmPanel.PANEL_TITLE , asmPanel );
         asmPanel.setEmulator( emulator );
