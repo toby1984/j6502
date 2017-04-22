@@ -19,6 +19,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
@@ -27,12 +28,10 @@ import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -208,7 +207,8 @@ public class Debugger
     private final ScreenPanel screenPanel = new ScreenPanel();
     private final BlockAllocationPanel bamPanel = new BlockAllocationPanel();
     private final CalculatorPanel calculatorPanel = new CalculatorPanel();
-	private final CommentedCodeViewer codeViewer = new CommentedCodeViewer();
+    private final CommentedCodeViewer codeViewer = new CommentedCodeViewer();
+    private final SpriteViewer spriteView = new SpriteViewer(emulator);
 
     private final AsmPanel asmPanel = new AsmPanel(desktop)
     {
@@ -287,21 +287,21 @@ public class Debugger
 
         final JInternalFrame screenPanelFrame = wrap( "Screen" , screenPanel );
         desktop.add( screenPanelFrame  );
-		
-	    final JInternalFrame codeViewerFrame = wrap( "Code viewer" , codeViewer );
-	    desktop.add( codeViewerFrame  );
+
+        final JInternalFrame codeViewerFrame = wrap( "Code viewer" , codeViewer );
+        desktop.add( codeViewerFrame  );
 
         final JInternalFrame calculatorPanelFrame = wrap( "Calculator" , calculatorPanel );
         desktop.add( calculatorPanelFrame  );
 
         final JInternalFrame bamPanelFrame = wrap( "BAM" , bamPanel );
         desktop.add( bamPanelFrame  );
-		
-		final JInternalFrame memoryBreakpointsFrame = wrap( "Memory Breakpoints" , memoryBreakpoints );
-		desktop.add( memoryBreakpointsFrame  );
-		
-		final JInternalFrame spriteViewerFrame = wrap( "Sprite view" , spriteView );
-		desktop.add( spriteViewerFrame  );
+
+        final JInternalFrame memoryBreakpointsFrame = wrap( "Memory Breakpoints" , memoryBreakpoints );
+        desktop.add( memoryBreakpointsFrame  );
+
+        final JInternalFrame spriteViewerFrame = wrap( "Sprite view" , spriteView );
+        desktop.add( spriteViewerFrame  );
 
         final JInternalFrame asmPanelFrame = wrap( AsmPanel.PANEL_TITLE , asmPanel );
         asmPanel.setEmulator( emulator );
@@ -420,7 +420,7 @@ public class Debugger
         final JMenu menu = new JMenu("File");
         menuBar.add( menu );
 
-		// disk handling
+        // disk handling
         JMenuItem item = new JMenuItem("Insert disk...");
         item.addActionListener( event -> insertDisk() );
         menu.add( item );
@@ -428,23 +428,23 @@ public class Debugger
         item = new JMenuItem("Eject disk...");
         item.addActionListener( event -> ejectDisk() );
         menu.add( item );
-		
-		// tape handling
-		menu.addSeparator();
-		item = new JMenuItem("Insert tape...");
-		item.addActionListener( event -> 
-		{
-			try {
-				insertTape();
-			} catch(Exception e) {
-				showError("Failed to load .t64 file",e);
-			}
-		});
-		menu.add( item );
 
-		item = new JMenuItem("Eject tape...");
-		item.addActionListener( event -> ejectTape() );
-		menu.add( item );		
+        // tape handling
+        menu.addSeparator();
+        item = new JMenuItem("Insert tape...");
+        item.addActionListener( event -> 
+        {
+            try {
+                insertTape();
+            } catch(Exception e) {
+                showError("Failed to load .t64 file",e);
+            }
+        });
+        menu.add( item );
+
+        item = new JMenuItem("Eject tape...");
+        item.addActionListener( event -> ejectTape() );
+        menu.add( item );		
 
         // add 'Views' menu
         final JMenu views = new JMenu("Views");
@@ -583,7 +583,7 @@ public class Debugger
             .stream().filter( dev -> dev instanceof DiskHardware).map( dev -> (DiskHardware) dev).findFirst().ifPresent( consumer );
         }
     }
-	
+
     private <T> Optional<T> doWithFloppyAndReturn(Function<DiskHardware,Optional<T>> consumer)
     {
         synchronized(emulator)
@@ -595,22 +595,22 @@ public class Debugger
                 return consumer.apply( floppy.get() );
             }
             return Optional.empty();
-		}
-	}
-	
-	private void insertTape() throws IOException 
-	{
-		final String lastFile = loc.getConfigProperties().get("last_t64_file");
-		final JFileChooser chooser;
-		if (StringUtils.isNotBlank( lastFile ))
-		{
-			chooser = new JFileChooser(new File( lastFile ) );
-		} else {
-			chooser = new JFileChooser( new File("/home/tgierke/mars_workspace/j6502/tapes") );
-		}
+        }
+    }
 
-		chooser.setFileFilter( new FileFilter()
-		{
+    private void insertTape() throws IOException 
+    {
+        final String lastFile = loc.getConfigProperties().get("last_t64_file");
+        final JFileChooser chooser;
+        if (StringUtils.isNotBlank( lastFile ))
+        {
+            chooser = new JFileChooser(new File( lastFile ) );
+        } else {
+            chooser = new JFileChooser( new File("/home/tgierke/mars_workspace/j6502/tapes") );
+        }
+
+        chooser.setFileFilter( new FileFilter()
+        {
             @Override
             public boolean accept(File f) 
             {
@@ -622,25 +622,25 @@ public class Debugger
             public String getDescription() {
                 return ".t64 / .tap";
             }
-		});
-		if ( chooser.showOpenDialog( null ) != JFileChooser.APPROVE_OPTION )
-		{
-			return;
-		}     
-		
-		final File file = chooser.getSelectedFile();
+        });
+        if ( chooser.showOpenDialog( null ) != JFileChooser.APPROVE_OPTION )
+        {
+            return;
+        }     
 
-		loc.getConfigProperties().put( "last_t64_file" , file.getAbsolutePath() );
-		synchronized( emulator ) 
-		{
-			emulator.tapeDrive.insert( TapeFile.load( file ) );
-		}
-	}
-	
-	private void ejectTape() 
-	{
-		synchronized( emulator ) {
-			emulator.tapeDrive.eject();
+        final File file = chooser.getSelectedFile();
+
+        loc.getConfigProperties().put( "last_t64_file" , file.getAbsolutePath() );
+        synchronized( emulator ) 
+        {
+            emulator.tapeDrive.insert( TapeFile.load( file ) );
+        }
+    }
+
+    private void ejectTape() 
+    {
+        synchronized( emulator ) {
+            emulator.tapeDrive.eject();
         }
     }
 
@@ -797,20 +797,23 @@ public class Debugger
         public final JButton stepOverButton = new JButton("Step over");
         public final JButton loadButton = new JButton("Load");
         public final JButton toggleSpeedButton = new JButton("Toggle speed");
-		public final JToggleButton tapePlay = new JToggleButton("Tape: Play",false);
+        public final JToggleButton tapePlay = new JToggleButton("Tape: Play",false);
+        public final JButton saveTape = new JButton("Save tape");
         public final JButton refreshUIButton = new JButton("Refresh UI");
 
-		private final KeyAdapter keyListener = new KeyAdapter() 
-		{
-			public void keyReleased(KeyEvent e) 
-			{
-				if ( e.getKeyCode() == KeyEvent.VK_F6 ) 
-				{
-					singleStepButton.doClick();
-				}
-			}
-		};
-		
+        private final KeyAdapter keyListener = new KeyAdapter() 
+        {
+            public void keyReleased(KeyEvent e) 
+            {
+                if ( e.getKeyCode() == KeyEvent.VK_F6 ) 
+                {
+                    singleStepButton.doClick();
+                }
+            }
+        };
+
+        private final Map<String,String> config = new HashMap<>();
+
         private Component peer;
         private boolean isDisplayed;
 
@@ -837,6 +840,17 @@ public class Debugger
         @Override
         public void setDisplayed(boolean yesNo) {
             this.isDisplayed = yesNo;
+        }
+
+        @Override
+        public void setConfigProperties(Map<String, String> properties) {
+            this.config.clear();
+            this.config.putAll( properties );
+        }
+
+        @Override
+        public Map<String, String> getConfigProperties() {
+            return this.config;
         }
 
         @Override
@@ -882,8 +896,8 @@ public class Debugger
 
             final BreakpointsController bpController = getBreakPointsController();
             bpController.removeAllBreakpoints();
-			bpController.addBreakpoint( Breakpoint.unconditionalBreakpoint( (short) 0x45bf ) );
-			bpController.addBreakpoint( Breakpoint.unconditionalBreakpoint( (short) 0x40cb ) );
+            bpController.addBreakpoint( Breakpoint.unconditionalBreakpoint( (short) 0x45bf ) );
+            bpController.addBreakpoint( Breakpoint.unconditionalBreakpoint( (short) 0x40cb ) );
             hexPanel.setAddress( (short) 0x210 );
             updateWindows(false);
         }
@@ -913,9 +927,9 @@ public class Debugger
         {
             setPreferredSize( new Dimension( 400,50 ) );
 
-			setFocusable( true );
-			addKeyListener(keyListener); 
-			
+            setFocusable( true );
+            addKeyListener(keyListener); 
+
             loadButton.addActionListener( event ->
             {
                 prepareTest();
@@ -972,7 +986,12 @@ public class Debugger
                     emulator.tapeDrive.setKeyPressed( tapePlay.isSelected() );
                 }
             });
-			
+
+            saveTape.addActionListener( ev -> 
+            {
+                saveTape();
+            });
+
             refreshUIButton.addActionListener( ev ->
             {
                 updateWindows( false );
@@ -983,13 +1002,14 @@ public class Debugger
             });
 
             setLayout( new FlowLayout() );
-			
-			final List<AbstractButton> allButtons = Arrays.asList(stopButton, runButton, singleStepButton, stepOverButton, resetButton, breakOnIRQButton, loadButton, toggleSpeedButton, tapePlay, refreshUIButton );
-			for ( AbstractButton button : allButtons ) 
-			{
-				button.setFocusable(false);
-				add( button );
-			}
+
+            final List<AbstractButton> allButtons = Arrays.asList(stopButton, runButton,
+                    singleStepButton, stepOverButton, resetButton, breakOnIRQButton, loadButton, toggleSpeedButton, saveTape , tapePlay, refreshUIButton );
+            for ( AbstractButton button : allButtons ) 
+            {
+                button.setFocusable(false);
+                add( button );
+            }
 
             updateButtons();
         }
@@ -1004,6 +1024,120 @@ public class Debugger
             stepOverButton.setEnabled( getBreakPointsController().canStepOver( getMemory(), getCPU() ) );
             breakOnIRQButton.setEnabled( ! getCPU().isBreakOnIRQ() );
         }
+        
+        protected void saveTape() {
+
+            final File lastSavedFile;
+            if ( config.getOrDefault( "tape_recording", null ) != null ) {
+                lastSavedFile = new File( config.get("tape_recording" ) );
+            } else {
+                lastSavedFile = null;
+            }
+            final JFileChooser chooser = new JFileChooser();
+            if ( lastSavedFile != null ) {
+                chooser.setSelectedFile( lastSavedFile );
+            }
+            if ( chooser.showSaveDialog( null ) != JFileChooser.APPROVE_OPTION )
+            {
+                return;
+            }
+
+            final File file = chooser.getSelectedFile();
+            config.put("tape_recording" , file.getAbsolutePath() );
+
+            final int[] data;
+            synchronized(emulator) 
+            {
+                data = emulator.tapeDrive.getRecording();
+            }
+
+            // write tap file
+            /*
+    Bytes: $0000-000B: File signature "C64-TAPE-RAW"
+                     000C: TAP version (see below for description)
+                            $00 - Original layout
+                             01 - Updated
+                000D-000F: Future expansion
+                0010-0013: File  data  size  (not  including  this  header,  in
+                           LOW/HIGH format) i.e. This image is $00082151  bytes
+                           long.
+                0014-xxxx: File data             
+             */
+            final ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+            try ( FileOutputStream fileOut = new FileOutputStream( file ) ) 
+            {
+                // write header
+                final char[] headerChars = "C64-TAPE-RAW".toCharArray();
+                final byte[] HEADER = new byte[ headerChars.length];
+                for ( int i = 0 ; i < headerChars.length ; i++ ) 
+                {
+                    HEADER[i] = (byte) headerChars[i];
+                }               
+                out.write( HEADER );
+
+                // write file format version
+                out.write( (byte) 0x01 );
+
+                // write expansion bytes
+                out.write( new byte[] { 0 , 0 , 0 } );
+
+                // write file size
+                final int sizeLo = data.length & 0xff;
+                final int sizeHi = (data.length >>> 8 ) & 0xff;
+                out.write( sizeLo );
+                out.write( sizeHi );
+
+                // write data
+                for ( int cycles : data ) 
+                {
+                    /*
+                     *                               (8 * data byte) 
+                     * pulse length (in seconds) =  ----------------
+                     *                               clock cycles
+                     * 
+                     *   Therefore, a data value of $2F (47 in decimal) would be:
+                     * 
+                     *     (47 * 8) / 985248 = 0.00038975 seconds.
+                     *                       = 0.00038163 seconds.
+                     * 
+                     *
+                     *   clock_cyles         
+                     * ---------------   =  data byte
+                     *         8         
+                     *                                                   
+                     */
+                    final int dataByte = Math.round( cycles / 8f );
+                    if ( dataByte < 255 ) 
+                    {
+                        System.out.println( cycles+" cycles => $"+Integer.toHexString( dataByte ) );
+                        out.write( (byte) dataByte );
+                    }
+                    else 
+                    {
+                        /* 
+                         * Overflow.
+                         * 
+                         * Data value of 00 is followed by three bytes, representing a 24 bit value of C64 _CYCLES_ (NOT cycles/8). 
+                         * The order is as follow: 00 <bit0-7> <bit8-15> <bit16-24>.                         
+                         */
+                        System.err.println("Overflow detected, tape pulse lasted "+cycles+" CPU cycles");
+                        out.write( 0 );
+                        out.write( (byte) ( cycles       & 0xff) );
+                        out.write( (byte) ((cycles>>>8)  & 0xff) );
+                        out.write( (byte) ((cycles>>>16) & 0xff) );
+                    }
+                }
+
+                // write everything to the file
+                fileOut.write( out.toByteArray() );
+                System.out.println("Success - TAP64 written to "+file.getAbsolutePath() );
+            } 
+            catch ( IOException e) 
+            {
+                e.printStackTrace();
+            }
+        }        
     }
 
     protected void updateWindows(boolean isTick)
@@ -1468,7 +1602,7 @@ public class Debugger
                         final Integer address = MemoryBreakpointsPanel.parseHexAddress( sAddress );
                         if ( address != null ) 
                         {
-                            getBreakPointsController().addBreakpoint( Breakpoint.unconditionalBreakpoint( address ));
+                            getBreakPointsController().addBreakpoint( Breakpoint.unconditionalBreakpoint( address ) );
                         }
                     }
                 }
@@ -1553,7 +1687,7 @@ public class Debugger
             switch(column) {
                 case 0: return "Address";
                 case 1: return "Enabled";
-                case 2: return "Required CPU flags";
+                case 2: return "Condition";
                 default:
                     return "unknown";
             }
@@ -1600,11 +1734,12 @@ public class Debugger
             }
             else
             {
-                if ( !(aValue instanceof String) ) {
-                    throw new IllegalArgumentException("No valid processor flags: "+aValue);
+                if ( !(aValue instanceof String) || ! Breakpoint.isValidExpression( (String) aValue ) ) 
+                {
+                    throw new IllegalArgumentException("Invalid breakpoint condition: "+aValue);
                 }
-                final String flagString = ((String) aValue).trim();
-                newBP = Breakpoint.toBreakpoint(currentBP.address , false , flagString  , true );
+
+                newBP = Breakpoint.toBreakpoint( currentBP.address , false , (String) aValue , true );
             }
             getBreakPointsController().addBreakpoint( newBP );
         }
@@ -1619,10 +1754,7 @@ public class Debugger
                 case 1:
                     return bp.isEnabled;
                 case 2:
-                    if ( StringUtils.isNotBlank( bp.pattern ) ) {
-                        return bp.pattern;
-                    }
-                    return "<unconditional breakpoint>";
+                    return bp.pattern == null ? "<unconditional breakpoint>" : bp.pattern;
                 default:
                     throw new RuntimeException("Unreachable code reached");
             }
