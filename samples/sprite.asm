@@ -26,14 +26,21 @@ STA $d027
 LDA #1
 STA $d015 
 ; set X coordinate sprite #0
-LDA #0
+LDA #24
 STA $d000
 ; set y coordinate sprite #0
-LDA #0
+LDA #50
 STA $d001
 ; clear MSB X coordinate sprite #0
 LDA #0
 STA $d010
+; switch on multicolor
+LDA #1
+STA $d01c
+LDA #244
+STA $d025
+LDA #240
+STA $d026
 RTS
 
 spriteData:
@@ -59,4 +66,4 @@ spriteData:
 .byte 7,255,224
 .byte 3,255,192
 .byte 0,126,0
-                               
+                                       
