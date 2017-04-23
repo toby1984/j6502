@@ -1328,7 +1328,7 @@ public class Debugger
             setRequestFocusEnabled(true);
             keyboardListener.attach( this );
 
-            setPreferredSize( new Dimension(VIC.DISPLAY_WIDTH,VIC.DISPLAY_HEIGHT ) );
+            setPreferredSize( new Dimension(VIC.DISPLAY_AREA_WIDTH,VIC.DISPLAY_AREA_HEIGHT ) );
 
             // 16 ms = 60hz screen refresh
             final Timer timer = new Timer(16, ev -> repaint() );
@@ -1348,8 +1348,8 @@ public class Debugger
         @Override
         public void setLocationPeer(Component frame) {
             this.frame = frame;
-            frame.setPreferredSize( new Dimension(VIC.DISPLAY_WIDTH,VIC.DISPLAY_HEIGHT ) );
-            frame.setSize( new Dimension(VIC.DISPLAY_WIDTH,VIC.DISPLAY_HEIGHT ) );
+            frame.setPreferredSize( new Dimension(VIC.DISPLAY_AREA_WIDTH,VIC.DISPLAY_AREA_HEIGHT ) );
+            frame.setSize( new Dimension(VIC.DISPLAY_AREA_WIDTH,VIC.DISPLAY_AREA_HEIGHT ) );
         }
 
         @Override
