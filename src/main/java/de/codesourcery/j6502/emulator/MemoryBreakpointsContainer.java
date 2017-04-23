@@ -263,9 +263,9 @@ public final class MemoryBreakpointsContainer
     public final class MemoryBreakpoint 
     {
         public final boolean enabled;
-        public int flags;
         public final int address;
-        public final MemoryBreakpointsContainer container=MemoryBreakpointsContainer.this;
+        public final MemoryBreakpointsContainer container=MemoryBreakpointsContainer.this;        
+        public int flags;
         
         private MemoryBreakpoint(int address,Flag flag1,Flag... additional) 
         {
