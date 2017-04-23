@@ -9,6 +9,7 @@ import java.util.Arrays;
 import de.codesourcery.j6502.emulator.CPU.IRQType;
 import de.codesourcery.j6502.emulator.MemorySubsystem.RAMView;
 import de.codesourcery.j6502.utils.HexDump;
+import de.codesourcery.j6502.utils.Misc;
 
 public class VIC extends IMemoryRegion
 {
@@ -16,10 +17,9 @@ public class VIC extends IMemoryRegion
     public static final boolean DEBUG_RASTER_IRQ = true;
     public static final boolean DEBUG_FPS = true;
     public static final boolean DEBUG_GRAPHIC_MODES = true;
+    public static final boolean DEBUG_SPRITES = false;
 
     protected static final boolean DEBUG_MEMORY_LAYOUT = true;
-
-    protected static final boolean DEBUG_SET_GRAPHICS_MODE = true;
 
     public static final int TOTAL_RASTER_LINES = 403; // PAL-B
     public static final int VISIBLE_RASTER_LINES = 312; // PAL-B
@@ -67,8 +67,8 @@ public class VIC extends IMemoryRegion
             return isDoubleHeight() ? 42 : 21;
         }
 
-        public int getMainColor() {
-            return spriteMainColor[ spriteNo ];
+        public int getMainColorRGB() {
+            return RGB_COLORS[ spriteMainColor[ spriteNo ] & 0b1111 ];
         }
 
         public int y() {
@@ -99,7 +99,8 @@ public class VIC extends IMemoryRegion
         {
             // each sprite is 24x21 bits = 3 bytes * 21 = 63 bytes , gets padded to 64 bytes
             final int blockNo = vicAddressView.readByteNoSideEffects( sprite0DataPtrAddress+spriteNo );
-            return videoRAMAdr + blockNo*64;
+            // 8 bit blockNo with 64 bytes per sprite data block => 16 kb bank
+            return bankAdr + blockNo*64;
         }
     }
 
@@ -370,6 +371,9 @@ public class VIC extends IMemoryRegion
 
     public static final int DISPLAY_WIDTH= 504;
     public static final int DISPLAY_HEIGHT = 312;
+    
+    public static final int VISIBLE_AREA_WIDTH = 320;
+    public static final int VISIBLE_AREA_HEIGHT = 200;
 
     // color palette taken from http://www.pepto.de/projects/colorvic/
 
@@ -493,7 +497,7 @@ public class VIC extends IMemoryRegion
     {
         private final Sprite sprite;
         
-        private final int[] displayRowData = new int[ DISPLAY_WIDTH ];
+        private final int[] displayRowData = new int[ VISIBLE_AREA_WIDTH ];
         
         private int pixelPtr = 0;
         private boolean visible;
@@ -516,11 +520,12 @@ public class VIC extends IMemoryRegion
             if ( ! sprite.isEnabled() ) {
                 return false ;
             }
+            final int beamDelta = beamY - FIRST_DISPLAY_AREA_Y;
             final int y = sprite.y();
-            if ( beamY < y ) {
+            if ( beamDelta < y ) {
                 return false;
             }
-            return beamY < y + sprite.height();
+            return beamDelta < y + sprite.height();
         }
 
         @Override
@@ -532,7 +537,8 @@ public class VIC extends IMemoryRegion
                 return;
             }
             // calculate address of sprite row we need to render
-            int yDelta = beamY - sprite.y();
+            // System.out.println("Sprite #"+sprite.spriteNo+" is visible on y == "+beamY);
+            int yDelta = beamY - FIRST_DISPLAY_AREA_Y - sprite.y();
             if ( sprite.isDoubleHeight() ) {
                 yDelta /= 2;
             }
@@ -542,16 +548,13 @@ public class VIC extends IMemoryRegion
             reader.setup(rowDataAddress);
 
             // generate data for scan line
+            Arrays.fill( displayRowData , SPRITE_TRANSPARENT_COLOR );
+            
             final int xMin = sprite.x();
-            final int xMax = xMin + sprite.width();            
-            for ( int x = 0 ; x < DISPLAY_WIDTH ; x++ ) 
+            final int xMax = Math.min( xMin + sprite.width() , VISIBLE_AREA_WIDTH );     
+            for ( int x = xMin ; x < xMax ; x++ ) 
             {
-                if ( x >= xMin && x < xMax ) 
-                {
-                    displayRowData[x] = reader.getRGBColor();
-                } else {
-                    displayRowData[x] = SPRITE_TRANSPARENT_COLOR;
-                }
+                displayRowData[x] = reader.getRGBColor();
             }
         }
     }
@@ -578,7 +581,7 @@ public class VIC extends IMemoryRegion
         
         public int getRGBColor() 
         {
-            final int color = (data & bitMask) == 1 ? sprite.getMainColor() : SPRITE_TRANSPARENT_COLOR;  
+            final int color = (data & bitMask) != 0 ? sprite.getMainColorRGB() : SPRITE_TRANSPARENT_COLOR;  
             // advance to next pixel in row
             pixelCounter++;
             if ( ! sprite.isDoubleWidth() || (pixelCounter % 2 )== 0 ) 
@@ -628,20 +631,20 @@ public class VIC extends IMemoryRegion
             {
                 case 0b00: color= SPRITE_TRANSPARENT_COLOR; break;
                 //
-                case 0b01: color=  spriteMultiColor01; break;
-                case 0b0100: color=  spriteMultiColor01; break;
-                case 0b010000: color=  spriteMultiColor01; break;
-                case 0b01000000: color=  spriteMultiColor01; break;
+                case 0b01: color=  spriteMultiColor01RGB; break;
+                case 0b0100: color=  spriteMultiColor01RGB; break;
+                case 0b010000: color=  spriteMultiColor01RGB; break;
+                case 0b01000000: color=  spriteMultiColor01RGB; break;
                 //
-                case 0b10: color=  spriteMultiColor10; break;
-                case 0b1000: color=  spriteMultiColor10; break;
-                case 0b100000: color=  spriteMultiColor10; break;
-                case 0b10000000: color=  spriteMultiColor10; break;
+                case 0b10: color=  spriteMultiColor10RGB; break;
+                case 0b1000: color=  spriteMultiColor10RGB; break;
+                case 0b100000: color=  spriteMultiColor10RGB; break;
+                case 0b10000000: color=  spriteMultiColor10RGB; break;
                 //
-                case 0b11: color=  sprite.getMainColor(); break;
-                case 0b1100: color=  sprite.getMainColor(); break;
-                case 0b110000: color=  sprite.getMainColor(); break;
-                case 0b11000000: color=  sprite.getMainColor();      break; 
+                case 0b11: color=  sprite.getMainColorRGB(); break;
+                case 0b1100: color=  sprite.getMainColorRGB(); break;
+                case 0b110000: color=  sprite.getMainColorRGB(); break;
+                case 0b11000000: color=  sprite.getMainColorRGB();      break; 
                 // 
                 default:
                     throw new RuntimeException("Unreachable code reached");
@@ -914,12 +917,16 @@ public class VIC extends IMemoryRegion
     protected int spritesBehindBackground; // ok
     
     protected final int[] spriteMainColor = new int[8]; // ok
+    protected final int[] spriteMainColorRGB = new int[8]; // ok
     
     protected int spriteBackgroundCollision; // ok
     protected int spriteSpriteCollision; // ok
     
     protected int spriteMultiColor01; // ok
+    protected int spriteMultiColor01RGB; // ok
+    
     protected int spriteMultiColor10; // ok
+    protected int spriteMultiColor10RGB; // ok
     
     protected final int[] spriteXLow = new int[8]; // ok
     protected int spriteXhi; // ok
@@ -1066,7 +1073,7 @@ public class VIC extends IMemoryRegion
          */
         final int rasterPoint = isRasterIRQEnabled() ? rasterIRQLine+4 : -1;
 
-        // we'll render 4 pixels per clock phase
+        // render 4 pixels/clock phase = 8 pixel/clock cycle
         for ( int i = 0 ; i < 4 ; i++ )
         {
             if ( beamX == 0  )
@@ -1078,7 +1085,7 @@ public class VIC extends IMemoryRegion
                 triggerRasterIRQ(cpu);
             }
 
-            // check if we're inside border/vblank/hblank area
+            // use border color if we're inside border/vblank/hblank area
             if ( beamY < FIRST_DISPLAY_AREA_Y ||
                     beamY > LAST_DISPLAY_AREA_Y ||
                     beamX < FIRST_DISPLAY_AREA_X ||
@@ -1289,9 +1296,13 @@ public class VIC extends IMemoryRegion
         spriteSpriteCollision = 0;
         
         Arrays.fill( spriteMainColor , 0 );
+        Arrays.fill( spriteMainColorRGB , RGB_COLORS[0] );
         
         spriteMultiColor01 = 0;
+        spriteMultiColor01RGB = RGB_COLORS[0];
+        
         spriteMultiColor10 = 0;
+        spriteMultiColor10RGB = RGB_COLORS[0];
         
         Arrays.fill( spriteXLow , 0 );
         spriteXhi=0;
@@ -1488,6 +1499,9 @@ public class VIC extends IMemoryRegion
             //
             case VIC_SPRITE_X_COORDS_HI_BIT:
                 spriteXhi = value & 0xff;
+                if ( DEBUG_SPRITES ) {
+                    System.out.println("VIC: Sprite X hi-bits: "+Misc.to8BitBinary( value ));
+                }                 
                 break;
             case VIC_SPRITE0_COLOR10:
             case VIC_SPRITE1_COLOR10:
@@ -1498,27 +1512,48 @@ public class VIC extends IMemoryRegion
             case VIC_SPRITE6_COLOR10:
             case VIC_SPRITE7_COLOR10:
                 spriteMainColor[ trimmed - VIC_SPRITE0_COLOR10 ] = value & 0xff;
+                spriteMainColorRGB[ trimmed - VIC_SPRITE0_COLOR10 ] = RGB_COLORS[ value & 0b1111 ];
+                if ( DEBUG_SPRITES ) {
+                    System.out.println("VIC: Sprite #"+(trimmed - VIC_SPRITE0_COLOR10)+" color: "+(value & 0xff)); 
+                }                
                 break;
             case VIC_SPRITE_ENABLE:
                 spritesEnabled = value & 0xff;
+                if ( DEBUG_SPRITES ) {
+                    System.out.println("VIC: Sprites enabled: "+Misc.to8BitBinary( spritesEnabled ) );
+                }
                 break;
             case VIC_SPRITE_DOUBLE_HEIGHT:
                 spritesDoubleHeight = value & 0xff;
+                if ( DEBUG_SPRITES ) {
+                    System.out.println("VIC: Sprites double height: "+Misc.to8BitBinary( spritesEnabled ) );
+                }                
                 break;
             case VIC_SPRITE_DOUBLE_WIDTH:
                 spritesDoubleWidth = value & 0xff;
+                if ( DEBUG_SPRITES ) {
+                    System.out.println("VIC: Sprites double width: "+Misc.to8BitBinary( spritesEnabled ) );
+                }                  
                 break;             
             case VIC_SPRITE_MULTICOLOR_MODE:
                 spritesMultiColorMode = value & 0xff;
+                if ( DEBUG_SPRITES ) {
+                    System.out.println("VIC: Sprites multi-color: "+Misc.to8BitBinary( spritesEnabled ) );
+                }                  
                 break;
             case VIC_SPRITE_PRIORITY:
                 spritesBehindBackground = value & 0xff;
+                if ( DEBUG_SPRITES ) {
+                    System.out.println("VIC: Sprites behind background: "+Misc.to8BitBinary( spritesEnabled ) );
+                }                
                 break;
             case VIC_SPRITE_COLOR01_MULTICOLOR_MODE:
                 spriteMultiColor01 = value & 0xff;
+                spriteMultiColor01RGB = RGB_COLORS[ value & 0b1111 ];
                 break;
             case VIC_SPRITE_COLOR10_MULTICOLOR_MODE:
                 spriteMultiColor10 = value & 0xff;
+                spriteMultiColor10RGB = RGB_COLORS[ value & 0b1111 ];
                 break;        
             /* other stuff */
             case VIC_BACKGROUND0_EXT_COLOR:

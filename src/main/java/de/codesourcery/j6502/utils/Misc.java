@@ -19,6 +19,18 @@ public class Misc
 		}
 		return hiNibble*10+loNibble;
 	}
+	
+	public static String to16BitHex(int value) {
+	    return StringUtils.leftPad( Integer.toHexString( value & 0xffff ) , 4 , '0' );
+	}
+	
+    public static String to8BitHex(int value) {
+        return StringUtils.leftPad( Integer.toHexString( value & 0xff ) , 2 , '0' );
+    }	
+    
+    public static String to8BitBinary(int value) {
+        return StringUtils.leftPad( Integer.toBinaryString( value & 0xff ) , 8 , '0' );
+    }    
 
 	public  static int binaryToBCD(int value)
 	{
