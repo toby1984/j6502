@@ -107,9 +107,9 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 					}
 				}
 				result2 &= joy1Mask;
-				if ( result2 != 0xff ) {
-				    System.out.println("CIA #1 - PRA: %"+StringUtils.leftPad( Integer.toBinaryString( pra ) , 8 , '0') + " , result: %"+StringUtils.leftPad( Integer.toBinaryString( result2 ) , 8 , '0' ) +" ( $"+Integer.toHexString( result2 )+", joyMask: "+joy1Mask+")" );
-				}
+//				if ( result2 != 0xff ) {
+//				    System.out.println("CIA #1 - PRA: %"+StringUtils.leftPad( Integer.toBinaryString( pra ) , 8 , '0') + " , result: %"+StringUtils.leftPad( Integer.toBinaryString( result2 ) , 8 , '0' ) +" ( $"+Integer.toHexString( result2 )+", joyMask: "+joy1Mask+")" );
+//				}
 				return result2;
 			}
 			return super.readByte( offset );
@@ -377,7 +377,6 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 	protected void handleKeyPress(Key key)
 	{
 		keyboardColumns[ key.colBitNo ] &= ~(1 << key.rowBitNo); // bits are low-active so clear bit if key is pressed
-		System.out.println("handleKeyPress(): "+key+" => keyboardColumns[ "+key.colBitNo+" ] = "+StringUtils.leftPad( Integer.toBinaryString( keyboardColumns[ key.colBitNo ]) , 8 , '0' ) );
 		if ( key.clearShift() ) {
 			handleKeyRelease(Key.KEY_LEFT_SHIFT);
 			handleKeyRelease(Key.KEY_RIGHT_SHIFT);

@@ -12,9 +12,11 @@ public class C64
 
 		final Emulator emulator = new Emulator();
 		emulator.reset();
+		
 		final EmulatorDriver driver = new EmulatorDriver( emulator ) {
             
 		    private final BreakpointsController controller = new BreakpointsController( emulator.getCPU() , emulator.getMemory() ); 
+		    
             @Override
             protected void tick() {
             }
