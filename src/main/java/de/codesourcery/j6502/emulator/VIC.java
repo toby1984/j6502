@@ -995,6 +995,7 @@ SPRITE_DISPLAY_AREA_START_X
     protected int bitmapRAMAdr;
     protected int builtinCharRomStart;
     protected int builtinCharRomEnd;
+    protected int charRomOffset;
     protected int charROMAdr;
 
     // Sprite stuff
@@ -1108,7 +1109,7 @@ SPRITE_DISPLAY_AREA_START_X
                 {
                     return ram.readByteNoSideEffects(adr);
                 }
-                return mainMemory.getCharacterROM().readByteNoSideEffects( adr - charROMAdr );
+                return mainMemory.getCharacterROM().readByteNoSideEffects( adr - charROMAdr  + charRomOffset );
             }
 
             @Override
@@ -1118,7 +1119,7 @@ SPRITE_DISPLAY_AREA_START_X
                 {
                     return ram.readByte(adr);
                 }
-                return mainMemory.getCharacterROM().readByte( adr - charROMAdr );
+                return mainMemory.getCharacterROM().readByte( adr - charROMAdr + charRomOffset );
             }
         };
 
@@ -1284,6 +1285,7 @@ SPRITE_DISPLAY_AREA_START_X
         sprite0DataPtrAddress = bankAdr + videoRAMOffset + 1024 - 8;
 
         // char ROM is only available in banks #1 (start: 0x8000) and #3 (0x0000)
+        charRomOffset = ( ( memoryMapping & 0b0000_0010) >> 1) == 0 ? 0 : 2048;
         switch( bankAdr )
         {
             case 0x0000:
@@ -1305,6 +1307,7 @@ SPRITE_DISPLAY_AREA_START_X
             System.out.println("VIC: Bitmap RAM @ "+HexDump.toAdr( bitmapRAMAdr ) );
             System.out.println("VIC: Character ROM available ? "+( ! charROMHidden ? "yes" :"no"));
             System.out.println("VIC: Char ROM @ "+HexDump.toAdr( charROMAdr )  );
+            System.out.println("VIC: Char ROM offset @ "+HexDump.toAdr( charRomOffset )  );
             System.out.println("VIC: Sprite #0 data ptr @ "+HexDump.toAdr( sprite0DataPtrAddress )  );
         }
     }

@@ -15,8 +15,8 @@ import de.codesourcery.j6502.utils.Misc;
  */
 public class CIA extends Memory
 {
-    private static final boolean DEBUG = true;
-    private static final boolean DEBUG_VERBOSE = true;
+    private static final boolean DEBUG = false;
+    private static final boolean DEBUG_VERBOSE = false;
     private static final boolean DEBUG_TIMER_LOAD = false;
     private static final boolean DEBUG_TAPE_SLOPE = true;
 
