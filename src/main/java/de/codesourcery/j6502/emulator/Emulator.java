@@ -103,7 +103,7 @@ public class Emulator
         boolean internalHwBreakpointReached = false;
         if ( --this.cpu.cycles == 0 ) // wait until current command has 'finished' executing
         {
-            internalHwBreakpointReached = cpu.isHardwareBreakpointReached(); 
+            internalHwBreakpointReached = cpu.isBreakpointReached(); 
             
             if ( this.cpu.handleInterrupt() ) {
                 this.cpu.cycles+=7; // delay executing first IRQ routine instruction by 7 clock cycles , that's how long the 6510 takes to jump to an IRQ
