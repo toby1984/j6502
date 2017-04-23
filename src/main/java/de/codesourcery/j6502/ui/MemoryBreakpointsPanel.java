@@ -201,7 +201,7 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
 
         final BiConsumer<MemoryBreakpointsContainer, MemoryBreakpoint> callback = (container,breakpoint) -> 
         {
-            emulator.getCPU().setHardwareBreakpoint();
+            emulator.getCPU().setBreakpointReached();
         };
         visitBreakpointContainers( emulator , container -> container.setCallback( callback ) );
         

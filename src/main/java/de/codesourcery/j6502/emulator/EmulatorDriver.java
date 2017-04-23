@@ -329,6 +329,10 @@ public abstract class EmulatorDriver extends Thread
 					emulator.doOneCycle(this);
 
 					cyclesUntilNextTick--;
+					
+					if ( getBreakPointsController().isAtBreakpoint() ) {
+					    emulator.getCPU().setBreakpointReached();
+					}
 				}
 				catch(final Throwable e)
 				{
@@ -340,7 +344,7 @@ public abstract class EmulatorDriver extends Thread
 				}
 			}
 			
-            if ( emulator.getCPU().isHardwareBreakpointReached() )
+            if ( emulator.getCPU().isBreakpointReached() )
             {
                 isRunnable = false;
                 cmd = stopCommand( false , true ); // assign to cmd so that next loop iteration will know why we stopped execution

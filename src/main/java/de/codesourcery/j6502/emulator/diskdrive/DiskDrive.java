@@ -270,7 +270,7 @@ public class DiskDrive extends IMemoryRegion
 
             cpuImpl.executeInstruction();
         }   
-        return cpu.isHardwareBreakpointReached() ? false:true; 
+        return cpu.isBreakpointReached() ? false:true; 
     }
 
     @Override

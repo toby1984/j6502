@@ -32,7 +32,7 @@ public class CPU
 	public int lastInsDuration;
 	
 	private boolean breakOnInterrupt;
-	private boolean hwBreakpointReached;
+	private boolean breakpointReached;
 
 	private byte flags = CPU.Flag.EXTENSION.set((byte)0); // extension bit is always 1
 
@@ -221,7 +221,7 @@ public class CPU
 	    lastInsDuration = 0;
 	    
 	    breakOnInterrupt = false;
-	    hwBreakpointReached = false;
+	    breakpointReached = false;
 	    
 		cycles = 1;
 		
@@ -241,14 +241,14 @@ public class CPU
 	    breakOnInterrupt = true;
 	}
 	
-	public void setHardwareBreakpoint() {
-	    this.hwBreakpointReached = true;
+	public void setBreakpointReached() {
+	    this.breakpointReached = true;
 	}
 	
-	public boolean isHardwareBreakpointReached() 
+	public boolean isBreakpointReached() 
 	{
-	    if ( hwBreakpointReached ) {
-	        hwBreakpointReached = false;
+	    if ( breakpointReached ) {
+	        breakpointReached = false;
 	        return true;
 	    }
         return false;
@@ -342,7 +342,7 @@ public class CPU
 	        case NMI:
 	            performInterrupt();
 	            if ( breakOnInterrupt ) {
-	                hwBreakpointReached = true;
+	                breakpointReached = true;
 	                breakOnInterrupt = false;
 	            }
 	            return true;
@@ -354,7 +354,7 @@ public class CPU
                 {
                     performInterrupt();
                     if ( breakOnInterrupt ) {
-                        hwBreakpointReached = true;
+                        breakpointReached = true;
                         breakOnInterrupt = false;
                     }
                     return true;
