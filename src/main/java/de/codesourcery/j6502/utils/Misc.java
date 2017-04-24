@@ -21,7 +21,7 @@ public class Misc
 	}
 	
 	public static String to16BitHex(int value) {
-	    return StringUtils.leftPad( Integer.toHexString( value & 0xffff ) , 4 , '0' );
+	    return "$"+StringUtils.leftPad( Integer.toHexString( value & 0xffff ) , 4 , '0' );
 	}
 	
     public static String to8BitHex(int value) {

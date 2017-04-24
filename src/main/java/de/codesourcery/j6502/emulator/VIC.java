@@ -15,10 +15,14 @@ public class VIC extends IMemoryRegion
 {
     private static final int RASTER_IRQ_X_COORDINATE = 76; // only on 6569
 
-    public static final boolean DEBUG_RASTER_IRQ = true;
+    public static final boolean DEBUG_DRAW_RASTER_IRQ_LINE = true;
+    
+    public static final boolean DEBUG_INTERRUPTS = false;
+    public static final boolean DEBUG_TRIGGERED_INTERRUPTS = false;
+    
     public static final boolean DEBUG_FPS = true;
     public static final boolean DEBUG_GRAPHIC_MODES = true;
-    public static final boolean DEBUG_SPRITES = false;
+    public static final boolean DEBUG_SPRITES = true;
     public static final boolean DEBUG_MEMORY_LAYOUT = true;
 
     public static final int TOTAL_RASTER_LINES = 403; // PAL-B
@@ -203,7 +207,7 @@ public class VIC extends IMemoryRegion
      *  ( )
      *  ( )                       Beachte: Das Character-ROM wird nur in VIC-Bank 0 und 2 ab 4096 eingeblendet
      *  ( )
-     *  ( ) $D019  53273  25  Interrupt Request, Bit = 1 = an
+     *  ( ) $D019  53273  25  Triggered interrupts: Maske, Bit = 1 = an
      *  ( )                       Lesen:
      *  ( )                       Bit 7: IRQ durch VIC ausgelöst
      *  ( )                       Bit 6..4: unbenutzt
@@ -214,12 +218,12 @@ public class VIC extends IMemoryRegion
      *  ( )                       Schreiben:
      *  ( )                       1 in jeweiliges Bit schreiben = zugehöriges Interrupt-Flag löschen
      *
-     *  ( ) $D01A  53274  26  Interrupt Request: Maske, Bit = 1 = an
+     *  ( ) $D01A  53274  26  Unlocked interrupts: Maske, Bit = 1 = an
      *  ( )                       Ist das entsprechende Bit hier und in $D019 gesetzt, wird ein IRQ ausgelöst und Bit 7 in $D019 gesetzt
      *  ( )                       Bit 7..4: unbenutzt
      *  ( )                       Bit 3: IRQ wird durch Lightpen ausgelöst
-     *  ( )                       Bit 2: IRQ wird durch S-S-Kollision ausgelöst
-     *  ( )                       Bit 1: IRQ wird durch S-H-Kollision ausgelöst
+     *  ( )                       Bit 2: IRQ wird durch Sprite-Sprite-Kollision ausgelöst
+     *  ( )                       Bit 1: IRQ wird durch Sprite-Hintergrund-Kollision ausgelöst
      *  ( )                       Bit 0: IRQ wird durch Rasterstrahl ausgelöst
      *
      *  ( ) $D01B  53275  27  Priorität Sprite-Hintergrund, Bit = 1: Hintergrund liegt vor Sprite n (0..255)
@@ -613,7 +617,7 @@ public class VIC extends IMemoryRegion
             final SpriteRowDataReader reader = sprite.getRowDataReader();
             reader.setup(rowDataAddress);
 
-            // generate data for scan line
+            // generate data for current scan line
             Arrays.fill( displayRowData , SPRITE_TRANSPARENT_COLOR );
 
             final int xMin = sprite.x();
@@ -1137,7 +1141,9 @@ SPRITE_DISPLAY_AREA_START_X
     protected int bitmapRAMAdr;
     protected int builtinCharRomStart;
     protected int builtinCharRomEnd;
-    protected int charRomOffset;
+    
+    protected int charRomOffset; // FIXME: Remove this, this is a hack to make switching character sets work properly ... but IMHO this shouldn't be needed
+    
     protected int charROMAdr;
 
     // Sprite stuff
@@ -1253,7 +1259,8 @@ SPRITE_DISPLAY_AREA_START_X
                 {
                     return ram.readByteNoSideEffects(adr);
                 }
-                return mainMemory.getCharacterROM().readByteNoSideEffects( adr - charROMAdr  + charRomOffset );
+                final int offset = ( adr - charROMAdr + charRomOffset ) % 4096;     // TODO: This is a hack to prevent nasty out-of-bounds exceptions ... fix the root cause instead!             
+                return mainMemory.getCharacterROM().readByteNoSideEffects( offset );
             }
 
             @Override
@@ -1263,7 +1270,8 @@ SPRITE_DISPLAY_AREA_START_X
                 {
                     return ram.readByte(adr);
                 }
-                return mainMemory.getCharacterROM().readByte( adr - charROMAdr + charRomOffset );
+                final int offset = ( adr - charROMAdr + charRomOffset ) % 4096;    // TODO: This is a hack to prevent nasty out-of-bounds exceptions ... fix the root cause instead!            
+                return mainMemory.getCharacterROM().readByte( offset );
             }
         };
 
@@ -1312,7 +1320,7 @@ SPRITE_DISPLAY_AREA_START_X
         spriteBackgroundCollisionDetected= false;
 
         // TODO: Nasty hack with rasterIRQLine+4 because I'm not honoring the cycle timings at all....fix this !!!
-        final int rasterPoint = isRasterIRQEnabled() ? rasterIRQLine+4 : -1;
+        final int rasterPoint = isRasterIrqEnabled() ? rasterIRQLine+4 : -1;
 
         // render 4 pixels/clock phase = 8 pixel/clock cycle
         for ( int i = 0 ; i < 4 ; i++ )
@@ -1368,18 +1376,24 @@ SPRITE_DISPLAY_AREA_START_X
     {
         final int oldValue = triggeredInterruptFlags;
         this.triggeredInterruptFlags = (oldValue| IRQ_SPRITE_BACKGROUND |1<<7);
-        if ( (oldValue & IRQ_SPRITE_BACKGROUND) == 0 ) // only trigger interrupt if IRQ is not already active
+        if ( (oldValue & IRQ_SPRITE_BACKGROUND) == 0 && isSpriteBackgroundIrqEnabled() ) // only trigger interrupt if IRQ is not already active
         {
+            if ( DEBUG_TRIGGERED_INTERRUPTS ) {
+                System.out.println("VIC: Triggered sprite-background IRQ");
+            }            
             cpu.queueInterrupt( IRQType.REGULAR  );
         }
     }    
-
+    
     private void triggerSpriteSpriteCollisionIRQ(CPU cpu)
     {
         final int oldValue = triggeredInterruptFlags;
         this.triggeredInterruptFlags = (oldValue| IRQ_SPRITE_SPRITE |1<<7);
-        if ( (oldValue & IRQ_SPRITE_SPRITE) == 0 ) // only trigger interrupt if IRQ is not already active
+        if ( (oldValue & IRQ_SPRITE_SPRITE) == 0 && isSpriteSpriteIrqEnabled() ) // only trigger interrupt if IRQ is not already active
         {
+            if ( DEBUG_TRIGGERED_INTERRUPTS ) {
+                System.out.println("VIC: Triggered sprite-sprite IRQ");
+            }            
             cpu.queueInterrupt( IRQType.REGULAR  );
         }
     }
@@ -1388,11 +1402,26 @@ SPRITE_DISPLAY_AREA_START_X
     {
         final int oldValue = triggeredInterruptFlags;
         this.triggeredInterruptFlags = (oldValue| IRQ_RASTER |1<<7);
-        if ( (oldValue & IRQ_RASTER) == 0 ) // only trigger interrupt if IRQ is not already active
+        if ( (oldValue & IRQ_RASTER) == 0 && isRasterIrqEnabled() ) // only trigger interrupt if IRQ is not already active
         {
+            if ( DEBUG_TRIGGERED_INTERRUPTS ) {
+                System.out.println("VIC: Triggered raster IRQ");
+            }
             cpu.queueInterrupt( IRQType.REGULAR  );
         }
     }
+    
+    private boolean isSpriteBackgroundIrqEnabled() {
+        return ( enabledInterruptFlags & IRQ_SPRITE_BACKGROUND) != 0;
+    }
+    
+    private boolean isSpriteSpriteIrqEnabled() {
+        return ( enabledInterruptFlags & IRQ_SPRITE_SPRITE) != 0;
+    }
+    
+    private boolean isRasterIrqEnabled() {
+        return ( enabledInterruptFlags & IRQ_RASTER) != 0;
+    }      
 
     /**
      * CIA #2 , $DD00
@@ -1467,6 +1496,8 @@ SPRITE_DISPLAY_AREA_START_X
         videoRAMAdr = bankAdr + videoRAMOffset;
         charROMAdr  = bankAdr + glyphRAMOffset;
         sprite0DataPtrAddress = bankAdr + videoRAMOffset + 1024 - 8;
+        
+     // FIXME: Get rid of the following line, this is a hack to make switching character sets work properly ... but IMHO this shouldn't be needed at all
         charRomOffset = ( ( memoryMapping & 0b0000_0010) >> 1) == 0 ? 0 : 2048;
 
         if ( DEBUG_MEMORY_LAYOUT ) {
@@ -1645,7 +1676,7 @@ display window.
     {
         synchronized( frontBuffer )
         {
-            if ( DEBUG_RASTER_IRQ && isRasterIRQEnabled() )
+            if ( DEBUG_DRAW_RASTER_IRQ_LINE && isRasterIrqEnabled() )
             {
                 final Graphics2D gfx = backBufferGfx;
                 gfx.setColor(Color.RED);
@@ -1867,6 +1898,14 @@ display window.
                 spritesEnabled = value & 0xff;
                 if ( DEBUG_SPRITES ) {
                     System.out.println("VIC: Sprites enabled: "+Misc.to8BitBinary( spritesEnabled ) );
+                    System.out.println("VIC: Sprite #0 data @ "+Misc.to16BitHex( sprite0.getDataStartAddress() ) );
+                    System.out.println("VIC: Sprite #1 data @ "+Misc.to16BitHex( sprite1.getDataStartAddress() ) );
+                    System.out.println("VIC: Sprite #2 data @ "+Misc.to16BitHex( sprite2.getDataStartAddress() ) );
+                    System.out.println("VIC: Sprite #3 data @ "+Misc.to16BitHex( sprite3.getDataStartAddress() ) );
+                    System.out.println("VIC: Sprite #4 data @ "+Misc.to16BitHex( sprite4.getDataStartAddress() ) );
+                    System.out.println("VIC: Sprite #5 data @ "+Misc.to16BitHex( sprite5.getDataStartAddress() ) );
+                    System.out.println("VIC: Sprite #6 data @ "+Misc.to16BitHex( sprite6.getDataStartAddress() ) );
+                    System.out.println("VIC: Sprite #7 data @ "+Misc.to16BitHex( sprite7.getDataStartAddress() ) );
                 }
                 break;
             case VIC_SPRITE_DOUBLE_HEIGHT:
@@ -1939,9 +1978,15 @@ display window.
                 } else {
                     this.triggeredInterruptFlags = newValue;
                 }
+                if ( DEBUG_INTERRUPTS ) {
+                    System.out.println("VIC: currently triggered interrupts: "+Misc.to8BitBinary( this.triggeredInterruptFlags ) );
+                }
                 break;
             case VIC_IRQ_ENABLE_BITS:
-                this.enabledInterruptFlags = value;
+                this.enabledInterruptFlags = value & 0xff;
+                if ( DEBUG_INTERRUPTS ) {
+                    System.out.println("VIC: Enabled interrupts: "+Misc.to8BitBinary( this.enabledInterruptFlags ) );
+                }                
                 break;
             case VIC_CTRL1:
                 if ( DEBUG_GRAPHIC_MODES )
@@ -2021,9 +2066,5 @@ display window.
     @Override
     public String dump(int offset, int len) {
         return HexDump.INSTANCE.dump( (short) (getAddressRange().getStartAddress()+offset),this,offset,len);
-    }
-
-    private boolean isRasterIRQEnabled() {
-        return (enabledInterruptFlags & IRQ_RASTER) != 0;
     }
 }

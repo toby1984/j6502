@@ -1087,46 +1087,46 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
 
         // TODO: Remove tape debug code
 
-        if ( initialPC == 0xF92C) 
-        {
-            final int correction = memory.readByte( 0xb0 );
-            System.out.println("Speed correction: "+correction+" (%"+StringUtils.leftPad( Integer.toBinaryString(correction ) , 8 , '0' )+")" );
-        } 
-        else if ( initialPC == 0xF9D5) 
-        {
-            final WavePeriod first = memory.readByte( 0xd7 ) == 0 ? WavePeriod.SHORT : WavePeriod.MEDIUM;
-            final WavePeriod second = cpu.getX() == 0 ? WavePeriod.SHORT : WavePeriod.MEDIUM;
-            System.out.println("Detected pair ("+first+","+second+")");
-        } 
-        else if ( initialPC == 0xFA10 ) 
-        {
-            System.out.println("Long pulse received");
-        } 
-        else if ( initialPC == 0xF98B ) 
-        {
-            System.out.println("parity error");
-        } 
-        else if ( initialPC == 0xFA8F2 ) 
-        {
-            System.out.println("Read error (parity)");
-        } 
-        else if ( initialPC == 0xFA57 ) 
-        {
-            System.out.println("Read error");
-        } 
-        else if ( initialPC == 0xF959 ) 
-        {
-            final int elapsedLo = memory.readByte( 0xb1 ) & 0xff;
-            final int elapsedHi = cpu.getAccumulator() & 0xff;
-            final int elapsedCycles = (elapsedHi << 8 | elapsedLo)*4;
-            System.out.println("Elapsed cycles: "+elapsedCycles);
-        }
-        else if ( initialPC == 0xFA08 ) 
-        {
-            final int value = memory.readByte( 0xbf ); 
-            final int bit = memory.readByte( 0xa3 ); 
-            System.out.println("Byte is now: %"+StringUtils.leftPad( Integer.toBinaryString( value ) , 8 , "0" )+" , bit "+bit+" , ($"+Integer.toHexString(value) );
-        }
+//        if ( initialPC == 0xF92C) 
+//        {
+//            final int correction = memory.readByte( 0xb0 );
+//            System.out.println("Speed correction: "+correction+" (%"+StringUtils.leftPad( Integer.toBinaryString(correction ) , 8 , '0' )+")" );
+//        } 
+//        else if ( initialPC == 0xF9D5) 
+//        {
+//            final WavePeriod first = memory.readByte( 0xd7 ) == 0 ? WavePeriod.SHORT : WavePeriod.MEDIUM;
+//            final WavePeriod second = cpu.getX() == 0 ? WavePeriod.SHORT : WavePeriod.MEDIUM;
+//            System.out.println("Detected pair ("+first+","+second+")");
+//        } 
+//        else if ( initialPC == 0xFA10 ) 
+//        {
+//            System.out.println("Long pulse received");
+//        } 
+//        else if ( initialPC == 0xF98B ) 
+//        {
+//            System.out.println("parity error");
+//        } 
+//        else if ( initialPC == 0xFA8F2 ) 
+//        {
+//            System.out.println("Read error (parity)");
+//        } 
+//        else if ( initialPC == 0xFA57 ) 
+//        {
+//            System.out.println("Read error");
+//        } 
+//        else if ( initialPC == 0xF959 ) 
+//        {
+//            final int elapsedLo = memory.readByte( 0xb1 ) & 0xff;
+//            final int elapsedHi = cpu.getAccumulator() & 0xff;
+//            final int elapsedCycles = (elapsedHi << 8 | elapsedLo)*4;
+//            System.out.println("Elapsed cycles: "+elapsedCycles);
+//        }
+//        else if ( initialPC == 0xFA08 ) 
+//        {
+//            final int value = memory.readByte( 0xbf ); 
+//            final int bit = memory.readByte( 0xa3 ); 
+//            System.out.println("Byte is now: %"+StringUtils.leftPad( Integer.toBinaryString( value ) , 8 , "0" )+" , bit "+bit+" , ($"+Integer.toHexString(value) );
+//        }
 
         opcode = read6502( initialPC );
 
