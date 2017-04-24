@@ -196,10 +196,10 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 				/*
 				 Bit 0..1: Select the position of the VIC-memory
 
-				     %00, 0: Bank 3: $C000-$FFFF, 49152-65535
-				     %01, 1: Bank 2: $8000-$BFFF, 32768-49151
-				     %10, 2: Bank 1: $4000-$7FFF, 16384-32767
-				     %11, 3: Bank 0: $0000-$3FFF, 0-16383 (standard)
+				     %00, Bank 0: $C000-$FFFF, 49152-65535
+				     %01, Bank 1: $8000-$BFFF, 32768-49151
+				     %10, Bank 2: $4000-$7FFF, 16384-32767
+				     %11, Bank 3: $0000-$3FFF, 0-16383 (standard)
 
 				Bit 2: RS-232: TXD Output, userport: Data PA 2 (pin M)
 				Bit 3..5: serial bus Output (0=High/Inactive, 1=Low/Active)
