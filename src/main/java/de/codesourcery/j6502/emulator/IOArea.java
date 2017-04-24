@@ -478,7 +478,6 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		}
 
 		vic.tick( cpu , clockHigh );
-
 	}
 
 	protected static String toBinaryString(int value)

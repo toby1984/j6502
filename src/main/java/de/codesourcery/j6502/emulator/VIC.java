@@ -1362,8 +1362,8 @@ public class VIC extends IMemoryRegion
                 triggerRasterIRQ(cpu);
             }
 
-            if ( beamY >= FIRST_DISPLAY_AREA_Y && beamY <= LAST_DISPLAY_AREA_Y &&
-                 beamX >= FIRST_DISPLAY_AREA_X && beamX <= LAST_DISPLAY_AREA_X)
+            if ( beamY >= FIRST_DISPLAY_AREA_Y && beamX >= FIRST_DISPLAY_AREA_X &&
+                 beamY <= LAST_DISPLAY_AREA_Y && beamX <= LAST_DISPLAY_AREA_X)
             {
                 // write pixel.
                 // we abused the alpha channel to distinguish between 'foreground' and 'background' pixels
