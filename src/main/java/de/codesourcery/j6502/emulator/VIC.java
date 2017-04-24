@@ -15,15 +15,15 @@ public class VIC extends IMemoryRegion
 {
     private static final int RASTER_IRQ_X_COORDINATE = 76; // only on 6569
 
-    public static final boolean DEBUG_DRAW_RASTER_IRQ_LINE = true;
+    public static final boolean DEBUG_DRAW_RASTER_IRQ_LINE = false;
     
     public static final boolean DEBUG_INTERRUPTS = false;
     public static final boolean DEBUG_TRIGGERED_INTERRUPTS = false;
     
     public static final boolean DEBUG_FPS = true;
-    public static final boolean DEBUG_GRAPHIC_MODES = true;
-    public static final boolean DEBUG_SPRITES = true;
-    public static final boolean DEBUG_MEMORY_LAYOUT = true;
+    public static final boolean DEBUG_GRAPHIC_MODES = false;
+    public static final boolean DEBUG_SPRITES = false;
+    public static final boolean DEBUG_MEMORY_LAYOUT = false;
 
     public static final int TOTAL_RASTER_LINES = 403; // PAL-B
 
@@ -125,24 +125,65 @@ public class VIC extends IMemoryRegion
         }
     }
 
-    protected static final class GraphicsMode
+    private enum GraphicsMode 
     {
+        MODE_000(false,false,false),
+        MODE_001(false,false,true),
+        MODE_010(false,true ,false),
+        MODE_011(false,true ,true),
+        MODE_100(true ,false,false),
+        MODE_101(true ,false,true),
+        MODE_110(true ,true ,false),
+        MODE_111(true ,true ,true);
+        
         public final boolean bitMapMode;
+        public final boolean textMode;
         public final boolean extendedColorMode;
         public final boolean multiColorMode;
-
-        public GraphicsMode(boolean bitMapMode, boolean extendedColorMode, boolean multiColorMode) {
+        
+        private GraphicsMode(boolean bitMapMode, boolean extendedColorMode, boolean multiColorMode) {
             this.bitMapMode = bitMapMode;
+            this.textMode = ! bitMapMode;
             this.extendedColorMode = extendedColorMode;
             this.multiColorMode = multiColorMode;
         }
-
+        
         @Override
         public String toString() {
             return "bitmap: "+bitMapMode+" | multi-color: "+multiColorMode+" | extended: "+extendedColorMode;
+        }        
+        
+        protected static boolean isExtendedColorMode(VIC vic) {
+            return ( vic.vicCtrl1 & 1<< 6) != 0;
+        }
+
+        protected static boolean isBitmapMode(VIC vic) {
+            return ( vic.vicCtrl1 & 1<< 5) != 0;
+        }
+
+        protected static boolean isMultiColor(VIC vic) {
+            return ( vic.vicCtrl2 & 1<< 4) != 0;
+        }        
+        
+        public static GraphicsMode get(VIC vic) 
+        {
+            final int value = (isBitmapMode(vic) ? 4 : 0) | (isExtendedColorMode(vic) ? 2 : 0) | (isMultiColor(vic) ? 1 :0 ); 
+            switch(value) 
+            {
+                case 0: return MODE_000;
+                case 1: return MODE_001;
+                case 2: return MODE_010;
+                case 3: return MODE_011;
+                case 4: return MODE_100;
+                case 5: return MODE_101;
+                case 6: return MODE_110;
+                case 7: return MODE_111;
+                default:
+                    throw new IllegalArgumentException("Illegal mask value");
+            }
         }
     }
-
+    
     /* VIC I/O area is fixed at $D000 - $DFFF.
      *
      * VIC $d000 - $d02f
@@ -669,27 +710,6 @@ public class VIC extends IMemoryRegion
             return rgbBorderColor;
         }
 
-        /*
-SPRITE_DISPLAY_AREA_START_X         
-         */
-
-        private boolean isInSpriteArea(int beamX,int beamY) 
-        {
-            return  beamX >= SPRITE_DISPLAY_AREA_START_X && beamY >= SPRITE_DISPLAY_AREA_START_Y;
-        }         
-
-        private boolean isInGfxArea(int beamX,int beamY) 
-        {
-            return  beamX >= FIRST_GFX_DISPLAY_AREA_X && beamY >= FIRST_GFX_DISPLAY_AREA_Y &&
-                    beamX <= LAST_GFX_DISPLAY_AREA_X && beamY <= LAST_GFX_DISPLAY_AREA_Y;
-        }        
-
-        private boolean isInBorder(int beamX,int beamY) 
-        {
-            return  beamX <= leftBorderEndX || beamX >= rightBorderStartX ||
-                    beamY <= topBorderEndY || beamY >= bottomBorderStartY;
-        }        
-
         public void onStartOfLine() 
         {
             bg.onStartOfLine();
@@ -703,7 +723,7 @@ SPRITE_DISPLAY_AREA_START_X
             sprite7Sequencer.onStartOfLine();            
         }
     }
-
+    
     private int getFinalPixelColor(int colorFromBitmap) 
     {
         // check whether the pixel's original color is something 
@@ -829,7 +849,7 @@ SPRITE_DISPLAY_AREA_START_X
         return colorFromBitmap;
     }    
 
-    private boolean isForegroundPixelColor(int rgb) {
+    private static boolean isForegroundPixelColor(int rgb) {
         return ( rgb & 0xff000000 ) != 0;
     }
     
@@ -970,15 +990,16 @@ SPRITE_DISPLAY_AREA_START_X
             }
             bitCounter++;
 
+            final GraphicsMode mode = graphicsMode;
             final int pixelColor;
-            if ( isBitmapMode() )
+            if ( mode.bitMapMode )
             {
-                if ( isExtendedColorMode() ) // there are not extended-color bitmap modes
+                if ( mode.extendedColorMode ) // there are not extended-color bitmap modes
                 {
                     pixelColor = RGB_FG_COLORS[ 0 ];
                     currentVideoData <<= 1;
                 }
-                else if ( isMultiColor() ) // multi-color bitmap mode
+                else if ( mode.multiColorMode ) // multi-color bitmap mode
                 {
                     switch( ( currentVideoData & 0b1100_0000) >>> 6 )
                     {
@@ -1003,7 +1024,7 @@ SPRITE_DISPLAY_AREA_START_X
                     currentVideoData <<= 1;
                 }
             }
-            else if ( isExtendedColorMode() ) // ECM text mode
+            else if ( mode.extendedColorMode ) // ECM text mode
             {
                 if ( (currentVideoData & 1<<7) != 0 ) // => pixel is set
                 {
@@ -1021,7 +1042,7 @@ SPRITE_DISPLAY_AREA_START_X
                     }
                 }
             }
-            else  if ( isMultiColor() )  // MC text mode
+            else  if ( mode.multiColorMode )  // MC text mode
             {
                 /* This mode allows for displaying four-colored characters at the cost of
                  * horizontal resolution. If bit 11 of the c-data is zero, the character is
@@ -1061,12 +1082,13 @@ SPRITE_DISPLAY_AREA_START_X
             // video data is organized column-wise , so 8 successive bytes belong to 8 successive rows on the screen
             final int rowOffset = displayY & 0b111;
 
-            if ( isTextMode() )
+            final GraphicsMode mode = graphicsMode;
+            if ( mode.textMode )
             {
                 final int rowStartOffset = (displayY/8)*40;
                 final int charPtr = videoRAMAdr+rowStartOffset+dataPtr;
                 final int character = vicAddressView.readByte( charPtr );
-                if ( isExtendedColorMode() )
+                if ( mode.extendedColorMode )
                 {
                     return vicAddressView.readByte( glyphDataAdr + ( character & 0b0011_1111) *8 + rowOffset );
                 }
@@ -1080,7 +1102,8 @@ SPRITE_DISPLAY_AREA_START_X
 
         private int glyphData(int displayY)
         {
-            if ( isTextMode() && isExtendedColorMode() )
+            final GraphicsMode mode = graphicsMode;
+            if ( mode.textMode && mode.extendedColorMode )
             {
                 final int rowStartOffset = (displayY/8)*40;
                 int charPtr = videoRAMAdr+rowStartOffset+dataPtr;
@@ -1094,13 +1117,14 @@ SPRITE_DISPLAY_AREA_START_X
             final int rowStartOffset = (displayY/8)*40;
 
             // fetch data from color ram
-            if ( isTextMode() )
+            final GraphicsMode mode = graphicsMode;
+            if ( mode.textMode )
             {
                 return colorMemory.readByte( 0x800 + rowStartOffset + dataPtr );
             }
 
             // bitmap mode
-            if ( isMultiColor() ) {
+            if ( mode.multiColorMode ) {
                 return colorMemory.readByte( 0x800 + rowStartOffset + dataPtr );
             }
             return vicAddressView.readByte( videoRAMAdr + rowStartOffset + dataPtr );
@@ -1206,8 +1230,9 @@ SPRITE_DISPLAY_AREA_START_X
 
     protected int rasterIRQLine;
 
-    private int vicCtrl1;
-    private int vicCtrl2;
+    protected int vicCtrl1;
+    protected int vicCtrl2;
+    private GraphicsMode graphicsMode = GraphicsMode.MODE_000;
 
     private int lightpenY;
     private int lightpenX;    
@@ -1510,22 +1535,6 @@ SPRITE_DISPLAY_AREA_START_X
         }
     }
 
-    protected boolean isExtendedColorMode() {
-        return ( vicCtrl1 & 1<< 6) != 0;
-    }
-
-    protected boolean isBitmapMode() {
-        return ( vicCtrl1 & 1<< 5) != 0;
-    }
-
-    protected boolean isTextMode() {
-        return ! isBitmapMode();
-    }
-
-    protected boolean isMultiColor() {
-        return ( vicCtrl2 & 1<< 4) != 0;
-    }
-
     /*
  If CSEL=0 the left border is extended by 7 pixels and the
 right one by 9 pixels. 
@@ -1547,7 +1556,6 @@ display window.
     private void recalculateHorizontalBorders() 
     {
         final int columns = getColumns();
-        System.out.println("VIC: "+columns+" columns");
         switch( columns ) 
         {
             case 38: // CSEL = 0
@@ -1566,7 +1574,6 @@ display window.
     private void recalculateVerticalBorders() 
     {
         final int rows = getRows();
-        System.out.println("VIC: "+rows+" rows");        
         switch( rows ) 
         {
             case 24: // RSEL = 0
@@ -1611,6 +1618,8 @@ display window.
          */
         vicCtrl2 = 1<<3; // 40 columns
 
+        graphicsMode = GraphicsMode.get(this);
+        
         recalculateHorizontalBorders();
         recalculateVerticalBorders();
 
@@ -1992,9 +2001,9 @@ display window.
                 {
                     if ( ( vicCtrl1 & 0b0110_0000) != (value & 0b0110_0000) )
                     {
-                        final GraphicsMode oldMode = new GraphicsMode( isBitmapMode() , isExtendedColorMode() , isMultiColor() );
+                        final GraphicsMode oldMode = this.graphicsMode;
                         this.vicCtrl1 = value & 0b0111_1111; // bit 7 is actually bit 8 of raster IRQ line
-                        final GraphicsMode newMode = new GraphicsMode( isBitmapMode() , isExtendedColorMode() , isMultiColor() );
+                        final GraphicsMode newMode = GraphicsMode.get(this);
                         System.err.println("VIC_CTRL1 mode changed: "+oldMode+" -> "+newMode);
                     }
                 }
@@ -2011,13 +2020,14 @@ display window.
                 {
                     if ( (vicCtrl2 & 1<<4)  != (value & 1<<4) )
                     {
-                        final GraphicsMode oldMode = new GraphicsMode( isBitmapMode() , isExtendedColorMode() , isMultiColor() );
+                        final GraphicsMode oldMode = this.graphicsMode;
                         this.vicCtrl2 = value & 0xff;
-                        final GraphicsMode newMode = new GraphicsMode( isBitmapMode() , isExtendedColorMode() , isMultiColor() );
+                        final GraphicsMode newMode = GraphicsMode.get(this);
                         System.err.println("VIC_CTRL2 mode changed: "+oldMode+" -> "+newMode);
                     }
                 }
                 this.vicCtrl2 = value & 0xff;
+                this.graphicsMode = GraphicsMode.get( this );
                 recalculateHorizontalBorders();
                 break;
             case VIC_BORDER_COLOR:
@@ -2066,4 +2076,21 @@ display window.
     public String dump(int offset, int len) {
         return HexDump.INSTANCE.dump( (short) (getAddressRange().getStartAddress()+offset),this,offset,len);
     }
+    
+    protected boolean isInBorder(int beamX,int beamY) 
+    {
+        return  beamX <= leftBorderEndX || beamX >= rightBorderStartX ||
+                beamY <= topBorderEndY || beamY >= bottomBorderStartY;
+    }   
+    
+    protected static boolean isInSpriteArea(int beamX,int beamY) 
+    {
+        return  beamX >= SPRITE_DISPLAY_AREA_START_X && beamY >= SPRITE_DISPLAY_AREA_START_Y;
+    }         
+
+    protected static boolean isInGfxArea(int beamX,int beamY) 
+    {
+        return  beamX >= FIRST_GFX_DISPLAY_AREA_X && beamY >= FIRST_GFX_DISPLAY_AREA_Y &&
+                beamX <= LAST_GFX_DISPLAY_AREA_X && beamY <= LAST_GFX_DISPLAY_AREA_Y;
+    }     
 }
