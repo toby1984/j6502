@@ -525,7 +525,7 @@ public class VIC extends IMemoryRegion
      */
 
     // borders, all coordinates are absolute 
-    private static final int HORIZONTAL_BORDER_WIDTH = 41; // TODO: actually 41.5 ...
+    private static final int HORIZONTAL_BORDER_WIDTH = 41; // actually 41.5 ...
 
     private static final int LEFT_BORDER_START_X = 50;
     private static final int RIGHT_BORDER_END_X = 453;
@@ -641,7 +641,6 @@ public class VIC extends IMemoryRegion
 
         public int getRGBColor(int beamX,int beamY) 
         {
-            // TODO: Handle sprite-background collisions !!
             if ( isInGfxArea(beamX,beamY) ) 
             {
                 final int color = bg.getRGBColor();
@@ -653,9 +652,17 @@ public class VIC extends IMemoryRegion
                 return color;
             }
             // sprite display area is larger than graphics area
-            if ( isInSpriteArea(beamX, beamY) ) {
-                // advance sprite sequencers
-                getFinalPixelColor( rgbBorderColor );
+            if ( isInSpriteArea(beamX, beamY) ) 
+            {
+                // advance sprite sequencers but ignore pixel colors
+                sprite0Sequencer.getRGBColor();     
+                sprite1Sequencer.getRGBColor(); 
+                sprite2Sequencer.getRGBColor();
+                sprite3Sequencer.getRGBColor(); 
+                sprite4Sequencer.getRGBColor(); 
+                sprite5Sequencer.getRGBColor(); 
+                sprite6Sequencer.getRGBColor(); 
+                sprite7Sequencer.getRGBColor(); 
             }
             // TODO: Handle case where borders are turned off with RSEL/CSEL hacks and sprite data is visible
             // TODO: This requires modeling the hardware on a half-cycle level though , including support for 'bad lines' and stalling the CPU during sprite/char rom fetches
@@ -673,8 +680,8 @@ SPRITE_DISPLAY_AREA_START_X
 
         private boolean isInGfxArea(int beamX,int beamY) 
         {
-            return  beamX >= FIRST_GFX_DISPLAY_AREA_X && beamX <= LAST_GFX_DISPLAY_AREA_X &&
-                    beamY >= FIRST_GFX_DISPLAY_AREA_Y && beamY <= LAST_GFX_DISPLAY_AREA_Y;
+            return  beamX >= FIRST_GFX_DISPLAY_AREA_X && beamY >= FIRST_GFX_DISPLAY_AREA_Y &&
+                    beamX <= LAST_GFX_DISPLAY_AREA_X && beamY <= LAST_GFX_DISPLAY_AREA_Y;
         }        
 
         private boolean isInBorder(int beamX,int beamY) 
@@ -953,7 +960,7 @@ SPRITE_DISPLAY_AREA_START_X
             {
                 // calculate Y offset relative to start of display area
                 final int displayY  = beamY - FIRST_GFX_DISPLAY_AREA_Y;
-                if ( displayY >= 0 )
+                if ( displayY >= 0 ) // Check probably not needed 
                 {
                     currentVideoData  = videoData( displayY );
                     currentColor = colorData( displayY );
@@ -1061,9 +1068,9 @@ SPRITE_DISPLAY_AREA_START_X
                 final int character = vicAddressView.readByte( charPtr );
                 if ( isExtendedColorMode() )
                 {
-                    return vicAddressView.readByte( charROMAdr + ( character & 0b0011_1111) *8 + rowOffset );
+                    return vicAddressView.readByte( glyphDataAdr + ( character & 0b0011_1111) *8 + rowOffset );
                 }
-                return vicAddressView.readByte( charROMAdr + character*8 + rowOffset );
+                return vicAddressView.readByte( glyphDataAdr + character*8 + rowOffset );
             }
 
             // bitmap mode
@@ -1140,11 +1147,8 @@ SPRITE_DISPLAY_AREA_START_X
     protected int sprite0DataPtrAddress; 
     protected int bitmapRAMAdr;
     protected int builtinCharRomStart;
-    protected int builtinCharRomEnd;
     
-    protected int charRomOffset; // FIXME: Remove this, this is a hack to make switching character sets work properly ... but IMHO this shouldn't be needed
-    
-    protected int charROMAdr;
+    protected int glyphDataAdr;
 
     // Sprite stuff
     protected int spritesEnabled; // ok
@@ -1249,7 +1253,8 @@ SPRITE_DISPLAY_AREA_START_X
 
             private boolean isNotWithinCharacterROM(int address)
             {
-                return address < builtinCharRomStart || address >= builtinCharRomEnd;
+                final int romStart = builtinCharRomStart;
+                return address < romStart || address >= romStart+4096;
             }
 
             @Override
@@ -1259,8 +1264,7 @@ SPRITE_DISPLAY_AREA_START_X
                 {
                     return ram.readByteNoSideEffects(adr);
                 }
-                final int offset = ( adr - charROMAdr + charRomOffset ) % 4096;     // TODO: This is a hack to prevent nasty out-of-bounds exceptions ... fix the root cause instead!             
-                return mainMemory.getCharacterROM().readByteNoSideEffects( offset );
+                return mainMemory.getCharacterROM().readByteNoSideEffects( adr - builtinCharRomStart );
             }
 
             @Override
@@ -1270,8 +1274,7 @@ SPRITE_DISPLAY_AREA_START_X
                 {
                     return ram.readByte(adr);
                 }
-                final int offset = ( adr - charROMAdr + charRomOffset ) % 4096;    // TODO: This is a hack to prevent nasty out-of-bounds exceptions ... fix the root cause instead!            
-                return mainMemory.getCharacterROM().readByte( offset );
+                return mainMemory.getCharacterROM().readByte( adr - builtinCharRomStart );
             }
         };
 
@@ -1319,7 +1322,7 @@ SPRITE_DISPLAY_AREA_START_X
         spriteSpriteCollisionDetected = false;
         spriteBackgroundCollisionDetected= false;
 
-        // TODO: Nasty hack with rasterIRQLine+4 because I'm not honoring the cycle timings at all....fix this !!!
+        // TODO: Nasty hack with rasterIRQLine+4 because I'm not honoring cycle timings at all....fix this !!!
         final int rasterPoint = isRasterIrqEnabled() ? rasterIRQLine+4 : -1;
 
         // render 4 pixels/clock phase = 8 pixel/clock cycle
@@ -1464,7 +1467,6 @@ SPRITE_DISPLAY_AREA_START_X
             default:
                 throw new RuntimeException("Unreachable code reached");
         }
-        builtinCharRomEnd = builtinCharRomStart+4096;        
         updateMemoryMapping();
     }
 
@@ -1494,19 +1496,16 @@ SPRITE_DISPLAY_AREA_START_X
 
         bitmapRAMAdr = bankAdr + ( (memoryMapping & 0b1000) == 0 ? 0 : 0x2000 );
         videoRAMAdr = bankAdr + videoRAMOffset;
-        charROMAdr  = bankAdr + glyphRAMOffset;
+        glyphDataAdr  = bankAdr + glyphRAMOffset;
+        
         sprite0DataPtrAddress = bankAdr + videoRAMOffset + 1024 - 8;
         
-     // FIXME: Get rid of the following line, this is a hack to make switching character sets work properly ... but IMHO this shouldn't be needed at all
-        charRomOffset = ( ( memoryMapping & 0b0000_0010) >> 1) == 0 ? 0 : 2048;
-
         if ( DEBUG_MEMORY_LAYOUT ) {
             System.out.println("VIC: Bank @ "+HexDump.toAdr( bankAdr )+"");
             System.out.println("VIC: Video RAM @ "+HexDump.toAdr( videoRAMAdr ) );
             System.out.println("VIC: Bitmap RAM @ "+HexDump.toAdr( bitmapRAMAdr ) );
             System.out.println("VIC: Character ROM available ? "+( ! charROMHidden ? "yes" :"no"));
-            System.out.println("VIC: Char ROM @ "+HexDump.toAdr( charROMAdr )  );
-            System.out.println("VIC: Char ROM offset @ "+HexDump.toAdr( charRomOffset )  );
+            System.out.println("VIC: Glyph data @ "+HexDump.toAdr( glyphDataAdr )  );
             System.out.println("VIC: Sprite #0 data ptr @ "+HexDump.toAdr( sprite0DataPtrAddress )  );
         }
     }
