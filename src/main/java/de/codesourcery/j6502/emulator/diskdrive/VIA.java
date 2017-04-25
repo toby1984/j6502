@@ -471,27 +471,29 @@ public class VIA extends Memory
                 if ( oldValue ) { // true -> false transition
                     if ( line1Mode == ControlLine1Mode.IRQ_NEG_ACTIVE_EDGE )
                     {
-                        final boolean irqTriggered = setInterrupt( irqMaskBitsControlLine1 );
-                        if ( DEBUG_CONTROL_LINE1_OUTPUT ) {
-                            if ( irqTriggered ) {
-                                logDebug( "[ triggered ] Port "+portName+" control line #1 triggers IRQ because of negative edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
-                            } else {
-                                logDebug( "[ not triggered ] Port "+portName+" control line #1 triggers IRQ because of negative edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
-                            }
-                        }
+                        setInterrupt( irqMaskBitsControlLine1 );
+//                        final boolean irqTriggered = setInterrupt( irqMaskBitsControlLine1 );
+//                        if ( DEBUG_CONTROL_LINE1_OUTPUT ) {
+//                            if ( irqTriggered ) {
+//                                logDebug( "[ triggered ] Port "+portName+" control line #1 triggers IRQ because of negative edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
+//                            } else {
+//                                logDebug( "[ not triggered ] Port "+portName+" control line #1 triggers IRQ because of negative edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
+//                            }
+//                        }
                     }
                 } else { // false -> true transition
                     if ( line1Mode == ControlLine1Mode.IRQ_POS_ACTIVE_EDGE )
                     {
-                        boolean irqTriggered = setInterrupt( irqMaskBitsControlLine1 );
-                        if ( DEBUG_CONTROL_LINE1_OUTPUT )
-                        {
-                            if ( irqTriggered ) {
-                                logDebug("[ triggered ] Port "+portName+" control line #1 triggers IRQ because of positive edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
-                            } else {
-                                logDebug("[ not triggered ] Port "+portName+" control line #1 triggers IRQ because of positive edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
-                            }
-                        }
+                        setInterrupt( irqMaskBitsControlLine1 );
+//                        boolean irqTriggered = setInterrupt( irqMaskBitsControlLine1 );
+//                        if ( DEBUG_CONTROL_LINE1_OUTPUT )
+//                        {
+//                            if ( irqTriggered ) {
+//                                logDebug("[ triggered ] Port "+portName+" control line #1 triggers IRQ because of positive edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
+//                            } else {
+//                                logDebug("[ not triggered ] Port "+portName+" control line #1 triggers IRQ because of positive edge, mask: "+HexDump.toBinaryString( (byte)  irqMaskBitsControlLine1 ) );
+//                            }
+//                        }
                     }
                 }
                 if ( notifyListeners ) {
@@ -1087,7 +1089,9 @@ public class VIA extends Memory
 
     public void tick()
     {
-        cycles++;
+        if ( DEBUG ) {
+            cycles++;
+        }
 
         if ( timer1Running && --timer1 == 0 )
         {
@@ -1121,15 +1125,13 @@ public class VIA extends Memory
         }
     }
 
-    private boolean setInterrupt(int bitMask)
+    private void setInterrupt(int bitMask)
     {
         irqFlags |= ( IRQBIT_IRQ_OCCURRED | bitMask );
         if ( (irqEnable & bitMask) != 0 )
         {
             cpu.queueInterrupt( IRQType.REGULAR );
-            return true;
         } 
-        return false;
     }
 
     private void clearInterrupt(int bitMask)

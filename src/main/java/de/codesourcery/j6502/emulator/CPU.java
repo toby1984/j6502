@@ -9,6 +9,13 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class CPU
 {
+    public static final boolean RECORD_BACKTRACE = true;
+    public static final int BACKTRACE_RINGBUFFER_SIZE = 16; // MUST be a power of 2 , don't forget to update BACKTRACE_RINGBUFFER_SIZE_MASK !!!
+    public static final int BACKTRACE_RINGBUFFER_SIZE_MASK = 0xf; 
+    
+    public final int[] backtraceRingBuffer = new int[ BACKTRACE_RINGBUFFER_SIZE ];
+    public int backtraceRingBufferElements = 0; 
+    
 	public static final int RESET_VECTOR_LOCATION = 0xfffc;
 	public static final int BRK_VECTOR_LOCATION = 0xfffe; // same as IRQ_VECTOR_LOCATION
 	public static final int IRQ_VECTOR_LOCATION = 0xfffe; // same as BRK_VECTOR_LOCATION
@@ -424,5 +431,33 @@ public class CPU
 
     public boolean isBreakOnIRQ() {
         return breakOnInterrupt;
+    }
+    
+    /**
+     * Returns the addresses of up to {@link TRACK_PC_RINGBUFFER_SIZE} commands that have previously been executed.
+     * 
+     * first array element holds the oldest PC value while the last element holds the most recent PC value.
+     * @return
+     */
+    public int[] getBacktrace()
+    {
+        final int[] result = new int[ backtraceRingBufferElements % BACKTRACE_RINGBUFFER_SIZE ];
+        for ( int i = 0 , ptr = backtraceRingBufferElements-1 , len = backtraceRingBufferElements & BACKTRACE_RINGBUFFER_SIZE_MASK ; len > 0 ; i++ , ptr-- ) 
+        {
+            result[i] = backtraceRingBuffer[ptr & BACKTRACE_RINGBUFFER_SIZE_MASK];
+        }
+        return result;
+    }
+    
+    /**
+     * Remembers the current PC in a ringbuffer
+     * @return current PC
+     */
+    public int rememberPC() 
+    {
+        final int pc = this.pc;
+        backtraceRingBuffer[ backtraceRingBufferElements & BACKTRACE_RINGBUFFER_SIZE_MASK ] = pc;
+        backtraceRingBufferElements++;
+        return pc;
     }
 }

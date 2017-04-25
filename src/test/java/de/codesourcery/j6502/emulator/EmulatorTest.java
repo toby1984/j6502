@@ -46,28 +46,28 @@ public class EmulatorTest  extends TestCase
 
     public static final boolean TEST_PERFORMANCE = false;
 //
-//    public void testCPUPerformance() throws IOException 
-//    {
-//        System.out.println("Performance 'Other CPU'");
-//
-//        final Memory memory = new Memory("test" , new AddressRange(0,65536));
-//
-//        final Assembler asm = new Assembler();
-//        final CPU actualCPU = prepareTest( asm , memory );
-//        final CPUImpl cpu = new CPUImpl( actualCPU , memory );
-//
-//        final Supplier<Long> toTest = () -> 
-//        {
-//            actualCPU.reset();
-//            actualCPU.pc( asm.getOrigin() );
-//            for ( int i = PERFORMANCE_INSTRUCTIONS ; i > 0 ; i-- ) {
-//                cpu.executeInstruction();
-//            }
-//            return actualCPU.cycles;
-//        };        
-//
-//        benchmark( toTest , 200 , 100 );
-//    }
+    public void testCPUPerformance() throws IOException 
+    {
+        System.out.println("Performance 'Other CPU'");
+
+        final Memory memory = new Memory("test" , MemoryType.RAM , new AddressRange(0,65536));
+
+        final Assembler asm = new Assembler();
+        final CPU actualCPU = prepareTest( asm , memory );
+        final CPUImpl cpu = new CPUImpl( actualCPU , memory );
+
+        final Supplier<Long> toTest = () -> 
+        {
+            actualCPU.reset();
+            actualCPU.pc( asm.getOrigin() );
+            for ( int i = PERFORMANCE_INSTRUCTIONS ; i > 0 ; i-- ) {
+                cpu.executeInstruction();
+            }
+            return actualCPU.cycles;
+        };        
+
+        benchmark( toTest , 50 , 50 );
+    }
 
     private CPU prepareTest(Assembler a, Memory memory) throws IOException 
     {

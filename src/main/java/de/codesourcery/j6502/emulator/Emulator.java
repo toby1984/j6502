@@ -21,7 +21,7 @@ public class Emulator
 	public final TapeDrive tapeDrive = new TapeDrive();
 	
 	private final MemorySubsystem memory = new MemorySubsystem(tapeDrive);
-	private final CPU cpu = new CPU( this.memory );
+	public final CPU cpu = new CPU( this.memory );
 
 	private IMemoryProvider memoryProvider;
 

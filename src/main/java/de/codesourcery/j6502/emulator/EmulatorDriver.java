@@ -3,26 +3,33 @@ package de.codesourcery.j6502.emulator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.Validate;
 
 import de.codesourcery.j6502.assembler.SourceMap;
+import de.codesourcery.j6502.utils.Misc;
 import de.codesourcery.j6502.utils.SourceHelper;
 
 public abstract class EmulatorDriver extends Thread
 {
 	private static final AtomicLong CMD_ID = new AtomicLong(0);
 	
+	private static final boolean INVOKE_CALLBACK = false;
+	
 	private static final long CALLBACK_INVOKE_CYCLES = 300_000;
 
 	public volatile Throwable lastException;
+	
 
 	public static final boolean PRINT_SPEED = false;
 
 	public static enum Mode { SINGLE_STEP , CONTINOUS; }
-
+	
 	private final AtomicReference<Mode> currentMode = new AtomicReference<Mode>(Mode.SINGLE_STEP);
 
 	protected final Emulator emulator;
@@ -51,7 +58,7 @@ public abstract class EmulatorDriver extends Thread
 	    public void emulationStopped(Throwable t,boolean stoppedOnBreakpoint);
 	}
 
-	protected static enum CmdType { START , STOP , MAX_SPEED, TRUE_SPEED }
+	protected static enum CmdType { START , STOP , MAX_SPEED, TRUE_SPEED, RUNNABLE }
 
 	protected final class StopCmd extends Cmd
 	{
@@ -78,6 +85,28 @@ public abstract class EmulatorDriver extends Thread
         }
 	}
 
+	protected final class RunnableCmd extends Cmd {
+
+	    public final Consumer<Emulator> visitor;
+	    
+        public RunnableCmd(Consumer<Emulator> visitor,boolean ackRequired)
+        {
+            super(CmdType.RUNNABLE, ackRequired);
+            this.visitor = visitor;
+        }
+	}
+	
+    protected final class AckRunnable extends Cmd {
+
+        public final Runnable r;
+        
+        public AckRunnable(Runnable r)
+        {
+            super(CmdType.RUNNABLE, true);
+            this.r = r;
+        }
+    }	
+	
 	protected class Cmd
 	{
 		public final long id = CMD_ID.incrementAndGet();
@@ -169,6 +198,16 @@ public abstract class EmulatorDriver extends Thread
 		sendCmd( cmd );
 	}
 	
+	public void invoke(Consumer<Emulator> visitor) 
+	{
+	    sendCmd( new RunnableCmd( visitor , false ) );
+	}
+	
+    public void invokeAndWait(Consumer<Emulator> visitor) 
+    {
+        sendCmd( new RunnableCmd( visitor , true ) );
+    }	
+	
     public void setMaxSpeed() {
         sendCmd( new MaxSpeedCommand() );
     }
@@ -253,21 +292,30 @@ public abstract class EmulatorDriver extends Thread
 				cmd = requestQueue.poll();
 				if ( cmd != null )
 				{
-					cmd.ackIfNecessary();
                     switch( cmd.type )
                     {
                         case MAX_SPEED:
                             runAtTrueSpeed = false;
+                            cmd.ackIfNecessary();                              
                             break;
                         case STOP:
                             isRunnable = false;
-                            break;
+                            cmd.ackIfNecessary();  
+                            continue;
                         case TRUE_SPEED:
                             runAtTrueSpeed = true;
+                            cmd.ackIfNecessary();                              
                             break;
+                        case RUNNABLE:
+                            synchronized( emulator ) 
+                            {
+                                ((RunnableCmd) cmd).visitor.accept( emulator );
+                            }
+                            cmd.ackIfNecessary();                             
+                            continue; // start over as the Runnable might've issued a new command that needs processing
                         default:
                             break;
-                    }
+                    }                  
 				}
 			}
 			else
@@ -282,19 +330,27 @@ public abstract class EmulatorDriver extends Thread
 					try
 					{
 						cmd = requestQueue.take();
-						cmd.ackIfNecessary();
-
 						switch( cmd.type )
 						{
                             case MAX_SPEED:
                                 runAtTrueSpeed = false;
+                                cmd.ackIfNecessary();
                                 break;
                             case START:
                                 isRunnable = true;
+                                cmd.ackIfNecessary();
                                 break;
                             case TRUE_SPEED:
                                 runAtTrueSpeed = true;
+                                cmd.ackIfNecessary();
                                 break;
+                            case RUNNABLE:
+                                synchronized( emulator ) 
+                                {
+                                    ((RunnableCmd) cmd).visitor.accept( emulator );
+                                }
+                                cmd.ackIfNecessary();                             
+                                continue; // start over as the Runnable might've issued a new command that needs processing                                
                             default:
                                 break;
 						}
@@ -311,19 +367,19 @@ public abstract class EmulatorDriver extends Thread
 				onStart();
 			}
 
+            if ( runAtTrueSpeed ) 
+            {
+                double dummy = 0;
+                for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
+                    dummy += Math.sqrt( i );
+                }
+                this.dummyValue=dummy;
+            }
+            
 			synchronized( emulator )
 			{
 				try
 				{
-				    if ( runAtTrueSpeed ) 
-				    {
-				        double dummy = 0;
-				        for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
-				            dummy += Math.sqrt( i );
-				        }
-				        this.dummyValue=dummy;
-				    }
-
 					lastException = null;
 
 					emulator.doOneCycle(this);
@@ -336,6 +392,17 @@ public abstract class EmulatorDriver extends Thread
 				}
 				catch(final Throwable e)
 				{
+				    if ( CPU.RECORD_BACKTRACE ) 
+				    {
+				        final int[] lastPCs = emulator.getCPU().getBacktrace();
+				        System.err.println("\n*************\n"
+				                           + "Backtrace:\n"+
+				                             "*************\n");
+				        for ( int i = 0 , no = lastPCs.length ; i < lastPCs.length ; i++ , no-- ) 
+				        {
+				            System.out.println( StringUtils.leftPad( Integer.toString( no ) , 3 , ' ' )+": "+Misc.to16BitHex( lastPCs[i] ));
+				        }
+				    }
 					e.printStackTrace();
 					isRunnable = false;
 					lastException = e;
@@ -344,7 +411,7 @@ public abstract class EmulatorDriver extends Thread
 				}
 			}
 			
-            if ( emulator.getCPU().isBreakpointReached() )
+            if ( emulator.cpu.isBreakpointReached() )
             {
                 isRunnable = false;
                 cmd = stopCommand( false , true ); // assign to cmd so that next loop iteration will know why we stopped execution
@@ -353,7 +420,9 @@ public abstract class EmulatorDriver extends Thread
 			
 			if ( cyclesUntilNextTick <= 0 )
 			{
-				tick();
+			    if ( INVOKE_CALLBACK ) {
+			        tick();
+			    }
                 final long now = System.currentTimeMillis();
                 final float cyclesPerSecond = CALLBACK_INVOKE_CYCLES / ( (now - startTime ) / 1000f );
                 final float khz = cyclesPerSecond / 1000f;

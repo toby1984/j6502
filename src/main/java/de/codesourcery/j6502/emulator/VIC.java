@@ -1160,8 +1160,8 @@ public class VIC extends IMemoryRegion
 
     private long previousFrameTimestamp; // TODO: DEBUG code
     private long frameCounter; // TODO: DEBUG code
-    private long totalFrameTime; // TODO: DEBUG code
     private float fps; // TODO: DEBUG code
+    private long totalFrameTime; // TODO: DEBUG code
 
     // END: frame buffer
 
@@ -1232,8 +1232,12 @@ public class VIC extends IMemoryRegion
 
     protected int vicCtrl1;
     protected int vicCtrl2;
-    private GraphicsMode graphicsMode = GraphicsMode.MODE_000;
+    protected GraphicsMode graphicsMode = GraphicsMode.MODE_000;
 
+    protected boolean displayEnabled=true;
+    protected boolean displayEnabledNewState=true;
+    protected boolean displayEnabledChanged=false;
+    
     private int lightpenY;
     private int lightpenX;    
 
@@ -1334,6 +1338,12 @@ public class VIC extends IMemoryRegion
 
     public void tick(CPU cpu,boolean clockHigh)
     {
+        if ( ! displayEnabled ) 
+        {
+            tickDisabledDisplay(cpu, clockHigh);
+            return;
+        }
+        
         // copy stuff to local variables, hoping that the compiler will put
         // these in registers and avoid memory accesses...
         int beamX = this.beamX;
@@ -1392,12 +1402,78 @@ public class VIC extends IMemoryRegion
                     beamY = 0;
                     pixelData = swapBuffers();
                     imagePixelPtr = 0;
+                    
+                    latchDisplayEnabledState();
+                    if ( ! displayEnabled ) 
+                    {
+                        Arrays.fill( pixelData , rgbBorderColor | 0xff000000);                    
+                        break;
+                    }
                 }
             }
         }
         this.beamX = beamX;
         this.beamY = beamY;
         this.imagePixelPtr = imagePixelPtr;
+    }
+    
+    private void tickDisabledDisplay(CPU cpu,boolean clockHigh)
+    {
+        // copy stuff to local variables, hoping that the compiler will put
+        // these in registers and avoid memory accesses...
+        int beamX = this.beamX;
+        int beamY = this.beamY;
+        int imagePixelPtr = this.imagePixelPtr;
+        int[] pixelData = this.imagePixelData;
+
+//        boolean spriteSpriteCollisionNotActive = ( triggeredInterruptFlags & IRQ_SPRITE_SPRITE) == 0;
+//        boolean spriteBackgroundCollisionNotActive = ( triggeredInterruptFlags & IRQ_SPRITE_BACKGROUND) == 0;
+        
+        spriteSpriteCollisionDetected = false;
+        spriteBackgroundCollisionDetected= false;
+
+        // TODO: Nasty hack with rasterIRQLine+4 because I'm not honoring cycle timings at all....fix this !!!
+//        final int rasterPoint = isRasterIrqEnabled() ? rasterIRQLine+4 : -1;
+
+        // render 4 pixels/clock phase = 8 pixel/clock cycle
+        for ( int i = 0 ; i < 4 ; i++ )
+        {
+//            if ( beamX == RASTER_IRQ_X_COORDINATE && rasterPoint == beamY ) 
+//            { 
+//                triggerRasterIRQ(cpu);
+//            }
+
+            // advance raster beam
+            if ( ++beamX >= 504 )
+            {
+                // start of new raster line
+                beamX = 0;
+                if ( ++beamY >= 312 )
+                {
+                    // start of new frame
+                    beamY = 0;
+                    pixelData = swapBuffers();
+                    imagePixelPtr = 0;
+                    
+                    latchDisplayEnabledState();
+                    if ( displayEnabled ) {
+                        break;
+                    }
+                    Arrays.fill( pixelData , rgbBorderColor | 0xff000000);
+                }
+            }
+        }
+        this.beamX = beamX;
+        this.beamY = beamY;
+        this.imagePixelPtr = imagePixelPtr;
+    }    
+    
+    private void latchDisplayEnabledState() 
+    {
+        if ( displayEnabledChanged ) {
+            displayEnabled = displayEnabledNewState;
+            displayEnabledChanged  = false;
+        }
     }
     
     private void triggerSpriteBackgroundCollisionIRQ(CPU cpu)
@@ -1596,6 +1672,16 @@ display window.
     private int getRows() {
         return (vicCtrl1 & 1<<3) != 0 ? 25 : 24;
     }    
+    
+    public void setDisplayEnabled(boolean yesNo) 
+    {
+        displayEnabledNewState = yesNo;
+        displayEnabledChanged = true;
+    }
+    
+    public boolean isDisplayEnabled() {
+        return displayEnabled;
+    }
 
     @Override
     public void reset()
@@ -1617,6 +1703,10 @@ display window.
          *                       Bit 2..0: Offset in Pixeln vom linken Bildschirmrand
          */
         vicCtrl2 = 1<<3; // 40 columns
+
+        displayEnabled=true;
+        displayEnabledNewState=true;
+        displayEnabledChanged=false;        
 
         graphicsMode = GraphicsMode.get(this);
         
@@ -1703,7 +1793,7 @@ display window.
 
                     if ( ( frameCounter % 50) == 0 )
                     {
-                        fps = 1000f/ ((float) totalFrameTime / (float) frameCounter);
+                        fps = 1000f/ ((float) totalFrameTime / frameCounter);
                         frameCounter = 0;
                         totalFrameTime = 0;
                     }
@@ -2007,7 +2097,8 @@ display window.
                         System.err.println("VIC_CTRL1 mode changed: "+oldMode+" -> "+newMode);
                     }
                 }
-                this.vicCtrl1 = value & 0b0111_1111; // bit 7 is actually bit 8 of raster IRQ line
+                this.vicCtrl1 = value & 0xff;
+                setDisplayEnabled( (value & 1<<4) != 0 );
                 if ( (value & 1<<7) != 0 ) {
                     rasterIRQLine |= 1<<8;
                 } else {

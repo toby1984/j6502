@@ -8,11 +8,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.apache.commons.lang.StringUtils;
-
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.exceptions.HLTException;
-import de.codesourcery.j6502.emulator.tapedrive.WavePeriod;
 import de.codesourcery.j6502.utils.HexDump;
 
 /**
@@ -23,10 +20,10 @@ import de.codesourcery.j6502.utils.HexDump;
  */
 public final class CPUImpl
 {
-    protected static final boolean TRACK_INS_DURATION = true;
+    protected static final boolean TRACK_INS_DURATION = false;
 
     protected static final boolean DEBUG_TAPE = false;
-
+    
     protected IMemoryRegion memory;
     protected CPU cpu;
 
@@ -1083,7 +1080,12 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
 
     public void executeInstruction()
     {
-        final int initialPC = cpu.pc();
+        final int initialPC;
+        if ( CPU.RECORD_BACKTRACE ) {
+            initialPC = cpu.rememberPC();
+        } else {
+            initialPC = cpu.pc();            
+        }
 
         // TODO: Remove tape debug code
 

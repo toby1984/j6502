@@ -786,6 +786,7 @@ public class Debugger
     protected final class ButtonToolbar extends JPanel implements WindowLocationHelper.IDebuggerView
     {
         public final JButton singleStepButton = new JButton("Step");
+        public final JButton toggleDisplayToolbar = new JButton("Toggle display");
         public final JButton runButton = new JButton("Run");
         public final JButton stopButton = new JButton("Stop");
         public final JButton breakOnIRQButton = new JButton("Break on IRQ");
@@ -930,6 +931,14 @@ public class Debugger
             {
                 prepareTest();
             });
+            
+            toggleDisplayToolbar.addActionListener( event -> 
+            {
+               driver.invoke( emulator -> 
+               {
+                   emulator.getVIC().setDisplayEnabled( ! emulator.getVIC().isDisplayEnabled() );
+               });
+            });
 
             singleStepButton.addActionListener( event ->
             {
@@ -1000,7 +1009,7 @@ public class Debugger
             setLayout( new FlowLayout() );
 
             final List<AbstractButton> allButtons = Arrays.asList(stopButton, runButton,
-                    singleStepButton, stepOverButton, resetButton, breakOnIRQButton, loadButton, toggleSpeedButton, saveTape , tapePlay, refreshUIButton );
+                    singleStepButton, stepOverButton, resetButton, breakOnIRQButton, loadButton, toggleSpeedButton, saveTape , tapePlay, refreshUIButton , toggleDisplayToolbar );
             for ( AbstractButton button : allButtons ) 
             {
                 button.setFocusable(false);
