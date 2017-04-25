@@ -6,9 +6,14 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Frame;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.Rectangle;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -19,6 +24,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,9 +47,11 @@ import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
 import javax.swing.JDesktopPane;
+import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JInternalFrame;
+import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -70,6 +78,7 @@ import de.codesourcery.j6502.assembler.parser.Scanner;
 import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.disassembler.DisassemblerTest;
+import de.codesourcery.j6502.emulator.AddressRange;
 import de.codesourcery.j6502.emulator.Breakpoint;
 import de.codesourcery.j6502.emulator.BreakpointsController;
 import de.codesourcery.j6502.emulator.BreakpointsController.IBreakpointLister;
@@ -90,6 +99,7 @@ import de.codesourcery.j6502.emulator.tapedrive.TapeFile;
 import de.codesourcery.j6502.ui.KeyboardInputListener.JoystickPort;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
+import de.codesourcery.j6502.utils.Misc;
 
 public class Debugger
 {
@@ -403,6 +413,303 @@ public class Debugger
         }
     }
 
+    public static enum DialogMode { RESTORE,SAVE };
+
+    private class SaveRestoreMemoryDialog extends JDialog {
+
+        private final DialogMode mode;
+
+        private final JTextField selectedFile = new JTextField("/home/tobi/tmp/screen.bin");
+
+        public int startAddress = 0x0;
+        public int endAddress = 0xffff;
+        public int size = 0xffff;
+
+        private boolean validationEnabled = true;
+        
+        private void doNoValidation(Runnable r) {
+            validationEnabled = false;
+            try {
+                r.run();
+            } finally {
+                validationEnabled = true;
+            }
+        }
+        
+        private ActionListener wrap(ActionListener l) 
+        {
+            return new ActionListener() {
+                
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    if ( validationEnabled ) {
+                        l.actionPerformed( e );
+                    }
+                }
+            };
+        }        
+        
+        public SaveRestoreMemoryDialog(DialogMode mode) 
+        {
+            super((Frame) null, mode == DialogMode.RESTORE ? "Restore memory" : "Save memory" );
+            setModal( true );
+            this.mode = mode;
+
+            final JTextField startAddressField = new JTextField();
+            final JTextField endAddressField = new JTextField();            
+            final JTextField sizeField = new JTextField();
+
+            startAddressField.setText( Misc.to16BitHex( startAddress ) );
+            endAddressField.setText( Misc.to16BitHex( endAddress ) );
+            startAddressField.setText( Misc.to16BitHex( startAddress ) );
+            sizeField.setText( Integer.toString( size ) );
+
+            startAddressField.setColumns( 6 );
+            startAddressField.addActionListener( wrap( ev -> 
+            {
+                final String value = startAddressField.getText();
+                if ( Misc.isValidHexAddress( value ) ) {
+                    startAddress = Misc.parseHexAddress( value );
+                    if ( startAddress > endAddress ) {
+                        int end = Math.min( startAddress+size , 65535 );
+                        endAddress = end;
+                        doNoValidation( () -> endAddressField.setText( Misc.to16BitHex( end ) ) );
+                    }
+                } else {
+                    error("Invalid address: '"+value+"'");                    
+                }
+            } ));
+
+            endAddressField.setColumns( 6 );
+            endAddressField.addActionListener( wrap( ev -> 
+            {
+                final String value = endAddressField.getText();
+                if ( Misc.isValidHexAddress( value ) ) {
+                    endAddress = Misc.parseHexAddress( value );
+
+                    if ( endAddress >= startAddress ) {
+                        size = endAddress-startAddress;
+                        doNoValidation( () -> sizeField.setText( Integer.toString( size ) ) );
+                    } else {
+                        int min = Math.max(0,size);
+                        startAddress = min;
+                        size = endAddress-startAddress;
+                        doNoValidation( () -> {
+                            startAddressField.setText( Misc.to16BitHex( min ) ) ;
+                            sizeField.setText( Integer.toString( size ) );
+                        });
+                    }
+                } else {
+                    error("Invalid address: '"+value+"'");                    
+                }
+            }));            
+
+            sizeField.setEnabled( mode == DialogMode.SAVE );
+            endAddressField.setEnabled( mode == DialogMode.SAVE );
+            sizeField.setColumns( 6 );
+            sizeField.addActionListener( wrap(ev -> 
+            {
+                final String value = sizeField.getText();
+                try 
+                {
+                    int v = Integer.parseInt( value ); 
+                    if ( v > 0 && v <= 65536) {
+                        size = v;
+                        endAddress = Math.max( startAddress + size-1 , 65535 );
+                        System.out.println("End address: "+startAddress+" + "+size+" = "+endAddress);
+                        doNoValidation( () -> endAddressField.setText( Misc.to16BitHex( endAddress ) ) );
+                    }
+                } 
+                catch(Exception e) {
+                    error("Invalid size: '"+value+"'");
+                }
+            }));
+
+            selectedFile.addActionListener( ev -> 
+            {
+                final String f = selectedFile.getText();
+                if ( f != null && f.trim().length() > 0 ) 
+                {
+                    final File tmp = new File(f);
+                    if ( mode == DialogMode.RESTORE && !(tmp.isFile() && tmp.length() > 0 ) ) 
+                    {
+                        error("Not a regular file or file is empty: "+tmp.getAbsolutePath());
+                    } 
+                }
+            });
+            selectedFile.setColumns( 20 );
+            final JButton selectFileButton = new JButton("Select file...");
+            selectFileButton.addActionListener( ev -> 
+            {
+                final JFileChooser chooser = new JFileChooser();
+                chooser.setFileFilter( new FileFilter() {
+
+                    @Override
+                    public boolean accept(File f) 
+                    {
+                        if ( mode == DialogMode.RESTORE ) 
+                        {
+                            if ( f.isFile() && f.length() <= 0 ) {
+                                return false;
+                            }
+                        }
+                        if ( f.isFile() && ! f.getName().endsWith(".bin") ) {
+                            return false;
+                        }
+                        return f.isDirectory() || f.isFile();
+                    }
+
+                    @Override
+                    public String getDescription() {
+                        return ".bin";
+                    }
+                    
+                });
+                final int result;
+                if ( mode == DialogMode.RESTORE ) {
+                    result = chooser.showOpenDialog( this );
+                } else {
+                    result = chooser.showSaveDialog( this );
+                }
+                if ( result == JFileChooser.APPROVE_OPTION ) 
+                {
+                    File tmp = chooser.getSelectedFile();
+                    if ( ! isValidFile( tmp.getAbsolutePath() ) ) {
+                        error("File "+tmp.getAbsolutePath()+" is either no regular file or empty");
+                        return;
+                    }
+                    sizeField.setText( Long.toString( tmp.length() ) );
+                    selectedFile.setText( tmp.getAbsolutePath() );
+                }
+            });
+
+            final JButton cancelButton = new JButton("Cancel");
+            cancelButton.addActionListener( ev -> 
+            {
+                dispose();
+            });
+            final JButton saveButton = new JButton( mode == DialogMode.SAVE ? "Save" : "Restore");
+            saveButton.addActionListener( ev -> 
+            {
+                try {
+                    onClick();
+                    dispose();
+                } 
+                catch (Exception e) {
+                    e.printStackTrace();
+                    error( (mode == DialogMode.RESTORE ? "Loading" : "Saving") + " to file "+selectedFile.getText()+" failed: "+e.getMessage());
+                }
+            });
+
+            setLayout( new GridBagLayout());
+
+            // first row
+            GridBagConstraints cnstrs = cnstrs(0,0,1,1);
+            getContentPane().add( new JLabel("File:" ) , cnstrs );
+            cnstrs = cnstrs(1,0,1,1);
+            cnstrs.fill = GridBagConstraints.HORIZONTAL;            
+            getContentPane().add( selectedFile , cnstrs );
+            cnstrs = cnstrs(2,0,1,1);
+            getContentPane().add( selectFileButton , cnstrs );
+            // second row
+            cnstrs = cnstrs(0,1,1,1);
+            getContentPane().add( new JLabel("Start address:" ) , cnstrs );
+            cnstrs = cnstrs(1,1,2,1);
+            cnstrs.fill = GridBagConstraints.HORIZONTAL;
+            getContentPane().add( startAddressField, cnstrs );
+            // third row
+            cnstrs = cnstrs(0,2,1,1);
+            getContentPane().add( new JLabel("End address:" ) , cnstrs );
+            cnstrs = cnstrs(1,2,2,1);
+            cnstrs.fill = GridBagConstraints.HORIZONTAL;
+            getContentPane().add( endAddressField, cnstrs );            
+            // fourth row
+            cnstrs = cnstrs(0,3,1,1);
+            getContentPane().add( new JLabel("Size:" ) , cnstrs );
+            cnstrs = cnstrs(1,3,2,1);
+            cnstrs.fill = GridBagConstraints.HORIZONTAL;
+            getContentPane().add( sizeField, cnstrs );
+            // fifth row
+            final JPanel buttonPanel = new JPanel();
+            buttonPanel.add( cancelButton );
+            buttonPanel.add( saveButton );
+            buttonPanel.setLayout( new FlowLayout() );
+            cnstrs = cnstrs(0,4,3,1);
+            cnstrs.fill = GridBagConstraints.HORIZONTAL;
+            getContentPane().add( buttonPanel , cnstrs );     
+
+            setPreferredSize( new Dimension(320,200 ) );
+            pack();
+        }
+
+        private boolean isValidFile(String s) 
+        {
+            if ( s == null || s.trim().length() == 0 ) {
+                return false;
+            }
+            final File f = new File(s);
+            if ( mode == DialogMode.RESTORE ) {
+                if ( ! f.isFile() || f.length() <= 0 ) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public void onClick() throws FileNotFoundException, IOException {
+
+            if ( ! isValidFile( selectedFile.getText() ) ) 
+            {
+                error("Invalid file: "+selectedFile.getText());
+                return;
+            }
+            
+            System.out.println("Address range: "+startAddress+" - "+endAddress+" , "+size+" bytes");
+
+            final File file = new File( selectedFile.getText().trim() );
+            if ( mode == DialogMode.RESTORE ) 
+            {
+                driver.setMode( Mode.SINGLE_STEP );
+                synchronized( emulator ) 
+                {
+                    int loaded = emulator.getMemory().restoreRAM( new FileInputStream( file ) , startAddress );
+                    info("Restored "+loaded+" bytes from "+file.getAbsolutePath());
+                }
+            } 
+            else 
+            {
+                driver.setMode( Mode.SINGLE_STEP );                
+                synchronized( emulator ) 
+                {
+                    int saved = emulator.getMemory().saveRAM( AddressRange.range( startAddress, startAddress+size-1) , new FileOutputStream(file)); 
+                    info("Saved "+saved+" bytes to "+file.getAbsolutePath());
+                }                
+            }
+        }
+
+        private GridBagConstraints cnstrs(int x,int y,int width,int height) {
+            final GridBagConstraints result = new GridBagConstraints();
+            result.fill = GridBagConstraints.NONE;
+            result.gridx = x;
+            result.gridy = y;
+            result.gridwidth = width;
+            result.gridheight = height;
+            result.weightx = 1;
+            result.weighty = 1;
+            return result;
+        }
+
+    }
+
+    private void saveMemoryRegion() 
+    {
+        new SaveRestoreMemoryDialog( DialogMode.SAVE ).setVisible( true );
+    }
+
+    private void loadMemoryRegion() {
+        new SaveRestoreMemoryDialog( DialogMode.RESTORE ).setVisible( true );
+    }    
+
     private JMenuBar createMenu()
     {
         final JMenuBar menuBar = new JMenuBar();
@@ -410,8 +717,17 @@ public class Debugger
         final JMenu menu = new JMenu("File");
         menuBar.add( menu );
 
+        // memory save/restore
+        JMenuItem item = new JMenuItem("Save memory region...");
+        item.addActionListener( event -> saveMemoryRegion() );
+        menu.add( item );
+
+        item = new JMenuItem("Load memory region...");
+        item.addActionListener( event -> loadMemoryRegion() );
+        menu.add( item );        
+
         // disk handling
-        JMenuItem item = new JMenuItem("Insert disk...");
+        item = new JMenuItem("Insert disk...");
         item.addActionListener( event -> insertDisk() );
         menu.add( item );
 
@@ -925,13 +1241,13 @@ public class Debugger
             {
                 prepareTest();
             });
-            
+
             toggleDisplayToolbar.addActionListener( event -> 
             {
-               driver.invoke( emulator -> 
-               {
-                   emulator.getVIC().setDisplayEnabled( ! emulator.getVIC().isDisplayEnabled() );
-               });
+                driver.invoke( emulator -> 
+                {
+                    emulator.getVIC().setDisplayEnabled( ! emulator.getVIC().isDisplayEnabled() );
+                });
             });
 
             singleStepButton.addActionListener( event ->
@@ -1023,7 +1339,7 @@ public class Debugger
             stepOverButton.setEnabled( getBreakPointsController().canStepOver( getMemory(), getCPU() ) );
             breakOnIRQButton.setEnabled( ! getCPU().isBreakOnIRQ() );
         }
-        
+
         protected void saveTape() {
 
             final File lastSavedFile;
@@ -1598,7 +1914,7 @@ public class Debugger
                     else if ( event.getKeyCode() == KeyEvent.VK_INSERT ) 
                     {
                         final String sAddress = JOptionPane.showInputDialog( "Enter breakpoint address" , "$450c" );
-                        final Integer address = MemoryBreakpointsPanel.parseHexAddress( sAddress );
+                        final Integer address = Misc.parseHexAddress( sAddress );
                         if ( address != null ) 
                         {
                             getBreakPointsController().addBreakpoint( Breakpoint.unconditionalBreakpoint( address ) );
@@ -1798,4 +2114,12 @@ public class Debugger
     {
         return breakpointsController;
     }
+
+    protected static void error(String msg) {
+        JOptionPane.showMessageDialog(null, msg, "Error", JOptionPane.ERROR_MESSAGE );
+    }
+
+    protected static void info(String msg) {
+        JOptionPane.showMessageDialog(null, msg, "Info", JOptionPane.INFORMATION_MESSAGE );
+    }    
 }

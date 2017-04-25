@@ -31,8 +31,6 @@ import de.codesourcery.j6502.utils.Misc;
 
 public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView 
 {
-    private static final Pattern VALID_HEX_STRING = Pattern.compile("^\\$?([0-9a-fA-f]+)$");   
-
     private Component peer;
     private boolean isDisplayed;    
 
@@ -98,10 +96,9 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
                     switch( columnIndex ) 
                     {
                         case 0: // address
-                            final Matcher matcher = VALID_HEX_STRING.matcher( (String) aValue );
-                            if ( matcher.matches() ) 
+                            if ( Misc.isValidHexAddress( (String) aValue ) ) 
                             {
-                                final int address = Integer.parseInt( matcher.group(1).toLowerCase() , 16 ); 
+                                final int address = Misc.parseHexAddress( (String) aValue );
                                 oldBp.remove();
                                 newBp = oldBp.container.addBreakpoint( oldBp.withAddress( address ) );
                             }
@@ -221,18 +218,6 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
         }
     }
 
-    public static Integer parseHexAddress(String input) 
-    {
-        if ( input != null ) 
-        {
-            final Matcher matcher = VALID_HEX_STRING.matcher( input );
-            if ( matcher.matches() ) {
-                return Integer.parseInt( matcher.group(1).toLowerCase() , 16 );
-            }
-        }
-        return null;
-    }
-
     public MemoryBreakpointsPanel(final Emulator emulator) 
     {
         this.emulator = emulator;
@@ -292,7 +277,7 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
                 }
                 else if ( e.getKeyCode() == KeyEvent.VK_INSERT ) 
                 {
-                    final Integer address = parseHexAddress( JOptionPane.showInputDialog("Create breakpoint" , "$dc00" ) );
+                    final Integer address = Misc.parseHexAddress( JOptionPane.showInputDialog("Create breakpoint" , "$dc00" ) );
                     if ( address != null ) 
                     {
                         visitBreakpointContainers( emulator , container -> 

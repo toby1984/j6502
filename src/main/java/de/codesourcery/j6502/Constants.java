@@ -33,7 +33,7 @@ public class Constants
     public static final boolean VIC_DEBUG_FPS = true;
     public static final boolean VIC_DEBUG_GRAPHIC_MODES = true;
     public static final boolean VIC_DEBUG_DRAW_RASTER_IRQ_LINE = true;
-    public static final boolean VIC_DEBUG_SPRITES = false;
+    public static final boolean VIC_DEBUG_SPRITES = true;
     public static final boolean VIC_DEBUG_MEMORY_LAYOUT = true;
     
     // CIA class constants
