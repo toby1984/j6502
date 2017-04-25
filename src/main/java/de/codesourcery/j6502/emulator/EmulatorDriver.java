@@ -3,7 +3,6 @@ package de.codesourcery.j6502.emulator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -11,6 +10,7 @@ import java.util.function.Consumer;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.Validate;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.assembler.SourceMap;
 import de.codesourcery.j6502.utils.Misc;
 import de.codesourcery.j6502.utils.SourceHelper;
@@ -19,14 +19,7 @@ public abstract class EmulatorDriver extends Thread
 {
 	private static final AtomicLong CMD_ID = new AtomicLong(0);
 	
-	private static final boolean INVOKE_CALLBACK = false;
-	
-	private static final long CALLBACK_INVOKE_CYCLES = 300_000;
-
 	public volatile Throwable lastException;
-	
-
-	public static final boolean PRINT_SPEED = false;
 
 	public static enum Mode { SINGLE_STEP , CONTINOUS; }
 	
@@ -137,6 +130,9 @@ public abstract class EmulatorDriver extends Thread
 		public final void enqueue()
 		{
 			try {
+			    if ( Constants.EMULATORDRIVER_DEBUG_CMDS ) {
+			        System.out.println("EmulatorDriver: enqueing "+this);
+			    }
 				requestQueue.put( this );
 			} catch (final InterruptedException e) {
 				throw new RuntimeException(e);
@@ -146,7 +142,11 @@ public abstract class EmulatorDriver extends Thread
 		public final void ackIfNecessary()
 		{
 			if ( ackRequired ) {
-				try {
+				try 
+				{
+	                if ( Constants.EMULATORDRIVER_DEBUG_CMDS ) {
+	                    System.out.println("EmulatorDriver: Acknowledging "+this);
+	                }				    
 					ackQueue.put( this );
 				} catch (final InterruptedException e) {
 					throw new RuntimeException(e);
@@ -225,15 +225,26 @@ public abstract class EmulatorDriver extends Thread
 	{
 		cmd.enqueue();
 
+        if ( Constants.EMULATORDRIVER_DEBUG_CMDS && cmd.isAckRequired() ) {
+            System.out.println("EmulatorDriver: Awaiting ack for "+cmd);
+        }		
 		while ( cmd.isAckRequired() )
 		{
 			try {
 				final Cmd acked = ackQueue.take();
 				if ( acked.id == cmd.id ) {
+			        if ( Constants.EMULATORDRIVER_DEBUG_CMDS && cmd.isAckRequired() ) {
+			            System.out.println("EmulatorDriver: Received ack for "+cmd);
+			        }   				    
 					break;
 				}
+                if ( Constants.EMULATORDRIVER_DEBUG_CMDS && cmd.isAckRequired() ) {
+                    System.out.println("EmulatorDriver: Pushing back ack for "+cmd);
+                } 				
 				ackQueue.put( acked );
-			} catch (final InterruptedException e) {
+			} 
+			catch (final InterruptedException e) 
+			{
 				e.printStackTrace();
 			}
 		}
@@ -276,7 +287,7 @@ public abstract class EmulatorDriver extends Thread
 		boolean isRunnable = false;
 
 		long startTime = System.currentTimeMillis();
-		long cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
+		long cyclesUntilNextTick = Constants.EMULATORDRIVER_CALLBACK_INVOKE_CYCLES;
 
 		int delayIterationsCount=90;
 
@@ -292,6 +303,9 @@ public abstract class EmulatorDriver extends Thread
 				cmd = requestQueue.poll();
 				if ( cmd != null )
 				{
+                    if ( Constants.EMULATORDRIVER_DEBUG_CMDS ) {
+                        System.out.println("EmulatorDriver: (runnable) Received cmd "+cmd);
+                    }
                     switch( cmd.type )
                     {
                         case MAX_SPEED:
@@ -330,6 +344,9 @@ public abstract class EmulatorDriver extends Thread
 					try
 					{
 						cmd = requestQueue.take();
+	                    if ( Constants.EMULATORDRIVER_DEBUG_CMDS ) {
+	                        System.out.println("EmulatorDriver: (not runnable) Received cmd "+cmd);
+	                    }						
 						switch( cmd.type )
 						{
                             case MAX_SPEED:
@@ -351,8 +368,9 @@ public abstract class EmulatorDriver extends Thread
                                 }
                                 cmd.ackIfNecessary();                             
                                 continue; // start over as the Runnable might've issued a new command that needs processing                                
-                            default:
-                                break;
+                            default: // case STOP:
+                                cmd.ackIfNecessary();
+                                break; // CAREFUL, this breaks out of the while ( ! isRunnable ) loop
 						}
 					} catch (final InterruptedException e) {
 						continue;
@@ -360,7 +378,7 @@ public abstract class EmulatorDriver extends Thread
 				}
 
 				lastException = null;
-				cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
+				cyclesUntilNextTick = Constants.EMULATORDRIVER_CALLBACK_INVOKE_CYCLES;
 				startTime = System.currentTimeMillis();
 				adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
 
@@ -392,15 +410,15 @@ public abstract class EmulatorDriver extends Thread
 				}
 				catch(final Throwable e)
 				{
-				    if ( CPU.RECORD_BACKTRACE ) 
+				    if ( Constants.CPU_RECORD_BACKTRACE ) 
 				    {
 				        final int[] lastPCs = emulator.getCPU().getBacktrace();
-				        System.err.println("\n*************\n"
-				                           + "Backtrace:\n"+
-				                             "*************\n");
+				        System.err.println("\n**********\n"
+				                           + "Backtrace\n"+
+				                             "**********\n");
 				        for ( int i = 0 , no = lastPCs.length ; i < lastPCs.length ; i++ , no-- ) 
 				        {
-				            System.out.println( StringUtils.leftPad( Integer.toString( no ) , 3 , ' ' )+": "+Misc.to16BitHex( lastPCs[i] ));
+				            System.err.println( StringUtils.leftPad( Integer.toString( no ) , 3 , ' ' )+": "+Misc.to16BitHex( lastPCs[i] ));
 				        }
 				    }
 					e.printStackTrace();
@@ -420,13 +438,13 @@ public abstract class EmulatorDriver extends Thread
 			
 			if ( cyclesUntilNextTick <= 0 )
 			{
-			    if ( INVOKE_CALLBACK ) {
+			    if ( Constants.EMULATORDRIVER_INVOKE_CALLBACK ) {
 			        tick();
 			    }
                 final long now = System.currentTimeMillis();
-                final float cyclesPerSecond = CALLBACK_INVOKE_CYCLES / ( (now - startTime ) / 1000f );
+                final float cyclesPerSecond = Constants.EMULATORDRIVER_CALLBACK_INVOKE_CYCLES / ( (now - startTime ) / 1000f );
                 final float khz = cyclesPerSecond / 1000f;
-				if ( PRINT_SPEED )
+				if ( Constants.EMULATORDRIVER_PRINT_SPEED )
 				{
 					System.out.println("CPU frequency: "+khz+" kHz (delay iterations: "+delayIterationsCount+") "+this.dummyValue);
 				}
@@ -441,7 +459,7 @@ public abstract class EmulatorDriver extends Thread
     				}
 				}
 				startTime = now;
-				cyclesUntilNextTick = CALLBACK_INVOKE_CYCLES;
+				cyclesUntilNextTick = Constants.EMULATORDRIVER_CALLBACK_INVOKE_CYCLES;
 				adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
 			}
 		}

@@ -2,8 +2,26 @@ package de.codesourcery.j6502.emulator;
 
 public abstract class IMemoryRegion
 {
-    public static enum MemoryType {
-        RAM,ROM,IOAREA;
+    public static enum MemoryType 
+    {
+        RAM("ram"),ROM("rom"),IOAREA("io");
+        
+        public final String identifier;
+        
+        private MemoryType(String identifier) {
+            this.identifier = identifier;
+        }
+        
+        public static MemoryType fromIdentifier(String identifier) 
+        {
+            switch( identifier.toLowerCase() ) {
+                case "rom": return ROM;
+                case "ram": return RAM;
+                case "io" : return IOAREA;
+                default:
+                    throw new IllegalArgumentException("No memory type with identifier '"+identifier+"'");
+            }
+        }
     }
     
     private final MemoryType type;
@@ -16,7 +34,11 @@ public abstract class IMemoryRegion
 	    this.type = type;
 		this.identifier = identifier;
 		this.addressRange = range;
-		this.breakpointsContainer = new MemoryBreakpointsContainer( identifier , type , range );
+		this.breakpointsContainer = new MemoryBreakpointsContainer( identifier , this );
+	}
+	
+	public MemoryType getType() {
+	    return type;
 	}
 	
 	public MemoryBreakpointsContainer getBreakpointsContainer() {

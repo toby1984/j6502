@@ -57,53 +57,51 @@ public final class MemoryBreakpointsContainer
     
     private final MemoryBreakpoint[] breakpoints = new MemoryBreakpoint[ MAX_BREAKPOINTS+1 ]; // element #0 is always NULL 
     
-    public final AddressRange addressRange;
     public final String identifier;
-    public final MemoryType memoryType;
+    public final IMemoryRegion memoryRegion;
     private int breakpointCount;
     private final int[] addressSpace;
     
     private BiConsumer<MemoryBreakpointsContainer,MemoryBreakpoint> callback = (a,b) -> {};
     
-    public MemoryBreakpointsContainer(String identifier,MemoryType memoryType,AddressRange addressRange) 
+    public MemoryBreakpointsContainer(String identifier,IMemoryRegion memoryRegion) 
     {
         if ( identifier == null || identifier.trim().length() == 0 ) {
             throw new IllegalArgumentException("Identifier must not be NULL or blank");
         }
-        if ( memoryType == null ) {
-            throw new IllegalArgumentException("memory type must not be NULL or blank");
-        }        
-        if ( addressRange == null ) {
-            throw new IllegalArgumentException("Address range must not be NULL or blank");
-        }              
-        this.addressRange = addressRange;
+        Validate.notNull(memoryRegion, "memoryRegion must not be NULL");
+        
         this.identifier = identifier;
-        this.memoryType = memoryType;
-        this.addressSpace = new int[ addressRange.getSizeInBytes() ];
+        this.memoryRegion = memoryRegion;
+        this.addressSpace = new int[ memoryRegion.getAddressRange().getSizeInBytes() ];
     }
   
     public boolean hasMemoryType(MemoryType t) {
-        return t.equals( this.memoryType );
+        return t.equals( getMemoryType() );
     }
     
     public MemoryType getMemoryType() {
-        return memoryType;
+        return memoryRegion.getType();
     }
     
     @Override
     public String toString() {
-        return "MemoryBreakpoints[ "+memoryType+" , "+identifier+" , "+addressRange+" ]";
+        return "MemoryBreakpoints[ "+getMemoryType()+" , "+identifier+" , "+getAddressRange()+" ]";
+    }
+    
+    public AddressRange getAddressRange() {
+        return memoryRegion.getAddressRange();
     }
     
     public void replace(MemoryBreakpoint replacement) 
     {
         Validate.notNull(replacement, "breakpoint must not be NULL");
         final MemoryBreakpoint copy = replacement.copy(); 
-        if ( ! addressRange.contains( copy.address ) ) {
+        if ( ! getAddressRange().contains( copy.address ) ) {
             throw new IllegalArgumentException( copy+" is out of range for "+this);          
         }        
 
-        final int translated = copy.address - addressRange.getStartAddress();
+        final int translated = copy.address - getAddressRange().getStartAddress();
         final int index = addressSpace[ translated ];
         if ( index == 0 ) {
             throw new IllegalArgumentException("Replacement failed for "+copy+" because there is no already existing breakpoint");
@@ -112,27 +110,32 @@ public final class MemoryBreakpointsContainer
     }
     
     public MemoryBreakpoint addReadBreakpoint(int address) {
-        return add( new MemoryBreakpoint(address,Flag.READ));
+        return addBreakpoint( new MemoryBreakpoint(address,Flag.READ));
     }
     
-    public MemoryBreakpoint addWriteBreakpoint(int address) {
-        return add( new MemoryBreakpoint(address,Flag.WRITE) );
+    public MemoryBreakpoint addWriteBreakpoint(int address) 
+    {
+        return addBreakpoint( new MemoryBreakpoint(address,Flag.WRITE) );
     }
     
     public MemoryBreakpoint addReadWriteBreakpoint(int address) {
-        return add( new MemoryBreakpoint(address,Flag.READ,Flag.WRITE) );
+        return addBreakpoint( new MemoryBreakpoint(address,Flag.READ,Flag.WRITE) );
     }   
     
-    public MemoryBreakpoint add(final MemoryBreakpoint toAdd) 
+    public MemoryBreakpoint addBreakpoint(final MemoryBreakpoint toAdd) 
     {
         if ( toAdd == null ) {
             throw new IllegalArgumentException("Breakpoint must not be NULL");
         }
+        if ( ! toAdd.container.hasMemoryType( this.getMemoryType() ) ) {
+            throw new IllegalArgumentException("Cannot add breakpoint with type "+toAdd.getMemoryType()+" to breakpoints container with type "+this.getMemoryType());
+        }
         final MemoryBreakpoint newBP = toAdd.copy();
-        if ( ! addressRange.contains( newBP.address ) ) {
+        if ( ! getAddressRange().contains( newBP.address ) ) {
             throw new IllegalArgumentException( newBP+" is out of range for "+this);          
         }
-        final int translatedAddress = newBP.address - addressRange.getStartAddress();
+        System.out.println("Adding memory breakpoint: "+toAdd);
+        final int translatedAddress = newBP.address - getAddressRange().getStartAddress();
         int freeIdx = -1;
         for ( int i = 1 ; i < breakpoints.length ; i++ ) // element #0 is skipped because it always has to be NULL 
         {
@@ -186,11 +189,11 @@ public final class MemoryBreakpointsContainer
         }
     }
     
-    public boolean remove(MemoryBreakpoint toRemove) {
+    public boolean removeBreakpoint(MemoryBreakpoint toRemove) {
         if ( toRemove == null ) {
             throw new IllegalArgumentException("Breakpoint must not be NULL");
         }
-        if ( ! addressRange.contains( toRemove.address ) ) {
+        if ( ! getAddressRange().contains( toRemove.address ) ) {
             throw new IllegalArgumentException( toRemove+" is out of range for "+this);          
         }        
         
@@ -202,12 +205,14 @@ public final class MemoryBreakpointsContainer
                 final int newFlags = existing.flags & ~ toRemove.flags;
                 if ( newFlags == 0 ) 
                 {
+                    System.out.println("Removed memory breakpoint: "+toRemove);                    
                     breakpoints[i] = null;
-                    addressSpace[ toRemove.address - addressRange.getStartAddress() ] = 0;
+                    addressSpace[ toRemove.address - getAddressRange().getStartAddress() ] = 0;
                     breakpointCount--;
                 } 
                 else {
                     existing.flags = newFlags;
+                    System.out.println("Updated memory breakpoint: "+toRemove+" => "+existing);
                 }
                 return true;
             }
@@ -235,7 +240,7 @@ public final class MemoryBreakpointsContainer
         if ( hasBreakpoints() ) {
             MemoryBreakpoint bp = getWriteBreakpoint( address );
             if ( bp != null && bp.enabled ) {
-                System.out.println("Write to $"+Integer.toHexString( address )+" triggers breakpoint: "+bp);                   
+                System.out.println("Write to $"+Integer.toHexString( address+getAddressRange().getStartAddress() )+" triggers breakpoint: "+bp);                   
                 maybeTriggered( bp );
             }
         }
@@ -284,6 +289,19 @@ public final class MemoryBreakpointsContainer
             this.address = address;
             this.flags = flags;
             this.enabled = enabled;
+        }
+        
+        public MemoryType getMemoryType() {
+            return container.getMemoryType();
+        }
+        
+        public void remove() {
+            container.removeBreakpoint( this );
+        }
+        
+        public boolean hasMemoryType(MemoryType t) 
+        {
+            return t.equals( getMemoryType() );
         }
         
         public boolean equals(Object obj) 
@@ -339,7 +357,7 @@ public final class MemoryBreakpointsContainer
 
         @Override
         public String toString() {
-            return "Memory breakpoint $"+Integer.toHexString( this.address )+" ( read: "+isRead()+" , write: "+isWrite()+")";
+            return "Memory breakpoint $"+Integer.toHexString( this.address )+" , region "+container.memoryRegion+", ( read: "+isRead()+" , write: "+isWrite()+")";
         }
         
         public MemoryBreakpoint copy() {

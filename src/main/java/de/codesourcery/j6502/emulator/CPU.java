@@ -5,15 +5,12 @@ import java.util.Collection;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class CPU
 {
-    public static final boolean RECORD_BACKTRACE = true;
-    public static final int BACKTRACE_RINGBUFFER_SIZE = 16; // MUST be a power of 2 , don't forget to update BACKTRACE_RINGBUFFER_SIZE_MASK !!!
-    public static final int BACKTRACE_RINGBUFFER_SIZE_MASK = 0xf; 
-    
-    public final int[] backtraceRingBuffer = new int[ BACKTRACE_RINGBUFFER_SIZE ];
+    public final int[] backtraceRingBuffer = new int[ Constants.CPU_BACKTRACE_RINGBUFFER_SIZE ];
     public int backtraceRingBufferElements = 0; 
     
 	public static final int RESET_VECTOR_LOCATION = 0xfffc;
@@ -230,6 +227,8 @@ public class CPU
 	    breakOnInterrupt = false;
 	    breakpointReached = false;
 	    
+	    backtraceRingBufferElements = 0;
+	    
 		cycles = 1;
 		
 		pc = memory.readWord( RESET_VECTOR_LOCATION );
@@ -441,10 +440,11 @@ public class CPU
      */
     public int[] getBacktrace()
     {
-        final int[] result = new int[ backtraceRingBufferElements % BACKTRACE_RINGBUFFER_SIZE ];
-        for ( int i = 0 , ptr = backtraceRingBufferElements-1 , len = backtraceRingBufferElements & BACKTRACE_RINGBUFFER_SIZE_MASK ; len > 0 ; i++ , ptr-- ) 
+        final int arraySize = Math.min( backtraceRingBufferElements , Constants.CPU_BACKTRACE_RINGBUFFER_SIZE );
+        final int[] result = new int[arraySize ];
+        for ( int i = 0 , ptr = 0 , len = arraySize ; i < len ; i++ , ptr++ ) 
         {
-            result[i] = backtraceRingBuffer[ptr & BACKTRACE_RINGBUFFER_SIZE_MASK];
+            result[i] = backtraceRingBuffer[ptr & Constants.CPU_BACKTRACE_RINGBUFFER_SIZE_MASK];
         }
         return result;
     }
@@ -456,7 +456,7 @@ public class CPU
     public int rememberPC() 
     {
         final int pc = this.pc;
-        backtraceRingBuffer[ backtraceRingBufferElements & BACKTRACE_RINGBUFFER_SIZE_MASK ] = pc;
+        backtraceRingBuffer[ backtraceRingBufferElements & Constants.CPU_BACKTRACE_RINGBUFFER_SIZE_MASK ] = pc;
         backtraceRingBufferElements++;
         return pc;
     }

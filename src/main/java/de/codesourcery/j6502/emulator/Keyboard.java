@@ -194,7 +194,7 @@ public class Keyboard
             case KeyEvent.VK_LEFT:  return Key.KEY_LEFT;
             case KeyEvent.VK_ENTER:  return Key.KEY_RETURN;
             case KeyEvent.VK_BACK_SPACE: return Key.KEY_DELETE;
-            case KeyEvent.VK_DELETE: return Key.KEY_DELETE;
+            case KeyEvent.VK_DELETE: return Key.KEY_STOP;
             // row #1
             case KeyEvent.VK_SHIFT:
                 if ( location == KeyLocation.LEFT ) {

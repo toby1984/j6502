@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.exceptions.HLTException;
 import de.codesourcery.j6502.utils.HexDump;
@@ -20,10 +21,6 @@ import de.codesourcery.j6502.utils.HexDump;
  */
 public final class CPUImpl
 {
-    protected static final boolean TRACK_INS_DURATION = false;
-
-    protected static final boolean DEBUG_TAPE = false;
-    
     protected IMemoryRegion memory;
     protected CPU cpu;
 
@@ -32,7 +29,6 @@ public final class CPUImpl
     protected int ea, reladdr, value, result;
     protected int opcode;
     protected byte oldstatus;
-
 
     public CPUImpl(CPU cpu,IMemoryRegion region)
     {
@@ -1081,7 +1077,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
     public void executeInstruction()
     {
         final int initialPC;
-        if ( CPU.RECORD_BACKTRACE ) {
+        if ( Constants.CPU_RECORD_BACKTRACE ) {
             initialPC = cpu.rememberPC();
         } else {
             initialPC = cpu.pc();            
@@ -1140,7 +1136,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
         adrModeTable[opcode].run();
         optable[opcode].run();
 
-        if ( TRACK_INS_DURATION ) 
+        if ( Constants.CPUIMPL_TRACK_INS_DURATION ) 
         {
             int tmp = TICK_TABLE[opcode];
             if (penaltyop && penaltyaddr)

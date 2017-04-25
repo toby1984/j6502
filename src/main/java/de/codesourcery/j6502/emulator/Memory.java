@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.emulator;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class Memory extends IMemoryRegion
@@ -33,11 +34,17 @@ public class Memory extends IMemoryRegion
 
 	@Override
 	public int readByte(int offset) {
+	    if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
+	        getBreakpointsContainer().read( offset );
+	    }
 		return data[offset & 0xffff] & 0xff;
 	}
 
 	@Override
 	public void writeByte(int offset, byte value) {
+        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
+            getBreakpointsContainer().write( offset );
+        }	    
 		data[offset & 0xffff]=value;
 	}
 
@@ -47,10 +54,14 @@ public class Memory extends IMemoryRegion
 		final byte low = (byte) value;
 		final byte hi = (byte) (value>>8);
 
-		int realOffset = offset & 0xffff;
-		data[ realOffset ] = low;
-		realOffset = (realOffset+1) & 0xffff;
-		data[ realOffset ] = hi;
+		final int realOffsetLo = offset & 0xffff;
+		final int realOffsetHi = (realOffsetLo+1) & 0xffff;
+		data[ realOffsetLo ] = low;
+		data[ realOffsetHi ] = hi;
+        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
+            getBreakpointsContainer().write( realOffsetLo );
+            getBreakpointsContainer().write( realOffsetHi );
+        }
 	}
 
 	@Override
@@ -76,7 +87,12 @@ public class Memory extends IMemoryRegion
 	}
 
     @Override
-    public int readByteNoSideEffects(int offset) {
+    public int readByteNoSideEffects(int offset) 
+    {
+        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
+            getBreakpointsContainer().read( offset );
+        }
+                
         return data[offset & 0xffff] & 0xff;
     }
 }

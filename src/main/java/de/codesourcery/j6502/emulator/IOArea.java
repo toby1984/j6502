@@ -185,11 +185,6 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		@Override
 		public void writeByte(int adr, byte value)
 		{
-            // do NOT move this to the CIA (superclass) class as this method is also calling super.readByte() 
-            // with different addresses for internal purposes and this would trigger 
-            // memory breakpoints without the client code actually accessing the memory location  
-            getBreakpointsContainer().write( adr );   
-            
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
 			if (offset == CIA_PRA )
 			{
@@ -247,11 +242,6 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 		@Override
 		public int readByte(int adr)
 		{
-            // do NOT move this to the CIA (superclass) class as this method is also calling super.readByte() 
-            // with different addresses for internal purposes and this would trigger 
-            // memory breakpoints without the client code actually accessing the memory location  		    
-	        breakpointsContainer.read( adr );
-	        
 			int value = super.readByte(adr);
 			final int offset = ( adr & 0xffff ) % 0x10; // registers are mirrored/repeated every 16 bytes
 			if ( offset == 0 ) {

@@ -62,6 +62,7 @@ import javax.swing.table.AbstractTableModel;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.assembler.Assembler;
 import de.codesourcery.j6502.assembler.parser.Lexer;
 import de.codesourcery.j6502.assembler.parser.Parser;
@@ -92,13 +93,6 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class Debugger
 {
-    /**
-     * Time between consecutive UI updates while trying to run emulation at full speed.
-     */
-    public static final int UI_REFRESH_MILLIS = 500;
-
-    public static final boolean DEBUG_VIEW_PERFORMANCE = false;
-
     protected final Emulator emulator = new Emulator();
 
     protected static final int LINE_HEIGHT = 15;
@@ -146,7 +140,7 @@ public class Debugger
         {
             final long now = System.currentTimeMillis();
             long age = now - lastTick;
-            if ( age > UI_REFRESH_MILLIS ) // do not post more than 60 events / second to not overload the Swing Event handling queue
+            if ( age > Constants.DEBUGGER_UI_REFRESH_MILLIS ) // do not post more than 60 events / second to not overload the Swing Event handling queue
             {
                 lastTick = now;
                 try
@@ -1154,7 +1148,7 @@ public class Debugger
                 final IDebuggerView view = views.get(i);
                 if ( view.isDisplayed() && ( ! isTick || view.isRefreshAfterTick() ) ) 
                 {
-                    if ( DEBUG_VIEW_PERFORMANCE ) 
+                    if ( Constants.DEBUGGER_DEBUG_VIEW_PERFORMANCE ) 
                     {
                         benchmark(view);
                     } else {
@@ -1163,7 +1157,7 @@ public class Debugger
                 }
             }
 
-            if ( DEBUG_VIEW_PERFORMANCE && isTick ) 
+            if ( Constants.DEBUGGER_DEBUG_VIEW_PERFORMANCE && isTick ) 
             {
                 viewPerformanceTicks++;
                 if ( (viewPerformanceTicks % 3) == 0 ) 

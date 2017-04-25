@@ -9,12 +9,14 @@ import junit.framework.TestCase;
 
 public class MemoryBreakpointsContainerTest extends TestCase {
 
+    private IMemoryRegion region;
     private MemoryBreakpointsContainer container;
     
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        container = new MemoryBreakpointsContainer("dummy",MemoryType.RAM, AddressRange.range(0 , 0xffff) );
+        region = new Memory("dummy",MemoryType.RAM,AddressRange.range(0 , 0xffff));
+        container = region.getBreakpointsContainer();
     }
     
     public void testAddReadBreakpoint() {
@@ -115,7 +117,7 @@ public class MemoryBreakpointsContainerTest extends TestCase {
         assertEquals( 1 , container.getBreakpointCount() );
         assertTrue( container.hasBreakpoints() );
         
-        container.remove( breakpoint );
+        container.removeBreakpoint( breakpoint );
         assertEquals( 0 , container.getBreakpointCount() );
         assertFalse( container.hasBreakpoints() );        
         
@@ -140,7 +142,7 @@ public class MemoryBreakpointsContainerTest extends TestCase {
         assertTrue( container.hasBreakpoints() );
         
         final MemoryBreakpoint toRemove = breakpoint.withWrite( false );
-        container.remove( toRemove );
+        container.removeBreakpoint( toRemove );
         assertEquals( 1 , container.getBreakpointCount() );
         assertTrue( container.hasBreakpoints() );        
         
@@ -165,7 +167,7 @@ public class MemoryBreakpointsContainerTest extends TestCase {
         assertTrue( container.hasBreakpoints() );
         
         final MemoryBreakpoint toRemove = breakpoint.withRead( false );
-        container.remove( toRemove );
+        container.removeBreakpoint( toRemove );
         assertEquals( 1 , container.getBreakpointCount() );
         assertTrue( container.hasBreakpoints() );        
         

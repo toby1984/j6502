@@ -3,6 +3,7 @@ package de.codesourcery.j6502.emulator;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoField;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.emulator.CPU.IRQType;
 import de.codesourcery.j6502.utils.Misc;
 
@@ -15,11 +16,6 @@ import de.codesourcery.j6502.utils.Misc;
  */
 public class CIA extends Memory
 {
-    private static final boolean DEBUG = false;
-    private static final boolean DEBUG_VERBOSE = false;
-    private static final boolean DEBUG_TIMER_LOAD = false;
-    private static final boolean DEBUG_TAPE_SLOPE = true;
-
     public static final int CIA_PRA        = 0x00;
     public static final int CIA_PRB        = 0x01;
     public static final int CIA_DDRA       = 0x02;
@@ -571,7 +567,7 @@ CRB 	Control Timer B
                     raiseIRQ = icr_read & irqMask;
                 }
                 
-                if ( DEBUG && (oldMask != irqMask ) ) {
+                if ( Constants.CIA_DEBUG && (oldMask != irqMask ) ) {
                     System.out.println( this+" ICR = "+Integer.toBinaryString( irqMask ) );
                 }
                 break;
@@ -611,7 +607,7 @@ CRB 	Control Timer B
             	}
                 boolean oldState = timerARunning;
                 timerARunning = ( value & 1) != 0;
-                if ( DEBUG_VERBOSE ) {
+                if ( Constants.CIA_DEBUG_VERBOSE ) {
                     if ( oldState != timerARunning ) {
                         System.out.println( this+" , timer A running: "+timerARunning);
                     }
@@ -650,7 +646,7 @@ CRB 	Control Timer B
             	}
                 oldState = timerBRunning;
                 timerBRunning = ( value & 1) != 0;
-                if ( DEBUG_VERBOSE ) {
+                if ( Constants.CIA_DEBUG_VERBOSE ) {
                     if ( oldState != timerBRunning ) {
                         System.out.println( this+" , timer B running: "+timerBRunning);
                     }
@@ -658,7 +654,7 @@ CRB 	Control Timer B
 
                 if ( ( value & 1 << 4) != 0 ) 
                 {
-                    if ( DEBUG_TIMER_LOAD && DEBUG_VERBOSE ) {
+                    if ( Constants.CIA_DEBUG_TIMER_LOAD && Constants.CIA_DEBUG_VERBOSE ) {
                         System.out.println( this+" , FORCED loading timer B from latch: "+timerBLatch);
                     }					
                     timerBValue = timerBLatch;
@@ -821,12 +817,12 @@ CRB 	Control Timer B
                 // Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.	     
                 icr_read |= ( (1<<7) | (1<<4) ); 
                 if ( (irqMask & 1<<4) != 0 ) { // IRQ mask: Bit 4: 1 = Interrupt release if a positive slope occurs at the FLAG-Pin.
-                    if ( DEBUG_TAPE_SLOPE ) {
+                    if ( Constants.CIA_DEBUG_TAPE_SLOPE ) {
                         long delta = tickCounter - debugPreviousTapeSignalChangeTick;
                         System.out.println("Detected positive slope #"+tapeSlopeCounter+" on /FLAG (IRQ enabled) - tick "+tickCounter+" (delta: "+delta+"), timerA: "+timerAValue+" , timerB: "+timerBValue);
                     }	    	        
                     raiseIRQ |= IRQ_FLAG_PIN;
-                } else if ( DEBUG_TAPE_SLOPE ) {
+                } else if ( Constants.CIA_DEBUG_TAPE_SLOPE ) {
                     final long delta = tickCounter - debugPreviousTapeSignalChangeTick;	            	
                     System.out.println("Detected positive slope # "+tapeSlopeCounter+" on /FLAG (IRQ disabled) - tick "+tickCounter+" (delta: "+delta+") , timerA: "+timerAValue+" , timerB: "+timerBValue);
                 }	    
@@ -864,20 +860,20 @@ CRB 	Control Timer B
         icr_read |= ( (1<<7) | (1<<1) ); // timerB triggered underflow
 
         if ( (irqMask & (1<<1) ) != 0 ) { // trigger interrupt on timer B underflow ?
-            if ( DEBUG_VERBOSE ) {
+            if ( Constants.CIA_DEBUG_VERBOSE ) {
                 System.out.println(this+" queueing interrupt for timer B");
             }              
             raiseIRQ |= IRQ_UNDERFLOW_TIMER_B;
         }
         boolean timerBOneShotMode = (crb & 1<<3) != 0;
         if ( timerBOneShotMode ) { // bit 3 = 1 => timer stops after underflow
-            if ( DEBUG_VERBOSE ) {
+            if ( Constants.CIA_DEBUG_VERBOSE ) {
                 System.out.println(this+" , timer B running in one-shot mode, timer is now stopped.");
             }           
             timerBRunning = false;
         } 
 
-        if ( DEBUG_VERBOSE ) {
+        if ( Constants.CIA_DEBUG_VERBOSE ) {
             System.out.println(this+" , timer B underflow , loading timer B latch = "+timerBLatch);
         }
         reloadTimerB = true;

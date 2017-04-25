@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import de.codesourcery.j6502.emulator.CPU.IRQType;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.IOArea.JoyDirection;
 import de.codesourcery.j6502.emulator.Keyboard;
@@ -162,6 +163,13 @@ public class KeyboardInputListener extends KeyAdapter
 	{
 		switch( e.getKeyCode() ) 
 		{
+		    case KeyEvent.VK_END:
+	            synchronized( emulator ) 
+	            {
+	                System.out.println("=== NMI ===");
+	                emulator.getCPU().queueInterrupt( IRQType.NMI );
+	            }		        
+		        return;
 			case KeyEvent.VK_NUMPAD9: joyDirection = JoyDirection.CENTER; joystickChanged(); return;
 			case KeyEvent.VK_NUMPAD8: joyDirection = JoyDirection.CENTER; joystickChanged(); return;
 			case KeyEvent.VK_NUMPAD7: joyDirection = JoyDirection.CENTER; joystickChanged(); return;

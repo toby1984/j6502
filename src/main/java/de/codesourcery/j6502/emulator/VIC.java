@@ -6,6 +6,7 @@ import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.util.Arrays;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.emulator.CPU.IRQType;
 import de.codesourcery.j6502.emulator.MemorySubsystem.RAMView;
 import de.codesourcery.j6502.utils.HexDump;
@@ -14,16 +15,6 @@ import de.codesourcery.j6502.utils.Misc;
 public class VIC extends IMemoryRegion
 {
     private static final int RASTER_IRQ_X_COORDINATE = 76; // only on 6569
-
-    public static final boolean DEBUG_DRAW_RASTER_IRQ_LINE = false;
-    
-    public static final boolean DEBUG_INTERRUPTS = false;
-    public static final boolean DEBUG_TRIGGERED_INTERRUPTS = false;
-    
-    public static final boolean DEBUG_FPS = true;
-    public static final boolean DEBUG_GRAPHIC_MODES = false;
-    public static final boolean DEBUG_SPRITES = false;
-    public static final boolean DEBUG_MEMORY_LAYOUT = false;
 
     public static final int TOTAL_RASTER_LINES = 403; // PAL-B
 
@@ -1482,7 +1473,7 @@ public class VIC extends IMemoryRegion
         this.triggeredInterruptFlags = (oldValue| IRQ_SPRITE_BACKGROUND |1<<7);
         if ( (oldValue & IRQ_SPRITE_BACKGROUND) == 0 && isSpriteBackgroundIrqEnabled() ) // only trigger interrupt if IRQ is not already active
         {
-            if ( DEBUG_TRIGGERED_INTERRUPTS ) {
+            if ( Constants.VIC_DEBUG_TRIGGERED_INTERRUPTS ) {
                 System.out.println("VIC: Triggered sprite-background IRQ");
             }            
             cpu.queueInterrupt( IRQType.REGULAR  );
@@ -1495,7 +1486,7 @@ public class VIC extends IMemoryRegion
         this.triggeredInterruptFlags = (oldValue| IRQ_SPRITE_SPRITE |1<<7);
         if ( (oldValue & IRQ_SPRITE_SPRITE) == 0 && isSpriteSpriteIrqEnabled() ) // only trigger interrupt if IRQ is not already active
         {
-            if ( DEBUG_TRIGGERED_INTERRUPTS ) {
+            if ( Constants.VIC_DEBUG_TRIGGERED_INTERRUPTS ) {
                 System.out.println("VIC: Triggered sprite-sprite IRQ");
             }            
             cpu.queueInterrupt( IRQType.REGULAR  );
@@ -1508,7 +1499,7 @@ public class VIC extends IMemoryRegion
         this.triggeredInterruptFlags = (oldValue| IRQ_RASTER |1<<7);
         if ( (oldValue & IRQ_RASTER) == 0 && isRasterIrqEnabled() ) // only trigger interrupt if IRQ is not already active
         {
-            if ( DEBUG_TRIGGERED_INTERRUPTS ) {
+            if ( Constants.VIC_DEBUG_TRIGGERED_INTERRUPTS ) {
                 System.out.println("VIC: Triggered raster IRQ");
             }
             cpu.queueInterrupt( IRQType.REGULAR  );
@@ -1589,7 +1580,7 @@ public class VIC extends IMemoryRegion
          *  ( )
          *  ( )                       Beachte: Das Character-ROM wird nur in VIC-Bank 0 und 2 ab 4096 eingeblendet
          */
-        if ( DEBUG_MEMORY_LAYOUT ) {
+        if ( Constants.VIC_DEBUG_MEMORY_LAYOUT ) {
             System.out.println("VIC: mem_mapping is "+HexDump.toBinaryString( (byte) memoryMapping ) );
         }
         final int videoRAMOffset = 1024 * ( ( memoryMapping & 0b1111_0000) >>> 4 ); // The four most significant bits form a 4-bit number in the range 0 thru 15: Multiplied with 1024 this gives the start address for the screen character RAM.
@@ -1601,7 +1592,7 @@ public class VIC extends IMemoryRegion
         
         sprite0DataPtrAddress = bankAdr + videoRAMOffset + 1024 - 8;
         
-        if ( DEBUG_MEMORY_LAYOUT ) {
+        if ( Constants.VIC_DEBUG_MEMORY_LAYOUT ) {
             System.out.println("VIC: Bank @ "+HexDump.toAdr( bankAdr )+"");
             System.out.println("VIC: Video RAM @ "+HexDump.toAdr( videoRAMAdr ) );
             System.out.println("VIC: Bitmap RAM @ "+HexDump.toAdr( bitmapRAMAdr ) );
@@ -1774,14 +1765,14 @@ display window.
     {
         synchronized( frontBuffer )
         {
-            if ( DEBUG_DRAW_RASTER_IRQ_LINE && isRasterIrqEnabled() )
+            if ( Constants.VIC_DEBUG_DRAW_RASTER_IRQ_LINE && isRasterIrqEnabled() )
             {
                 final Graphics2D gfx = backBufferGfx;
                 gfx.setColor(Color.RED);
                 gfx.drawLine( 0 , rasterIRQLine , DISPLAY_AREA_WIDTH, rasterIRQLine );
             }
 
-            if ( DEBUG_FPS )
+            if ( Constants.VIC_DEBUG_FPS )
             {
                 final Graphics2D gfx = backBufferGfx;
                 final long now = System.currentTimeMillis();
@@ -1974,7 +1965,7 @@ display window.
             //
             case VIC_SPRITE_X_COORDS_HI_BIT:
                 spriteXhi = value & 0xff;
-                if ( DEBUG_SPRITES ) {
+                if ( Constants.VIC_DEBUG_SPRITES ) {
                     System.out.println("VIC: Sprite X hi-bits: "+Misc.to8BitBinary( value ));
                 }                 
                 break;
@@ -1988,13 +1979,13 @@ display window.
             case VIC_SPRITE7_COLOR10:
                 spriteMainColor[ trimmed - VIC_SPRITE0_COLOR10 ] = value & 0xff;
                 spriteMainColorRGB[ trimmed - VIC_SPRITE0_COLOR10 ] = RGB_FG_COLORS[ value & 0b1111 ];
-                if ( DEBUG_SPRITES ) {
+                if ( Constants.VIC_DEBUG_SPRITES ) {
                     System.out.println("VIC: Sprite #"+(trimmed - VIC_SPRITE0_COLOR10)+" color: "+(value & 0xff)); 
                 }                
                 break;
             case VIC_SPRITE_ENABLE:
                 spritesEnabled = value & 0xff;
-                if ( DEBUG_SPRITES ) {
+                if ( Constants.VIC_DEBUG_SPRITES ) {
                     System.out.println("VIC: Sprites enabled: "+Misc.to8BitBinary( spritesEnabled ) );
                     System.out.println("VIC: Sprite #0 data @ "+Misc.to16BitHex( sprite0.getDataStartAddress() ) );
                     System.out.println("VIC: Sprite #1 data @ "+Misc.to16BitHex( sprite1.getDataStartAddress() ) );
@@ -2008,25 +1999,25 @@ display window.
                 break;
             case VIC_SPRITE_DOUBLE_HEIGHT:
                 spritesDoubleHeight = value & 0xff;
-                if ( DEBUG_SPRITES ) {
+                if ( Constants.VIC_DEBUG_SPRITES ) {
                     System.out.println("VIC: Sprites double height: "+Misc.to8BitBinary( spritesEnabled ) );
                 }                
                 break;
             case VIC_SPRITE_DOUBLE_WIDTH:
                 spritesDoubleWidth = value & 0xff;
-                if ( DEBUG_SPRITES ) {
+                if ( Constants.VIC_DEBUG_SPRITES ) {
                     System.out.println("VIC: Sprites double width: "+Misc.to8BitBinary( spritesEnabled ) );
                 }                  
                 break;             
             case VIC_SPRITE_MULTICOLOR_MODE:
                 spritesMultiColorMode = value & 0xff;
-                if ( DEBUG_SPRITES ) {
+                if ( Constants.VIC_DEBUG_SPRITES ) {
                     System.out.println("VIC: Sprites multi-color: "+Misc.to8BitBinary( spritesEnabled ) );
                 }                  
                 break;
             case VIC_SPRITE_PRIORITY:
                 spritesBehindBackground = value & 0xff;
-                if ( DEBUG_SPRITES ) {
+                if ( Constants.VIC_DEBUG_SPRITES ) {
                     System.out.println("VIC: Sprites behind background: "+Misc.to8BitBinary( spritesEnabled ) );
                 }                
                 break;
@@ -2076,18 +2067,18 @@ display window.
                 } else {
                     this.triggeredInterruptFlags = newValue;
                 }
-                if ( DEBUG_INTERRUPTS ) {
+                if ( Constants.VIC_DEBUG_INTERRUPTS ) {
                     System.out.println("VIC: currently triggered interrupts: "+Misc.to8BitBinary( this.triggeredInterruptFlags ) );
                 }
                 break;
             case VIC_IRQ_ENABLE_BITS:
                 this.enabledInterruptFlags = value & 0xff;
-                if ( DEBUG_INTERRUPTS ) {
+                if ( Constants.VIC_DEBUG_INTERRUPTS ) {
                     System.out.println("VIC: Enabled interrupts: "+Misc.to8BitBinary( this.enabledInterruptFlags ) );
                 }                
                 break;
             case VIC_CTRL1:
-                if ( DEBUG_GRAPHIC_MODES )
+                if ( Constants.VIC_DEBUG_GRAPHIC_MODES )
                 {
                     if ( ( vicCtrl1 & 0b0110_0000) != (value & 0b0110_0000) )
                     {
@@ -2107,7 +2098,7 @@ display window.
                 recalculateVerticalBorders();
                 break;
             case VIC_CTRL2:
-                if ( DEBUG_GRAPHIC_MODES )
+                if ( Constants.VIC_DEBUG_GRAPHIC_MODES )
                 {
                     if ( (vicCtrl2 & 1<<4)  != (value & 1<<4) )
                     {

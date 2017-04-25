@@ -2,6 +2,7 @@ package de.codesourcery.j6502.emulator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 public final class BreakpointsController 
 {
@@ -16,6 +17,7 @@ public final class BreakpointsController
     // @GuardedBy( LOCK )
     private int breakpointsCount=0;
     
+    // @GuardedBy( breakpointListeners )
     private final List<IBreakpointLister> breakpointListeners = new ArrayList<>();
     
     private final CPU cpu;
@@ -36,19 +38,22 @@ public final class BreakpointsController
 
     public void removeAllBreakpoints()
     {
+        final List<Breakpoint> removed = new ArrayList<>();
         synchronized(LOCK)
         {
             for ( int i = 0 ; i < breakpoints.length ; i++ )
             {
                 Breakpoint bp = breakpoints[i];
                 if ( bp != null ) {
+                    removed.add( bp );
                     breakpoints[i] = null;
-                    breakpointListeners.forEach( l -> l.breakpointRemoved(bp) );
                 }
             }
             oneShotBreakpoint = null;
             breakpointsCount = 0;
         }
+        // invoke listeners AFTER releasing lock
+        visitBreakpointListeners( l -> removed.forEach( l::breakpointRemoved ) ); 
     }
 
     public void addBreakpointListener(IBreakpointLister l)
@@ -56,7 +61,7 @@ public final class BreakpointsController
         if (l == null) {
             throw new IllegalArgumentException("l must not be NULL");
         }
-        synchronized(LOCK) {
+        synchronized(breakpointListeners) {
             this.breakpointListeners.add(l);
         }
     }
@@ -66,13 +71,14 @@ public final class BreakpointsController
         if (l == null) {
             throw new IllegalArgumentException("l must not be NULL");
         }
-        synchronized(LOCK) {
+        synchronized(breakpointListeners) {
             this.breakpointListeners.remove(l);
         }
     }
     
     public void addBreakpoint(Breakpoint bp)
     {
+        Runnable doAfterReleasingLock = null;
         synchronized(LOCK)
         {
             if (bp.isOneshot)
@@ -89,13 +95,23 @@ public final class BreakpointsController
                 if ( old == null )
                 {
                     breakpointsCount++;
-                    breakpointListeners.forEach( l -> l.breakpointAdded( bp ) );
+                    doAfterReleasingLock = () -> visitBreakpointListeners( l -> l.breakpointAdded( bp ) );
                 }
                 else
                 {
-                    breakpointListeners.forEach( l -> l.breakpointReplaced( old , bp ) );
+                    doAfterReleasingLock = () -> visitBreakpointListeners( l -> l.breakpointReplaced( old , bp ) );
                 }
             }
+        }
+        if ( doAfterReleasingLock != null ) {
+            doAfterReleasingLock.run();
+        }
+    }
+    
+    private void visitBreakpointListeners(Consumer<IBreakpointLister> visitor) 
+    {
+        synchronized(breakpointListeners) {
+            breakpointListeners.forEach( visitor );
         }
     }
 
@@ -122,6 +138,7 @@ public final class BreakpointsController
 
     public void removeBreakpoint(Breakpoint breakpoint)
     {
+        Breakpoint removed = null;
         synchronized(LOCK)
         {
             if ( breakpoint.isOneshot )
@@ -138,9 +155,14 @@ public final class BreakpointsController
                 {
                     this.breakpoints[ breakpoint.address & 0xffff ] = null;
                     breakpointsCount--;
-                    breakpointListeners.forEach( l -> l.breakpointRemoved( existing ) );
+                    removed = existing;
                 }
             }
+        }
+        if ( removed != null ) 
+        {
+            final Breakpoint finalRemoved = removed;
+            visitBreakpointListeners(  l -> l.breakpointRemoved( finalRemoved ) );
         }
     }    
     
