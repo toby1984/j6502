@@ -28,10 +28,15 @@ public class EmulationState
     {
         HEADER((byte) 1),
         RAM((byte) 2),
-        FLOPPY_RAM((byte) 2),
-        IO_AREA((byte) 3),
+        FLOPPY_RAM((byte) 3),
         C64_CPU((byte) 4),
-        FLOPPY_CPU((byte) 5);
+        FLOPPY_CPU((byte) 5),
+        CIA1_RAM((byte) 6),
+        CIA1_FIELDS((byte) 7),
+        CIA2_RAM((byte) 8),
+        CIA2_FIELDS((byte) 9),
+        VIC_RAM((byte) 10),
+        VIC_FIELDS((byte) 11);
 
         public final byte typeId;
 
@@ -57,17 +62,29 @@ public class EmulationState
 
         private int checksum;
 
-        public EmulationStateEntry(EntryType type, byte version) {
+        public EmulationStateEntry(EntryType type, int version) {
 
             Validate.notNull(type, "type must not be NULL");
+            if ( version > Byte.MAX_VALUE || version < Byte.MIN_VALUE) {
+                throw new IllegalArgumentException("Version out of range: "+version);
+            }
             this.type = type;
-            this.version = version;
+            this.version = (byte) version;
             this.payload = new byte[0];
         }
 
         public byte[] getPayload()
         {
             return payload;
+        }
+        
+        public EmulationStateEntry addTo(EmulationState state) {
+            state.add( this );
+            return this;
+        }
+        
+        public ByteArrayInputStream toByteArrayInputStream() {
+            return new ByteArrayInputStream( this.payload );
         }
         
         public EmulationStateEntry(EntryType type, byte version, byte[] payload)
@@ -100,11 +117,21 @@ public class EmulationState
             return this;
         }
         
-        public void applyPayload(IMemoryRegion region) {
-            
-            for ( int i = 0,len = payload.length ; i < len ; i++ ) 
+        public void applyPayload(IMemoryRegion region,boolean applySideEffects) 
+        {
+            if ( applySideEffects ) 
             {
-                region.writeByte( i , payload[i] );
+                for ( int i = 0,len = payload.length ; i < len ; i++ ) 
+                {
+                    region.writeByte( i , payload[i] );
+                }
+            } 
+            else 
+            {
+                for ( int i = 0,len = payload.length ; i < len ; i++ ) 
+                {
+                    region.writeByteNoSideEffects( i , payload[i] );
+                }
             }
         }
 
@@ -214,13 +241,14 @@ public class EmulationState
         return result;
     }    
 
-    public void add(EmulationStateEntry entry) 
+    public EmulationStateEntry add(EmulationStateEntry entry) 
     {
         if ( entries.stream().anyMatch( existing -> existing.hasType( entry.type ) ) ) 
         {
             throw new IllegalArgumentException("Cannot add more than one entry for any type, offender: "+entry);
         }
         this.entries.add(entry);
+        return entry;
     }
     
     public void visitEntries(Consumer<EmulationStateEntry> visitor)
@@ -396,6 +424,32 @@ public class EmulationState
         final long lo = readInt( in ) & 0xffffffff;
         return hi << 32 | lo;
     }    
+    
+    public static void writeIntArray(int[] array, OutputStream out) throws IOException {
+        writeInt( array.length , out );
+        for (  int v : array ) {
+            writeInt( v , out );
+        }
+    }
+    
+    public static int[] readIntArray(InputStream in) throws IOException {
+        final int len = readInt( in );
+        final int[] result = new int[len];
+        for ( int i = 0 ; i < len ; i++ ) {
+            result[i] = readByte(in);
+        }
+        return result;
+    }
+    
+    public static void populateIntArray(int[] arrayToFill, InputStream in) throws IOException {
+        final int len = readInt( in );
+        if ( len != arrayToFill.length ) {
+            throw new IllegalArgumentException("Input array has size "+arrayToFill.length+" but de-serialized array has size "+len);
+        }
+        for ( int i = 0 ; i < len ; i++ ) {
+            arrayToFill[i] = readInt(in);
+        }
+    }
     
     public static void writeInt(int value, OutputStream out) throws IOException {
 

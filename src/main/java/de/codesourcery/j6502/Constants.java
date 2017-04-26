@@ -11,6 +11,7 @@ public class Constants
 {
     // various Memory implementations
     public static final boolean MEMORY_SUPPORT_BREAKPOINTS = true;
+    public static final boolean MEMORY_DEBUG_STATE_PERSISTENCE = true;
     
     // EmulatorDriver class constants
     public static final boolean EMULATORDRIVER_DEBUG_CMDS = false;

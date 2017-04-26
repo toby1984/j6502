@@ -135,6 +135,10 @@ public class HexDump {
 			public void writeByte(int offset, byte value) {
 				throw new UnsupportedOperationException();
 			}
+			
+			public void writeByteNoSideEffects(int offset, byte value) {
+                throw new UnsupportedOperationException();			    
+			}
 
 			@Override
 			public String dump(int offset, int len) {

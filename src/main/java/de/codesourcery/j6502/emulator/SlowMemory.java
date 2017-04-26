@@ -1,6 +1,5 @@
 package de.codesourcery.j6502.emulator;
 
-import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.utils.HexDump;
 
 /**
@@ -46,13 +45,17 @@ public class SlowMemory extends IMemoryRegion
 
     @Override
     public int readByteNoSideEffects(int offset) {
-        getBreakpointsContainer().read( offset );
         return data[offset & 0xffff] & 0xff;
     }	
 
     @Override
     public void writeByte(int offset, byte value) {
         getBreakpointsContainer().write( offset );
+        data[offset & 0xffff]=value;
+    }
+    
+    @Override
+    public void writeByteNoSideEffects(int offset, byte value) {
         data[offset & 0xffff]=value;
     }
 

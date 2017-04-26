@@ -45,6 +45,12 @@ public class Memory extends IMemoryRegion
         }	    
 		data[offset & 0xffff]=value;
 	}
+	
+	@Override
+	public void writeByteNoSideEffects(int offset, byte value) 
+	{
+        data[offset & 0xffff]=value;
+	}
 
 	@Override
 	public void writeWord(int offset, short value)

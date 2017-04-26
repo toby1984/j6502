@@ -1,10 +1,17 @@
 package de.codesourcery.j6502.emulator;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoField;
 
 import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.emulator.CPU.IRQType;
+import de.codesourcery.j6502.emulator.EmulationState.EmulationStateEntry;
+import de.codesourcery.j6502.emulator.EmulationState.EntryType;
 import de.codesourcery.j6502.utils.Misc;
 
 /**
@@ -14,7 +21,7 @@ import de.codesourcery.j6502.utils.Misc;
  *
  * @author tobias.gierke@code-sourcery.de
  */
-public abstract class CIA extends Memory
+public abstract class CIA extends SlowMemory implements IStatefulPart
 {
     public static final int CIA_PRA        = 0x00;
     public static final int CIA_PRB        = 0x01;
@@ -279,6 +286,29 @@ $DD0F 	56591 	15
 CRB 	Control Timer B 	see CIA 1
      */
 
+    protected static enum TimeOfDay
+    {
+        AM(1),PM(2);
+
+        public final byte identifier;
+
+        private TimeOfDay(int identifier) {
+            this.identifier = (byte) identifier;
+        }
+
+        public TimeOfDay flip() { return this == AM ? PM : AM; }
+
+        public static TimeOfDay fromIdentifier(byte identifier) 
+        {
+            for ( TimeOfDay f : values() ) {
+                if ( f.identifier == identifier ) {
+                    return f;
+                }
+            }
+            throw new IllegalArgumentException("Unknown identifier: "+identifier);
+        }
+    }    
+
     private long debugPreviousTapeSignalChangeTick=-1; // TODO: Debug code, remove when done
     private boolean previousTapeSignal;
 
@@ -296,17 +326,11 @@ CRB 	Control Timer B 	see CIA 1
 
     // RTC alarm time
     private boolean rtcAlarmIRQEnabled;
-    private TimeOfDay todAlarmTimeOfDay;
+    private TimeOfDay todAlarmTimeOfDay = TimeOfDay.AM;
     private int todAlarm10s = 0; // 10ths of seconds
     private int todAlarmSeconds = 0; // seconds
     private int todAlarmMinutes = 0; // minutes
     private int todAlarmHours= 0; // hours
-
-    protected static enum TimeOfDay
-    {
-        AM,PM;
-        public TimeOfDay flip() { return this == AM ? PM : AM; }
-    }
 
     private boolean reloadTimerA = false;
     private boolean reloadTimerB = false;
@@ -324,15 +348,122 @@ CRB 	Control Timer B 	see CIA 1
     public int timerBValue;
     public int timerBLatch;
 
+    protected final void saveState(OutputStream out) throws IOException
+    {
+        EmulationState.writeBoolean( previousTapeSignal , out );
+        EmulationState.writeLong( tapeSlopeCounter , out );
+        EmulationState.writeLong( tickCounter , out );
+        EmulationState.writeBoolean( todRunning , out ); 
+        out.write( timeOfDay.identifier & 0xff );
+        EmulationState.writeInt( tod10s , out );
+        EmulationState.writeInt( todSeconds , out );
+        EmulationState.writeInt( todMinutes, out );
+        EmulationState.writeInt( todHours, out );
+        EmulationState.writeBoolean( rtcAlarmIRQEnabled, out );
+        out.write( todAlarmTimeOfDay.identifier & 0xff );
+
+        EmulationState.writeInt( todAlarm10s, out );
+        EmulationState.writeInt( todAlarmSeconds, out );
+        EmulationState.writeInt( todAlarmMinutes, out );
+        EmulationState.writeInt( todAlarmHours, out );
+
+        EmulationState.writeBoolean( reloadTimerA, out );
+        EmulationState.writeBoolean( reloadTimerB, out );        
+
+        EmulationState.writeInt( raiseIRQ, out );
+        EmulationState.writeInt( irqMask, out );
+        EmulationState.writeInt( icr_read, out );   
+
+        EmulationState.writeBoolean( timerARunning, out );
+        EmulationState.writeBoolean( timerBRunning, out );     
+
+        EmulationState.writeInt( timerAValue, out );
+        EmulationState.writeInt( timerALatch, out );
+
+        EmulationState.writeInt( timerBValue, out );
+        EmulationState.writeInt( timerBLatch, out );        
+    }
+
+    protected final void loadState(InputStream in) throws IOException 
+    {
+        previousTapeSignal = EmulationState.readBoolean( in );
+        tapeSlopeCounter = EmulationState.readLong( in );
+        tickCounter  = EmulationState.readLong( in );
+        todRunning = EmulationState.readBoolean( in ); 
+        timeOfDay = TimeOfDay.fromIdentifier( (byte) EmulationState.readByte( in ) );
+        tod10s = EmulationState.readInt( in );
+        todSeconds = EmulationState.readInt( in );
+        todMinutes = EmulationState.readInt( in );
+        todHours = EmulationState.readInt( in );
+        rtcAlarmIRQEnabled = EmulationState.readBoolean( in );
+        todAlarmTimeOfDay = TimeOfDay.fromIdentifier( (byte) EmulationState.readByte( in ) );
+
+        todAlarm10s = EmulationState.readInt( in );
+        todAlarmSeconds = EmulationState.readInt( in );
+        todAlarmMinutes = EmulationState.readInt( in );
+        todAlarmHours = EmulationState.readInt( in );
+
+        reloadTimerA = EmulationState.readBoolean( in );
+        reloadTimerB = EmulationState.readBoolean( in );        
+
+        raiseIRQ = EmulationState.readInt( in );
+        irqMask = EmulationState.readInt( in );
+        icr_read = EmulationState.readInt( in );   
+
+        timerARunning = EmulationState.readBoolean( in );
+        timerBRunning = EmulationState.readBoolean( in );     
+
+        timerAValue = EmulationState.readInt( in );
+        timerALatch = EmulationState.readInt( in );
+
+        timerBValue = EmulationState.readInt( in );
+        timerBLatch = EmulationState.readInt( in );  
+    }    
+
     public CIA(String identifier, AddressRange range)
     {
         super(identifier, MemoryType.IOAREA , range);
-    }
+    }    
 
     @Override
     public boolean isReadsReturnWrites(int offset) {
         return false; // not for all registers
     }
+    
+    protected final void saveState(EmulationState state,EntryType ramType,EntryType fieldType) 
+    {
+        EmulationStateEntry entry = new EmulationStateEntry(ramType,(byte)1).setPayload( this );
+        state.add( entry );
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        
+        try 
+        {
+            saveFieldsHook( out );
+            saveState( out );
+            
+            entry = new EmulationStateEntry(fieldType,(byte)1 , out.toByteArray() );
+            state.add( entry );
+        } 
+        catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }    
+    
+    protected final void restoreState(EmulationState state,EntryType ramType,EntryType fieldType) 
+    {
+        state.getEntry( ramType ).applyPayload( this , false );
+        final EmulationStateEntry entry = state.getEntry( fieldType );
+        final ByteArrayInputStream in = entry.toByteArrayInputStream();
+        try {
+            loadFieldsHook( in );
+            loadState( in );
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    protected abstract void saveFieldsHook(OutputStream out) throws IOException;
+    
+    protected abstract void loadFieldsHook(InputStream out) throws IOException;
 
     private void initTOD() {
 
@@ -348,6 +479,7 @@ CRB 	Control Timer B 	see CIA 1
         this.rtcAlarmIRQEnabled = false;
 
         this.timeOfDay = hour >= 12 ? TimeOfDay.PM : TimeOfDay.AM;
+        this.todAlarmTimeOfDay = TimeOfDay.AM;
 
         this.tod10s = tenths;
         this.todSeconds = second;
@@ -390,7 +522,7 @@ CRB 	Control Timer B 	see CIA 1
     }
 
     @Override
-    public int readByteNoSideEffects(int offset)
+    public final int readByteNoSideEffects(int offset)
     {
         return readByte(offset,false);
     }
@@ -711,14 +843,13 @@ CRB 	Control Timer B
 
     public void tick(CPU cpu)
     {
-
         if ( raiseIRQ != 0 ) 
         {
             if ( Constants.CIA_DEBUG_TIMER_IRQS) {
-             final boolean timerAUnder = (raiseIRQ & IRQ_UNDERFLOW_TIMER_A) != 0 ;
-             final boolean timerBUnder = (raiseIRQ & IRQ_UNDERFLOW_TIMER_B) != 0;
-             final boolean flagChange = (raiseIRQ & IRQ_FLAG_PIN) != 0;
-             System.out.println("IRQ raised "+this+" , mask = "+(timerAUnder ? "TIMER_A" : "" )+" | "+(timerBUnder? "TIMER_B" : "")+" | "+(flagChange?"FLAG":""));
+                final boolean timerAUnder = (raiseIRQ & IRQ_UNDERFLOW_TIMER_A) != 0 ;
+                final boolean timerBUnder = (raiseIRQ & IRQ_UNDERFLOW_TIMER_B) != 0;
+                final boolean flagChange = (raiseIRQ & IRQ_FLAG_PIN) != 0;
+                System.out.println("IRQ raised "+this+" , mask = "+(timerAUnder ? "TIMER_A" : "" )+" | "+(timerBUnder? "TIMER_B" : "")+" | "+(flagChange?"FLAG":""));
             }
             cpu.queueInterrupt( IRQType.REGULAR );
             raiseIRQ = 0;

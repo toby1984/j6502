@@ -1,2 +1,6 @@
 target
 bin
+*.orig
+*.d64
+*.g64
+games 

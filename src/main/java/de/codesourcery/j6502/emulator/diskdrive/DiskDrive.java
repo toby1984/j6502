@@ -105,6 +105,11 @@ public class DiskDrive extends IMemoryRegion
         public void writeByte(int offset, byte value) {
             throw new RuntimeException("Write to non-existant memory location "+HexDump.toAdr( offset ) );            
         }
+        
+        @Override
+        public void writeByteNoSideEffects(int offset, byte value) {
+            throw new RuntimeException("Write to non-existant memory location "+HexDump.toAdr( offset ) );   
+        }
 
         @Override
         public void reset() {
@@ -308,6 +313,13 @@ public class DiskDrive extends IMemoryRegion
         final IMemoryRegion region = memoryMap[offset];
         final int translated = offset - region.getAddressRange().getStartAddress();
         region.writeByte( translated , value );      
+    }
+    
+    @Override
+    public void writeByteNoSideEffects(int offset, byte value) {
+        final IMemoryRegion region = memoryMap[offset];
+        final int translated = offset - region.getAddressRange().getStartAddress();
+        region.writeByteNoSideEffects( translated , value );      
     }
 
     @Override

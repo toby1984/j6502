@@ -114,6 +114,11 @@ public class Disassembler
 			public void writeByte(int offset, byte value) {
 				throw new UnsupportedOperationException();
 			}
+			
+			@Override
+			public void writeByteNoSideEffects(int offset, byte value) {
+	            throw new UnsupportedOperationException();
+			}
 
 		    @Override
 			public boolean isReadsReturnWrites(int offset) {

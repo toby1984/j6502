@@ -4,6 +4,9 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.Arrays;
 
 import de.codesourcery.j6502.Constants;
@@ -11,6 +14,8 @@ import de.codesourcery.j6502.emulator.CPU.IRQType;
 import de.codesourcery.j6502.emulator.MemorySubsystem.RAMView;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.Misc;
+
+import static de.codesourcery.j6502.emulator.EmulationState.*;
 
 public class VIC extends IMemoryRegion implements IStatefulPart
 {
@@ -40,7 +45,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
     protected static final int SPRITE_5_MASK = 1<<5;
     protected static final int SPRITE_6_MASK = 1<<6;
     protected static final int SPRITE_7_MASK = 1<<7;
-    
+
     protected final class Sprite 
     {
         public final int spriteNo;
@@ -102,7 +107,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         public boolean isBehindBackground() {
             return ( spritesBehindBackground & bitMask ) != 0;            
         }      
-        
+
         public boolean isInFrontOfBackground() {
             return ( spritesBehindBackground & bitMask ) == 0;            
         }          
@@ -126,24 +131,28 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         MODE_101(true ,false,true),
         MODE_110(true ,true ,false),
         MODE_111(true ,true ,true);
-        
+
         public final boolean bitMapMode;
         public final boolean textMode;
         public final boolean extendedColorMode;
         public final boolean multiColorMode;
-        
+
+        public int identifier() {
+            return (bitMapMode ? 4 : 0) | (extendedColorMode ? 2 : 0) | (multiColorMode ? 1 :0 ); 
+        }
+
         private GraphicsMode(boolean bitMapMode, boolean extendedColorMode, boolean multiColorMode) {
             this.bitMapMode = bitMapMode;
             this.textMode = ! bitMapMode;
             this.extendedColorMode = extendedColorMode;
             this.multiColorMode = multiColorMode;
         }
-        
+
         @Override
         public String toString() {
             return "bitmap: "+bitMapMode+" | multi-color: "+multiColorMode+" | extended: "+extendedColorMode;
         }        
-        
+
         protected static boolean isExtendedColorMode(VIC vic) {
             return ( vic.vicCtrl1 & 1<< 6) != 0;
         }
@@ -155,11 +164,10 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         protected static boolean isMultiColor(VIC vic) {
             return ( vic.vicCtrl2 & 1<< 4) != 0;
         }        
-        
-        public static GraphicsMode get(VIC vic) 
+
+        public static GraphicsMode fromIdentifier(int identifier) 
         {
-            final int value = (isBitmapMode(vic) ? 4 : 0) | (isExtendedColorMode(vic) ? 2 : 0) | (isMultiColor(vic) ? 1 :0 ); 
-            switch(value) 
+            switch(identifier) 
             {
                 case 0: return MODE_000;
                 case 1: return MODE_001;
@@ -170,11 +178,17 @@ public class VIC extends IMemoryRegion implements IStatefulPart
                 case 6: return MODE_110;
                 case 7: return MODE_111;
                 default:
-                    throw new IllegalArgumentException("Illegal mask value");
+                    throw new IllegalArgumentException("Unknown identifier: "+identifier);
             }
         }
+
+        public static GraphicsMode get(VIC vic) 
+        {
+            final int value = (isBitmapMode(vic) ? 4 : 0) | (isExtendedColorMode(vic) ? 2 : 0) | (isMultiColor(vic) ? 1 :0 );
+            return fromIdentifier( value );
+        }
     }
-    
+
     /* VIC I/O area is fixed at $D000 - $DFFF.
      *
      * VIC $d000 - $d02f
@@ -451,7 +465,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
      * Alpha channel is always set to 0xff.
      */
     public static final int[] RGB_FG_COLORS = new int[16];
-    
+
     /**
      * Colors that are considered to be part of the 'background' when checking for sprite &lt;-&gt; bitmap collisions.     
      * 
@@ -714,19 +728,19 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             sprite7Sequencer.onStartOfLine();            
         }
     }
-    
+
     private int getFinalPixelColor(int colorFromBitmap) 
     {
         // check whether the pixel's original color is something 
         // that can collide with a sprite
         final boolean bitmapColorIsForeground = isForegroundPixelColor( colorFromBitmap );
-        
+
         Sprite contributingSprite = null;
         int spriteColor = SPRITE_TRANSPARENT_COLOR;
 
         int spriteSpriteCollisionMask = 0;
         int backgroundCollisionMask = 0;
-        
+
         final int color0 = sprite0Sequencer.getRGBColor();     
         final int color1 = sprite1Sequencer.getRGBColor(); 
         final int color2 = sprite2Sequencer.getRGBColor();
@@ -735,7 +749,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         final int color5 = sprite5Sequencer.getRGBColor(); 
         final int color6 = sprite6Sequencer.getRGBColor(); 
         final int color7 = sprite7Sequencer.getRGBColor(); 
-        
+
         // Order of sprite checks is INTENTIONAL as it
         // reflects the sprite priorities (sprite #0 overrides sprite #1, sprite #1 overrides sprite #2, etc.)
         if ( color7 != SPRITE_TRANSPARENT_COLOR ) { 
@@ -745,7 +759,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             }
             contributingSprite = sprite7; 
         }
-       
+
         if ( color6 != SPRITE_TRANSPARENT_COLOR ) { 
             spriteColor = color6;
             if ( contributingSprite != null ) {
@@ -756,7 +770,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             }            
             contributingSprite = sprite6;
         }            
-          
+
         if ( color5 != SPRITE_TRANSPARENT_COLOR ) { 
             spriteColor = color5; 
             if ( contributingSprite != null ) {
@@ -767,7 +781,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             }            
             contributingSprite = sprite5;
         }            
-        
+
         if ( color4 != SPRITE_TRANSPARENT_COLOR ) { 
             spriteColor = color4; 
             if ( contributingSprite != null ) {
@@ -778,7 +792,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             }            
             contributingSprite = sprite4;
         }            
-         
+
         if ( color3 != SPRITE_TRANSPARENT_COLOR ) { 
             spriteColor = color3; 
             if ( contributingSprite != null ) {
@@ -789,7 +803,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             }            
             contributingSprite = sprite3;
         }            
-      
+
         if ( color2 != SPRITE_TRANSPARENT_COLOR ) { 
             spriteColor = color2; 
             if ( contributingSprite != null ) {
@@ -830,7 +844,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
                 spriteSpriteCollision |= spriteSpriteCollisionMask;
                 spriteSpriteCollisionDetected = true;
             }
-            
+
             // sprite-background rendering priority: only render sprite color if the background is a background color
             if ( contributingSprite.isInFrontOfBackground() || ! bitmapColorIsForeground ) 
             {
@@ -843,7 +857,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
     private static boolean isForegroundPixelColor(int rgb) {
         return ( rgb & 0xff000000 ) != 0;
     }
-    
+
     protected final class HiResSpriteRowDataReader extends SpriteRowDataReader
     {
         private int data;
@@ -1162,7 +1176,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
     protected int sprite0DataPtrAddress; 
     protected int bitmapRAMAdr;
     protected int builtinCharRomStart;
-    
+
     protected int glyphDataAdr;
 
     // Sprite stuff
@@ -1228,7 +1242,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
     protected boolean displayEnabled=true;
     protected boolean displayEnabledNewState=true;
     protected boolean displayEnabledChanged=false;
-    
+
     private int lightpenY;
     private int lightpenX;    
 
@@ -1288,6 +1302,12 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             }
 
             @Override
+            public void writeByteNoSideEffects(int offset, byte value) 
+            {
+                ram.writeByteNoSideEffects(offset,value);
+            }
+
+            @Override
             public int readByte(int adr)
             {
                 if ( charROMHidden || isNotWithinCharacterROM( adr ) )
@@ -1334,7 +1354,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             tickDisabledDisplay(cpu, clockHigh);
             return;
         }
-        
+
         // copy stuff to local variables, hoping that the compiler will put
         // these in registers and avoid memory accesses...
         int beamX = this.beamX;
@@ -1344,7 +1364,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
 
         boolean spriteSpriteCollisionNotActive = ( triggeredInterruptFlags & IRQ_SPRITE_SPRITE) == 0;
         boolean spriteBackgroundCollisionNotActive = ( triggeredInterruptFlags & IRQ_SPRITE_BACKGROUND) == 0;
-        
+
         spriteSpriteCollisionDetected = false;
         spriteBackgroundCollisionDetected= false;
 
@@ -1364,7 +1384,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             }
 
             if ( beamY >= FIRST_DISPLAY_AREA_Y && beamX >= FIRST_DISPLAY_AREA_X &&
-                 beamY <= LAST_DISPLAY_AREA_Y && beamX <= LAST_DISPLAY_AREA_X)
+                    beamY <= LAST_DISPLAY_AREA_Y && beamX <= LAST_DISPLAY_AREA_X)
             {
                 // write pixel.
                 // we abused the alpha channel to distinguish between 'foreground' and 'background' pixels
@@ -1393,7 +1413,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
                     beamY = 0;
                     pixelData = swapBuffers();
                     imagePixelPtr = 0;
-                    
+
                     latchDisplayEnabledState();
                     if ( ! displayEnabled ) 
                     {
@@ -1407,7 +1427,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         this.beamY = beamY;
         this.imagePixelPtr = imagePixelPtr;
     }
-    
+
     private void tickDisabledDisplay(CPU cpu,boolean clockHigh)
     {
         // copy stuff to local variables, hoping that the compiler will put
@@ -1417,22 +1437,22 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         int imagePixelPtr = this.imagePixelPtr;
         int[] pixelData = this.imagePixelData;
 
-//        boolean spriteSpriteCollisionNotActive = ( triggeredInterruptFlags & IRQ_SPRITE_SPRITE) == 0;
-//        boolean spriteBackgroundCollisionNotActive = ( triggeredInterruptFlags & IRQ_SPRITE_BACKGROUND) == 0;
-        
+        //        boolean spriteSpriteCollisionNotActive = ( triggeredInterruptFlags & IRQ_SPRITE_SPRITE) == 0;
+        //        boolean spriteBackgroundCollisionNotActive = ( triggeredInterruptFlags & IRQ_SPRITE_BACKGROUND) == 0;
+
         spriteSpriteCollisionDetected = false;
         spriteBackgroundCollisionDetected= false;
 
         // TODO: Nasty hack with rasterIRQLine+4 because I'm not honoring cycle timings at all....fix this !!!
-//        final int rasterPoint = isRasterIrqEnabled() ? rasterIRQLine+4 : -1;
+        //        final int rasterPoint = isRasterIrqEnabled() ? rasterIRQLine+4 : -1;
 
         // render 4 pixels/clock phase = 8 pixel/clock cycle
         for ( int i = 0 ; i < 4 ; i++ )
         {
-//            if ( beamX == RASTER_IRQ_X_COORDINATE && rasterPoint == beamY ) 
-//            { 
-//                triggerRasterIRQ(cpu);
-//            }
+            //            if ( beamX == RASTER_IRQ_X_COORDINATE && rasterPoint == beamY ) 
+            //            { 
+            //                triggerRasterIRQ(cpu);
+            //            }
 
             // advance raster beam
             if ( ++beamX >= 504 )
@@ -1445,7 +1465,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
                     beamY = 0;
                     pixelData = swapBuffers();
                     imagePixelPtr = 0;
-                    
+
                     latchDisplayEnabledState();
                     if ( displayEnabled ) {
                         break;
@@ -1458,7 +1478,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         this.beamY = beamY;
         this.imagePixelPtr = imagePixelPtr;
     }    
-    
+
     private void latchDisplayEnabledState() 
     {
         if ( displayEnabledChanged ) {
@@ -1466,7 +1486,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             displayEnabledChanged  = false;
         }
     }
-    
+
     private void triggerSpriteBackgroundCollisionIRQ(CPU cpu)
     {
         final int oldValue = triggeredInterruptFlags;
@@ -1479,7 +1499,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             cpu.queueInterrupt( IRQType.REGULAR  );
         }
     }    
-    
+
     private void triggerSpriteSpriteCollisionIRQ(CPU cpu)
     {
         final int oldValue = triggeredInterruptFlags;
@@ -1505,15 +1525,15 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             cpu.queueInterrupt( IRQType.REGULAR  );
         }
     }
-    
+
     private boolean isSpriteBackgroundIrqEnabled() {
         return ( enabledInterruptFlags & IRQ_SPRITE_BACKGROUND) != 0;
     }
-    
+
     private boolean isSpriteSpriteIrqEnabled() {
         return ( enabledInterruptFlags & IRQ_SPRITE_SPRITE) != 0;
     }
-    
+
     private boolean isRasterIrqEnabled() {
         return ( enabledInterruptFlags & IRQ_RASTER) != 0;
     }      
@@ -1589,9 +1609,9 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         bitmapRAMAdr = bankAdr + ( (memoryMapping & 0b1000) == 0 ? 0 : 0x2000 );
         videoRAMAdr = bankAdr + videoRAMOffset;
         glyphDataAdr  = bankAdr + glyphRAMOffset;
-        
+
         sprite0DataPtrAddress = bankAdr + videoRAMOffset + 1024 - 8;
-        
+
         if ( Constants.VIC_DEBUG_MEMORY_LAYOUT ) {
             System.out.println("VIC: Bank @ "+HexDump.toAdr( bankAdr )+"");
             System.out.println("VIC: Video RAM @ "+HexDump.toAdr( videoRAMAdr ) );
@@ -1663,13 +1683,13 @@ display window.
     private int getRows() {
         return (vicCtrl1 & 1<<3) != 0 ? 25 : 24;
     }    
-    
+
     public void setDisplayEnabled(boolean yesNo) 
     {
         displayEnabledNewState = yesNo;
         displayEnabledChanged = true;
     }
-    
+
     public boolean isDisplayEnabled() {
         return displayEnabled;
     }
@@ -1700,7 +1720,7 @@ display window.
         displayEnabledChanged=false;        
 
         graphicsMode = GraphicsMode.get(this);
-        
+
         recalculateHorizontalBorders();
         recalculateVerticalBorders();
 
@@ -1742,7 +1762,7 @@ display window.
 
         spriteBackgroundCollision = 0;
         spriteSpriteCollision = 0;
-        
+
         spriteSpriteCollisionDetected = false;
         spriteBackgroundCollisionDetected = false;
 
@@ -1927,8 +1947,14 @@ display window.
             case VIC_LIGHTPEN_Y_COORDS:
                 return lightpenY;
             default:
-                throw new RuntimeException("Read @ unhandled address $"+Integer.toHexString( getAddressRange().getStartAddress()+offset ) );
+                throw new RuntimeException("VIC - Read @ unhandled address $"+Integer.toHexString( getAddressRange().getStartAddress()+offset ) );
         }
+    }
+
+    @Override
+    public void writeByteNoSideEffects(int offset, byte value) {
+        // nothing to do here as this class
+        // does not rely on storing arbitrary stuff in a base class
     }
 
     @Override
@@ -2158,13 +2184,13 @@ display window.
     public String dump(int offset, int len) {
         return HexDump.INSTANCE.dump( (short) (getAddressRange().getStartAddress()+offset),this,offset,len);
     }
-    
+
     protected boolean isInBorder(int beamX,int beamY) 
     {
         return  beamX <= leftBorderEndX || beamX >= rightBorderStartX ||
                 beamY <= topBorderEndY || beamY >= bottomBorderStartY;
     }   
-    
+
     protected static boolean isInSpriteArea(int beamX,int beamY) 
     {
         return  beamX >= SPRITE_DISPLAY_AREA_START_X && beamY >= SPRITE_DISPLAY_AREA_START_Y;
@@ -2179,14 +2205,160 @@ display window.
     @Override
     public void restoreState(EmulationState state)
     {
-        // TODO Auto-generated method stub
-        
+        state.getEntry(EntryType.VIC_RAM).applyPayload( this , false );
+
+        final ByteArrayInputStream out = state.getEntry(EntryType.VIC_FIELDS).toByteArrayInputStream();
+
+        try {
+            vicCtrl1 = readInt( out );
+            vicCtrl2 = readInt( out  );
+
+            displayEnabled = readBoolean( out  );
+            displayEnabledNewState = readBoolean( out  );
+            displayEnabledChanged = readBoolean( out  );        
+            graphicsMode = GraphicsMode.fromIdentifier( readInt( out ) );
+
+            recalculateHorizontalBorders();
+            recalculateVerticalBorders();
+
+            triggeredInterruptFlags = readInt( out  ); // no interrupts triggered
+            enabledInterruptFlags = readInt( out  ); // all IRQs disabled
+
+            rasterIRQLine = readInt( out );
+
+            imagePixelPtr = readInt( out );
+
+            beamX = readInt( out );
+            beamY = readInt( out );
+
+            lightpenX = readInt( out  );
+            lightpenY  = readInt( out );
+
+            backgroundColor = readInt( out );
+            rgbBackgroundColor = RGB_BG_COLORS[ backgroundColor ];
+
+            backgroundExt0Color = readInt( out  );
+            rgbBackgroundExt0Color = RGB_BG_COLORS[backgroundExt0Color];
+
+            backgroundExt1Color = readInt( out );
+            rgbBackgroundExt1Color = RGB_FG_COLORS[backgroundExt1Color];
+
+            backgroundExt2Color = readInt( out );
+            rgbBackgroundExt2Color = RGB_FG_COLORS[backgroundExt2Color];
+
+            borderColor = readInt( out  );
+            rgbBorderColor = RGB_BG_COLORS[ borderColor ];
+
+            bankAdr = readInt(  out );
+            charROMHidden = readBoolean( out );
+            builtinCharRomStart = readInt( out );
+
+            spritesEnabled = readInt( out );
+            spritesDoubleWidth = readInt( out  );
+            spritesDoubleHeight = readInt( out  );
+            spritesMultiColorMode = readInt( out );
+            spritesBehindBackground = readInt( out );
+
+            spriteBackgroundCollision = readInt( out );
+            spriteSpriteCollision = readInt( out  );
+
+            spriteSpriteCollisionDetected = readBoolean( out  );
+            spriteBackgroundCollisionDetected = readBoolean( out  );
+
+            populateIntArray( spriteMainColor , out );
+            populateIntArray( spriteMainColorRGB , out );
+
+            spriteMultiColor01   = readInt( out );
+            spriteMultiColor01RGB = RGB_FG_COLORS[ spriteMultiColor01 ];
+
+            spriteMultiColor11 = readInt( out  );
+            spriteMultiColor11RGB = RGB_FG_COLORS[spriteMultiColor11];
+
+            populateIntArray( spriteXLow ,out );
+            spriteXhi = readInt( out );
+
+            populateIntArray( spriteY , out );
+        } 
+        catch(IOException e) 
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public void saveState(EmulationState state)
     {
-        // TODO Auto-generated method stub
-        
+        new EmulationStateEntry(EntryType.VIC_RAM , 0 ).setPayload( this ).addTo( state );
+
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            writeInt( vicCtrl1 , out );
+            writeInt( vicCtrl2 , out );
+
+            writeBoolean( displayEnabled , out );
+            writeBoolean( displayEnabledNewState , out );
+            writeBoolean( displayEnabledChanged , out );        
+            writeInt( graphicsMode.identifier() , out );
+
+            // recalculateHorizontalBorders();
+            // recalculateVerticalBorders();
+
+            writeInt( triggeredInterruptFlags , out );; // no interrupts triggered
+            writeInt( enabledInterruptFlags , out ); // all IRQs disabled
+
+            writeInt( rasterIRQLine , out );
+
+            writeInt( imagePixelPtr , out );
+
+            writeInt( beamX , out );
+            writeInt( beamY , out );
+
+            writeInt( lightpenX , out );
+            writeInt( lightpenY , out );
+
+            writeInt(backgroundColor , out );
+
+            writeInt(backgroundExt0Color , out );
+
+            writeInt( backgroundExt1Color , out );
+
+            writeInt( backgroundExt2Color , out );
+
+            writeInt( borderColor , out );
+
+            writeInt( bankAdr , out );
+            writeBoolean( charROMHidden  , out );
+            writeInt( builtinCharRomStart ,out );
+
+            writeInt( spritesEnabled , out );
+            writeInt( spritesDoubleWidth , out );
+            writeInt( spritesDoubleHeight , out );
+            writeInt( spritesMultiColorMode , out );
+            writeInt( spritesBehindBackground , out );
+
+            writeInt( spriteBackgroundCollision , out );
+            writeInt( spriteSpriteCollision , out );
+
+            writeBoolean( spriteSpriteCollisionDetected , out );
+            writeBoolean( spriteBackgroundCollisionDetected , out );
+
+            writeIntArray( spriteMainColor , out );
+            writeIntArray( spriteMainColorRGB , out );
+
+            writeInt( spriteMultiColor01 , out );
+            writeInt( spriteMultiColor11 , out );
+
+            writeIntArray( spriteXLow , out );
+            writeInt( spriteXhi , out );
+
+            writeIntArray( spriteY , out );
+
+            new EmulationStateEntry(EntryType.VIC_FIELDS, 1 ).setPayload( out.toByteArray() ).addTo( state );
+
+        } 
+        catch (IOException e) 
+        {
+            throw new RuntimeException(e);
+        }        
     }     
 }

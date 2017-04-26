@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.emulator.EmulationState.EmulationStateEntry;
 import de.codesourcery.j6502.emulator.EmulationState.EntryType;
 import de.codesourcery.j6502.emulator.MemoryBreakpointsContainer.MemoryBreakpoint;
@@ -639,6 +640,14 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
         final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
         region.writeByte( realOffset , value );
     }
+    
+    @Override
+    public void writeByteNoSideEffects(int offset, byte value) {
+        final int wrappedOffset = offset & 0xffff;
+        final IMemoryRegion region = writeRegions[ writeMap[ wrappedOffset ] ];
+        final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+        region.writeByteNoSideEffects( realOffset , value );
+    }
 
     @Override
     public boolean isReadsReturnWrites(int offset)
@@ -743,6 +752,14 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
             writeByte( offset , low );
             writeByte( offset+1 , hi );
         }
+        
+        @Override
+        public void writeByteNoSideEffects(int offset, byte value) {
+            final int wrappedOffset = offset & 0xffff;
+            final IMemoryRegion region = ramRegions[ writeMap[ wrappedOffset ] ];
+            final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
+            region.writeByteNoSideEffects( realOffset , value );
+        }
 
         @Override
         public void writeByte(int offset, byte value)
@@ -789,10 +806,10 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
             for ( int i = range.getStartAddress() , end = range.getEndAddress() ; i < end ; i++ ) 
             {
                 final IMemoryRegion region = getRAMRegion( i );
-                System.out.println( Misc.to16BitHex( i ) +" => "+region);
+                // System.out.println( Misc.to16BitHex( i ) +" => "+region);
                 final int translated = i - region.getAddressRange().getStartAddress();
                 int data = region.readByteNoSideEffects( translated );
-                System.out.println( Misc.to16BitHex( i ) +" "+region+" => "+Misc.to8BitHex( data ) );
+                // System.out.println( Misc.to16BitHex( i ) +" "+region+" => "+Misc.to8BitHex( data ) );
                 out.write( data );
                 bytesSaved++;
             }
@@ -813,7 +830,7 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
             {
                 final IMemoryRegion region = getRAMRegion( ptr );
                 final int translated = ptr - region.getAddressRange().getStartAddress();
-                region.writeByte( translated , (byte) data);
+                region.writeByteNoSideEffects( translated , (byte) data);
                 ptr = (ptr+1) & 0xffff;
                 bytesLoaded++;
                 if ( bytesLoaded == 65537 ) {
@@ -829,12 +846,14 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
     @Override
     public void restoreState(EmulationState state)
     {
-        final EmulationStateEntry entry = state.getEntry( EntryType.RAM );
         try 
         {
-            entry.applyPayload( this );
+            final EmulationStateEntry entry = state.getEntry( EntryType.RAM );
+            if ( Constants.MEMORY_DEBUG_STATE_PERSISTENCE ) {
+                System.out.println("Restoring "+entry.payloadLength()+" bytes to RAM...");
+            }
             restoreRAM( new ByteArrayInputStream( entry.getPayload() ) , 0 );
-            state.getEntry( EntryType.IO_AREA ).applyPayload( ioArea );
+            ioArea.restoreState( state );
         } 
         catch (IOException e) {
             throw new RuntimeException(e);
@@ -844,16 +863,19 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
     @Override
     public void saveState(EmulationState state)
     {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try {
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try 
+        {
             saveRAM( AddressRange.range( 0, 0xffff ) , out );
             // save RAM
             final EmulationStateEntry entry = new EmulationStateEntry( EntryType.RAM , (byte) 1 , out.toByteArray() );
+            if ( Constants.MEMORY_DEBUG_STATE_PERSISTENCE ) {
+                System.out.println("Saving "+entry.payloadLength()+" bytes of RAM...");
+            }            
             state.add( entry );
+            
             // save I/O area
-            final EmulationStateEntry entry2 = new EmulationStateEntry( EntryType.IO_AREA , (byte) 1 );
-            entry2.setPayload( ioArea );
-            state.add( entry2 );
+            ioArea.saveState( state );
         } 
         catch (IOException e) {
             throw new RuntimeException(e);

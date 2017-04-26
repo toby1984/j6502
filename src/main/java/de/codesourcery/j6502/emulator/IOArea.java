@@ -1,5 +1,9 @@
 package de.codesourcery.j6502.emulator;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.Constants;
@@ -48,15 +52,32 @@ public class IOArea extends SlowMemory implements IStatefulPart
             doHandleCassette( cpu );
         }
 
+        @Override
+        protected void saveFieldsHook(OutputStream out) throws IOException {
+            EmulationState.writeInt( joy1Mask , out );
+            EmulationState.writeInt( joy2Mask , out );
+        }
+        
+        @Override
+        protected void loadFieldsHook(InputStream in) throws IOException {
+            joy1Mask = EmulationState.readInt( in );
+            joy2Mask = EmulationState.readInt( in );
+        }
+        
+        @Override
+        public void saveState(EmulationState state) 
+        {
+            super.saveState( state , EntryType.CIA1_RAM , EntryType.CIA1_FIELDS );
+        }
+        
+        @Override
+        public void restoreState(EmulationState state) {
+            super.restoreState( state , EntryType.CIA1_RAM , EntryType.CIA1_FIELDS );            
+        }
+        
         protected final boolean getTapeSignal() 
         {
             return tapeDrive.currentSignal();
-        }
-
-        @Override
-        public void writeByte(int address, byte value) 
-        {
-            super.writeByte( address , value);
         }
 
         @Override
@@ -176,6 +197,25 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 
     public final CIA cia2 = new CIA("CIA #2" , AddressRange.range( 0xdd00, 0xde00 ) )
     {
+        @Override
+        protected void saveFieldsHook(OutputStream out) throws IOException {
+        }
+        
+        @Override
+        protected void loadFieldsHook(InputStream in) throws IOException {
+        }
+        
+        @Override
+        public void saveState(EmulationState state) 
+        {
+            super.saveState( state , EntryType.CIA2_RAM , EntryType.CIA2_FIELDS );
+        }
+        
+        @Override
+        public void restoreState(EmulationState state) {
+            super.restoreState( state , EntryType.CIA2_RAM , EntryType.CIA2_FIELDS );            
+        }        
+        
         @Override
         public void writeByte(int adr, byte value)
         {
@@ -353,7 +393,7 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
             }
         };
         this.iecBus = new IECBus("default bus" , cpuDevice );
-        this.vic = new VIC("VIC", AddressRange.range( 0xd000, 0xd02f) , mainMemory );
+        this.vic = new VIC("VIC", AddressRange.range( 0xd000, 0xd02e) , mainMemory );
     }
 
     private final int[] keyboardColumns = new int[] {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff}; // 8 keyboard columns, bits are low-active
@@ -503,14 +543,16 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
     @Override
     public void restoreState(EmulationState state)
     {
-        state.getEntry( EntryType.IO_AREA ).applyPayload( this );
+        cia1.restoreState( state );
+        cia2.restoreState( state );
+        vic.restoreState( state );
     }
 
     @Override
     public void saveState(EmulationState state)
     {
-        final EmulationStateEntry entry = new EmulationStateEntry( EntryType.IO_AREA , (byte) 1 );
-        entry.setPayload( this );
-        state.add( entry );
+        cia1.saveState( state );
+        cia2.saveState( state );
+        vic.saveState( state );
     }
 }

@@ -73,6 +73,8 @@ public abstract class IMemoryRegion
 	
 	public abstract void writeByte(int offset,byte value);
 
+	public abstract void writeByteNoSideEffects(int offset,byte value);
+	
 	public abstract String dump(int offset, int len);
 
 	public abstract boolean isReadsReturnWrites(int offset);
@@ -85,6 +87,7 @@ public abstract class IMemoryRegion
 	 * @return
 	 */
 	public abstract int readByteNoSideEffects(int offset);
+	
 
 	@Override
 	public String toString() {
