@@ -3,6 +3,7 @@ package de.codesourcery.j6502.emulator;
 import java.util.HashMap;
 import java.util.Map;
 
+import de.codesourcery.j6502.utils.CharsetConverter;
 import de.codesourcery.j6502.utils.RingBuffer;
 
 public abstract class AbstractSerialDevice implements SerialDevice {
@@ -690,7 +691,7 @@ public abstract class AbstractSerialDevice implements SerialDevice {
 	{
 		activeChannel.receiveBuffer.write( (byte) data );
 		if ( IECBus.DEBUG_DEVICE_LEVEL ) {
-			System.out.println("########## DATA: 0x"+Integer.toHexString( data )+" written to "+activeChannel);
+			System.out.println("########## DATA: 0x"+Integer.toHexString( data )+" ("+CharsetConverter.petToASCII( (byte) data ) +")written to "+activeChannel);
 		}
 	}
 

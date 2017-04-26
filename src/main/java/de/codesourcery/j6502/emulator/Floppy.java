@@ -292,17 +292,22 @@ public class Floppy extends AbstractSerialDevice
 	@Override
 	protected boolean onOpenDataHook(int channelNo) 
 	{
+	    final boolean result;
 		if ( deviceState == DeviceState.TALK_REQUESTED )
 		{
 			fillSendBuffer();
-			return getActiveChannel().sendBuffer.isNotEmpty();
+			result = getActiveChannel().sendBuffer.isNotEmpty();
+		} else {
+		    result = false;
 		}
-		return true;
+		System.out.println("onOpenDataHook(): channel #"+channelNo+" , device state "+deviceState+" , result: "+result);
+		return result;
 	}
 
 	@Override
 	protected boolean onOpenChannelHook(int channelNo)
 	{
+	    final boolean result;
 		if ( deviceState == DeviceState.TALK_REQUESTED )
 		{
 			if ( channelNo == LOAD_CHANNEL ) { // LOAD channel
@@ -312,9 +317,12 @@ public class Floppy extends AbstractSerialDevice
 				}
 			}
 			fillSendBuffer();
-			return getActiveChannel().sendBuffer.isNotEmpty();
+			result = getActiveChannel().sendBuffer.isNotEmpty();
+		} else {
+		    result = false;
 		}
-		return true;
+	    System.out.println("onOpenChannelHook(): channel #"+channelNo+" , device state "+deviceState+" , result: "+result);
+		return result;
 	}
 	
 	public boolean isDiskInserted() {

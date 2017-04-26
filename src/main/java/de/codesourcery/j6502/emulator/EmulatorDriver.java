@@ -16,7 +16,7 @@ public abstract class EmulatorDriver extends Thread
 
 	public volatile Throwable lastException;
 
-	public static final boolean PRINT_SPEED = true;
+	public static final boolean PRINT_SPEED = false;
 
 	public static enum Mode { SINGLE_STEP , CONTINOUS; }
 
@@ -255,16 +255,8 @@ public abstract class EmulatorDriver extends Thread
 				try
 				{
 					// run at max. speed if floppy is transferring data
-					final SerialDevice floppy = emulator.getBus().getDevice(8);
-					final boolean doDelay = floppy == null || ! floppy.isDataTransferActive();
-					if ( doDelay )
-					{
-						for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
-							dummy += Math.sqrt( i );
-						}
-					}
-					else {
-					    adjustDelayLoop = false;
+					for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
+						dummy += Math.sqrt( i );
 					}
 
 					lastException = null;

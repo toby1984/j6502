@@ -2,6 +2,7 @@ package de.codesourcery.j6502.emulator;
 
 import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.exceptions.HLTException;
+import de.codesourcery.j6502.utils.HexDump;
 
 /**
  * Ported from C code in http://codegolf.stackexchange.com/questions/12844/emulate-a-mos-6502-cpu
@@ -67,7 +68,11 @@ public final class CPUImpl
 
 	protected void clearsign() { cpu.clearFlag(Flag.NEGATIVE); }
 
-	protected int read6502(int address) {
+	protected int read6502(int address) 
+	{
+//	    if ( (address & 0xffff) == 0xd019) {
+//	        System.out.println("Read from PC "+HexDump.toAdr( cpu.pc() ) );
+//	    }
 		return memory.readByte( address );
 	}
 
@@ -299,6 +304,14 @@ public final class CPUImpl
 	protected final Runnable asl = () ->
 	{
 		value = getvaluereadwrite();
+		
+        /* http://dustlayer.com/c64-coding-tutorials/2013/4/8/episode-2-3-did-i-interrupt-you
+         * Now as coders are looking for optimization all the time somebody found out that the decrement command dec 
+         * can be used to do both operations with just one single command. 
+         * This works because dec is a so-called Read-Modify-Write command that writes back the original value during the modify cycle.
+         */
+        putvalue(value);
+        
 		result = value << 1;
 
 		carrycalc(result);
@@ -464,7 +477,7 @@ public final class CPUImpl
 		else {
 			clearcarry();
 		}
-		if ( cpu.getAccumulator() == (value & 0x00FF)) {
+		if ( result == 0) {
 			setzero();
 		}
 		else {
@@ -472,6 +485,27 @@ public final class CPUImpl
 		}
 		signcalc(result);
 	};
+	
+    protected final Runnable cpy = () ->
+    {
+        value = getvalue();
+        result = cpu.getY() - value;
+
+        if ( cpu.getY() >= (value & 0x00FF)) {
+            setcarry();
+        }
+        else {
+            clearcarry();
+        }
+
+        if ( result == 0 ) {
+            setzero();
+        }
+        else {
+            clearzero();
+        }
+        signcalc(result);
+    };	
 
 	protected final Runnable cpx= () ->
 	{
@@ -486,34 +520,7 @@ public final class CPUImpl
 		else {
 			clearcarry();
 		}
-		if ( cpu.getX() == (value & 0x00FF)) {
-			setzero();
-		}
-		else {
-			clearzero();
-		}
-		signcalc(result);
-	};
-
-	protected final Runnable cpy = () ->
-	{
-	    /*
- t = Y - M
-  P.N = t.7
-  P.C = (A>=M) ? 1:0
-  P.Z = (t==0) ? 1:0
-	     */
-		value = getvalue();
-		result = cpu.getY() - value;
-
-		if ( cpu.getY() >= (value & 0x00FF)) {
-			setcarry();
-		}
-		else {
-			clearcarry();
-		}
-
-		if ( result == 0 ) {
+		if ( result == 0) {
 			setzero();
 		}
 		else {
@@ -563,6 +570,14 @@ public final class CPUImpl
 	protected final Runnable inc = () ->
 	{
 		value = getvaluereadwrite();
+		
+        /* http://dustlayer.com/c64-coding-tutorials/2013/4/8/episode-2-3-did-i-interrupt-you
+         * Now as coders are looking for optimization all the time somebody found out that the decrement command dec 
+         * can be used to do both operations with just one single command. 
+         * This works because dec is a so-called Read-Modify-Write command that writes back the original value during the modify cycle.
+         */
+        putvalue(value);
+        
 		result = value + 1;
 
 		zerocalc(result);
