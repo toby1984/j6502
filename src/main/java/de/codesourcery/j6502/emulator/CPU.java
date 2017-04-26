@@ -36,6 +36,10 @@ public class CPU
 	public short sp;
 	private byte flags = CPU.Flag.EXTENSION.set((byte)0); // extension bit is always 1
 	
+    public int lastInsDuration;
+    
+    private boolean breakOnInterrupt;
+    private boolean breakpointReached;	
     
     public void restoreState(byte[] data) 
     {
@@ -76,11 +80,6 @@ public class CPU
         }
     }
     
-	public int lastInsDuration;
-	
-	private boolean breakOnInterrupt;
-	private boolean breakpointReached;
-
 	public static enum Flag
 	{
 		CARRY(1 <<0 , "C" , "Carry"), // 1
