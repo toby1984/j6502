@@ -2,6 +2,7 @@ package de.codesourcery.j6502.emulator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public final class BreakpointsController 
@@ -15,7 +16,7 @@ public final class BreakpointsController
     private final Breakpoint[] breakpoints = new Breakpoint[65536];
 
     // @GuardedBy( LOCK )
-    private int breakpointsCount=0;
+    private AtomicInteger breakpointsCount=new AtomicInteger(0);
     
     // @GuardedBy( breakpointListeners )
     private final List<IBreakpointLister> breakpointListeners = new ArrayList<>();
@@ -50,7 +51,7 @@ public final class BreakpointsController
                 }
             }
             oneShotBreakpoint = null;
-            breakpointsCount = 0;
+            breakpointsCount.set(0);
         }
         // invoke listeners AFTER releasing lock
         visitBreakpointListeners( l -> removed.forEach( l::breakpointRemoved ) ); 
@@ -84,7 +85,7 @@ public final class BreakpointsController
             if (bp.isOneshot)
             {
                 if ( this.oneShotBreakpoint == null ) {
-                    breakpointsCount++;
+                    breakpointsCount.incrementAndGet();
                 }
                 this.oneShotBreakpoint = bp;
             }
@@ -94,7 +95,7 @@ public final class BreakpointsController
                 this.breakpoints[ bp.address & 0xffff ] = bp;
                 if ( old == null )
                 {
-                    breakpointsCount++;
+                    breakpointsCount.incrementAndGet();
                     doAfterReleasingLock = () -> visitBreakpointListeners( l -> l.breakpointAdded( bp ) );
                 }
                 else
@@ -145,7 +146,7 @@ public final class BreakpointsController
             {
                 if ( oneShotBreakpoint != null && oneShotBreakpoint.address == breakpoint.address ) {
                     oneShotBreakpoint = null;
-                    breakpointsCount--;
+                    breakpointsCount.decrementAndGet();
                 }
             }
             else
@@ -154,7 +155,7 @@ public final class BreakpointsController
                 if ( existing != null )
                 {
                     this.breakpoints[ breakpoint.address & 0xffff ] = null;
-                    breakpointsCount--;
+                    breakpointsCount.decrementAndGet();
                     removed = existing;
                 }
             }
@@ -176,26 +177,32 @@ public final class BreakpointsController
         return false;
     }
     
-    public boolean isAtBreakpoint()
+    public boolean checkIsAtBreakpoint()
     {
-        synchronized(LOCK)
+        if ( breakpointsCount.get() > 0 ) 
         {
-            if ( breakpointsCount > 0 )
+            synchronized(LOCK)
             {
-                Breakpoint bp = breakpoints[ cpu.pc() ];
-                if ( bp == null && ( oneShotBreakpoint != null && oneShotBreakpoint.address == cpu.pc() ) ) {
-                    bp = oneShotBreakpoint;
-                }
-                if ( bp != null && bp.isTriggered( cpu ) )
+                if ( breakpointsCount.get() > 0 )
                 {
-                    if ( bp == oneShotBreakpoint ) {
-                        oneShotBreakpoint = null;
+                    Breakpoint bp = breakpoints[ cpu.pc() ];
+                    if ( bp == null && ( oneShotBreakpoint != null && oneShotBreakpoint.address == cpu.pc() ) ) {
+                        bp = oneShotBreakpoint;
                     }
-                    return true;
+                    if ( bp != null && bp.isTriggered( cpu ) )
+                    {
+                        if ( bp == oneShotBreakpoint ) 
+                        {
+                            oneShotBreakpoint = null;
+                            breakpointsCount.decrementAndGet();
+                        }
+                        cpu.setBreakpointReached();
+                        return true;
+                    }
                 }
             }
         }
-        return false;
+        return false; 
     }
 
     public boolean canStepOver(IMemoryRegion memory , CPU cpu)

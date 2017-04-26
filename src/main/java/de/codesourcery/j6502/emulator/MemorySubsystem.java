@@ -1,16 +1,20 @@
 package de.codesourcery.j6502.emulator;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
+import de.codesourcery.j6502.emulator.EmulationState.EmulationStateEntry;
+import de.codesourcery.j6502.emulator.EmulationState.EntryType;
 import de.codesourcery.j6502.emulator.MemoryBreakpointsContainer.MemoryBreakpoint;
 import de.codesourcery.j6502.emulator.tapedrive.TapeDrive;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.Misc;
 
 
-public final class MemorySubsystem extends IMemoryRegion
+public final class MemorySubsystem extends IMemoryRegion implements IStatefulPart
 {
     private static final boolean DEBUG_READS = false;
     private static final boolean DEBUG_ROM_IMAGES = false;
@@ -819,6 +823,40 @@ public final class MemorySubsystem extends IMemoryRegion
             return bytesLoaded;
         } finally {
             in.close();
+        }
+    }
+
+    @Override
+    public void restoreState(EmulationState state)
+    {
+        final EmulationStateEntry entry = state.getEntry( EntryType.RAM );
+        try 
+        {
+            entry.applyPayload( this );
+            restoreRAM( new ByteArrayInputStream( entry.getPayload() ) , 0 );
+            state.getEntry( EntryType.IO_AREA ).applyPayload( ioArea );
+        } 
+        catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public void saveState(EmulationState state)
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            saveRAM( AddressRange.range( 0, 0xffff ) , out );
+            // save RAM
+            final EmulationStateEntry entry = new EmulationStateEntry( EntryType.RAM , (byte) 1 , out.toByteArray() );
+            state.add( entry );
+            // save I/O area
+            final EmulationStateEntry entry2 = new EmulationStateEntry( EntryType.IO_AREA , (byte) 1 );
+            entry2.setPayload( ioArea );
+            state.add( entry2 );
+        } 
+        catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }            
 }

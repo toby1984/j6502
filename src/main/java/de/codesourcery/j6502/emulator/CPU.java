@@ -1,5 +1,8 @@
 package de.codesourcery.j6502.emulator;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Set;
@@ -10,9 +13,6 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class CPU
 {
-    public final int[] backtraceRingBuffer = new int[ Constants.CPU_BACKTRACE_RINGBUFFER_SIZE ];
-    public int backtraceRingBufferElements = 0; 
-    
 	public static final int RESET_VECTOR_LOCATION = 0xfffc;
 	public static final int BRK_VECTOR_LOCATION = 0xfffe; // same as IRQ_VECTOR_LOCATION
 	public static final int IRQ_VECTOR_LOCATION = 0xfffe; // same as BRK_VECTOR_LOCATION
@@ -24,21 +24,62 @@ public class CPU
 
 	private IRQType interruptQueued = IRQType.NONE;
 
+    public final int[] backtraceRingBuffer = new int[ Constants.CPU_BACKTRACE_RINGBUFFER_SIZE ];
+    public int backtraceRingBufferElements = 0; 
+    
 	public long cycles = 0;
-	public short previousPC;
 
 	private int pc;
 	private int accumulator;
 	private int x;
 	private int y;
 	public short sp;
+	private byte flags = CPU.Flag.EXTENSION.set((byte)0); // extension bit is always 1
 	
+    
+    public void restoreState(byte[] data) 
+    {
+        final ByteArrayInputStream in = new ByteArrayInputStream(data);
+        try 
+        {
+            cycles = EmulationState.readLong( in );
+            pc = EmulationState.readInt( in );
+            accumulator = EmulationState.readInt( in );
+            x = EmulationState.readInt( in );
+            y = EmulationState.readInt( in );
+            sp = EmulationState.readShort( in );
+            flags = (byte) EmulationState.readByte( in );
+        } 
+        catch (IOException e) 
+        {
+            throw new RuntimeException(e);
+        }
+    }
+    
+    public byte[] getState() 
+    {
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try 
+        {
+            EmulationState.writeLong( cycles , out );
+            EmulationState.writeInt( pc , out );
+            EmulationState.writeInt( accumulator , out );
+            EmulationState.writeInt( x , out );
+            EmulationState.writeInt( y , out );
+            EmulationState.writeShort( sp , out );
+            out.write( flags );
+            return out.toByteArray();
+        } 
+        catch (IOException e) 
+        {
+            throw new RuntimeException(e);
+        }
+    }
+    
 	public int lastInsDuration;
 	
 	private boolean breakOnInterrupt;
 	private boolean breakpointReached;
-
-	private byte flags = CPU.Flag.EXTENSION.set((byte)0); // extension bit is always 1
 
 	public static enum Flag
 	{
@@ -95,7 +136,8 @@ public class CPU
 	public void populateFrom(CPU other) {
 	    this.interruptQueued = other.interruptQueued;
 	    this.cycles = other.cycles;
-	    this.previousPC = other.previousPC;
+	    this.backtraceRingBufferElements = other.backtraceRingBufferElements;
+	    System.arraycopy( other.backtraceRingBuffer , 0 , this.backtraceRingBuffer , 0 , other.backtraceRingBuffer.length );
 	    this.pc = other.pc;
 	    this.accumulator = other.accumulator;
 	    this.x = other.x;
@@ -107,7 +149,6 @@ public class CPU
 	public boolean matches(CPU other)
 	{
 	    boolean result= this.interruptQueued == other.interruptQueued
-        && this.previousPC == other.previousPC
         && this.pc == other.pc
         && this.accumulator == other.accumulator
         && this.x == other.x
@@ -234,7 +275,6 @@ public class CPU
 		pc = memory.readWord( RESET_VECTOR_LOCATION );
 		System.out.println("RESET: PC of CPU "+this.memory+" now points to "+HexDump.toAdr( pc ) );
 
-		previousPC = (short) pc;
 		setAccumulator(0);
 		setX(0);
 		setY(0);
@@ -453,7 +493,7 @@ public class CPU
      * Remembers the current PC in a ringbuffer
      * @return current PC
      */
-    public int rememberPC() 
+    public int recordPC() 
     {
         final int pc = this.pc;
         backtraceRingBuffer[ backtraceRingBufferElements & Constants.CPU_BACKTRACE_RINGBUFFER_SIZE_MASK ] = pc;

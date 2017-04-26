@@ -1077,8 +1077,9 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
     public void executeInstruction()
     {
         final int initialPC;
+        
         if ( Constants.CPU_RECORD_BACKTRACE ) {
-            initialPC = cpu.rememberPC();
+            initialPC = cpu.recordPC();
         } else {
             initialPC = cpu.pc();            
         }
@@ -1136,7 +1137,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
         adrModeTable[opcode].run();
         optable[opcode].run();
 
-        if ( Constants.CPUIMPL_TRACK_INS_DURATION ) 
+        if ( Constants.CPUIMPL_TRACK_INSTRUCTION_DURATION ) 
         {
             int tmp = TICK_TABLE[opcode];
             if (penaltyop && penaltyaddr)
@@ -1155,8 +1156,6 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
                 cpu.cycles++;
             }
         }
-
-        cpu.previousPC = (short) initialPC;
     }
 
     public interface ByteProvider

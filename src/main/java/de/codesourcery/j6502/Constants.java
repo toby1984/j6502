@@ -13,13 +13,19 @@ public class Constants
     public static final boolean MEMORY_SUPPORT_BREAKPOINTS = true;
     
     // EmulatorDriver class constants
-    public static final boolean EMULATORDRIVER_DEBUG_CMDS = true;
+    public static final boolean EMULATORDRIVER_DEBUG_CMDS = false;
     public static final boolean EMULATORDRIVER_INVOKE_CALLBACK = true;
+    
+    /**
+     * Careful, this interval is also used to re-calibrate the CPU's delay loop.
+     * Setting it to a larger value will make the emulation worse at keeping
+     * to the true clock speed.
+     */
     public static final long EMULATORDRIVER_CALLBACK_INVOKE_CYCLES = 300_000;
     public static final boolean EMULATORDRIVER_PRINT_SPEED = false;
 
     // CPUImpl constants
-    public static final boolean CPUIMPL_TRACK_INS_DURATION = false;
+    public static final boolean CPUIMPL_TRACK_INSTRUCTION_DURATION = false;
     public static final boolean CPUIMPL_DEBUG_TAPE = false;       
     
     // CPU class constants
@@ -37,10 +43,11 @@ public class Constants
     public static final boolean VIC_DEBUG_MEMORY_LAYOUT = true;
     
     // CIA class constants
-    public static final boolean CIA_DEBUG = false;
-    public static final boolean CIA_DEBUG_VERBOSE = false;
-    public static final boolean CIA_DEBUG_TIMER_LOAD = false;
-    public static final boolean CIA_DEBUG_TAPE_SLOPE = true;
+    public static final boolean CIA_DEBUG = true;
+    public static final boolean CIA_DEBUG_VERBOSE = true;
+    public static final boolean CIA_DEBUG_TIMER_LOAD = true;
+    public static final boolean CIA_DEBUG_TIMER_IRQS = true;
+    public static final boolean CIA_DEBUG_TAPE_SLOPE = false;
     
     // Debugger class constants
     /**
@@ -48,4 +55,12 @@ public class Constants
      */
     public static final int DEBUGGER_UI_REFRESH_MILLIS = 500;
     public static final boolean DEBUGGER_DEBUG_VIEW_PERFORMANCE = false;
+
+    // IECBus class constants
+    public static final boolean IEC_BUS_ENABLED = true;
+    
+    public static final boolean IEC_CAPTURE_BUS_SNAPSHOTS = false;
+    public static final boolean IEC_DEBUG_WIRE_LEVEL = false;
+    public static final boolean IEC_DEBUG_DEVICE_LEVEL_VERBOSE = false;
+    public static final boolean IEC_DEBUG_DEVICE_LEVEL = false;
 }

@@ -29,6 +29,10 @@ public class Misc
 	    return "$"+StringUtils.leftPad( Integer.toHexString( value & 0xffff ) , 4 , '0' );
 	}
 	
+    public static String to32BitHex(int value) {
+        return "$"+StringUtils.leftPad( Integer.toHexString( value ) , 8 , '0' );
+    }	
+	
     public static String to8BitHex(int value) {
         return StringUtils.leftPad( Integer.toHexString( value & 0xff ) , 2 , '0' );
     }	

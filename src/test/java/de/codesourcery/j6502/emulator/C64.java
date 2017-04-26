@@ -2,6 +2,7 @@ package de.codesourcery.j6502.emulator;
 
 import java.io.PrintWriter;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.disassembler.Disassembler;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
 import de.codesourcery.j6502.utils.HexDump;
@@ -41,7 +42,13 @@ public class C64
 				final Disassembler d = new Disassembler();
 				final PrintWriter writer = new PrintWriter( System.out );
 				final IMemoryRegion region = emulator.getMemory();
-				System.out.println("Dumping "+HexDump.toAdr( emulator.getCPU().previousPC )+" : "+region);
+				if ( Constants.CPU_RECORD_BACKTRACE ) 
+				{
+				    final int[] bt = emulator.getCPU().getBacktrace();
+				    if ( bt.length > 0 ) {
+				        System.out.println("Dumping "+HexDump.toAdr( bt[ bt.length-1])+" : "+region);
+				    }
+				}
 				d.disassemble( region , 0xf6dc-10 , 32, writer );
 				writer.flush();
 				throw e;

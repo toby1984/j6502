@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 
 import org.apache.commons.lang.Validate;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.emulator.IMemoryRegion.MemoryType;
 
 public final class MemoryBreakpointsContainer 
@@ -227,21 +228,28 @@ public final class MemoryBreakpointsContainer
     
     public void read(int address) 
     {
-        if ( hasBreakpoints() ) {
-            MemoryBreakpoint bp = getReadBreakpoint( address );
-            if ( bp != null && bp.enabled ) {
-                System.out.println("Read from $"+Integer.toHexString( address )+" triggers breakpoint: "+bp);                
-                maybeTriggered( bp );
+        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) 
+        {
+            if ( hasBreakpoints() ) {
+                MemoryBreakpoint bp = getReadBreakpoint( address );
+                if ( bp != null && bp.enabled ) {
+                    System.out.println("Read from $"+Integer.toHexString( address )+" triggers breakpoint: "+bp);                
+                    maybeTriggered( bp );
+                }
             }
         }
     }
     
-    public void write(int address) {
-        if ( hasBreakpoints() ) {
-            MemoryBreakpoint bp = getWriteBreakpoint( address );
-            if ( bp != null && bp.enabled ) {
-                System.out.println("Write to $"+Integer.toHexString( address+getAddressRange().getStartAddress() )+" triggers breakpoint: "+bp);                   
-                maybeTriggered( bp );
+    public void write(int address) 
+    {
+        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) 
+        {
+            if ( hasBreakpoints() ) {
+                MemoryBreakpoint bp = getWriteBreakpoint( address );
+                if ( bp != null && bp.enabled ) {
+                    System.out.println("Write to $"+Integer.toHexString( address+getAddressRange().getStartAddress() )+" triggers breakpoint: "+bp);                   
+                    maybeTriggered( bp );
+                }
             }
         }
     }    

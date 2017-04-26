@@ -94,11 +94,11 @@ public class Emulator
          * the bus in the second (HIGH) clock phase, the VIC normally only in the
          * first (LOW) phase.
          */
-
         memory.tick( this , this.cpu , false ); // clock == LOW
 
         /*
          * Second (high) half of clock cycle.
+         * CPU is active on this clock phase.
          */
         boolean internalHwBreakpointReached = false;
         if ( --this.cpu.cycles == 0 ) // wait until current command has 'finished' executing

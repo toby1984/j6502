@@ -34,9 +34,7 @@ public class Memory extends IMemoryRegion
 
 	@Override
 	public int readByte(int offset) {
-	    if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
-	        getBreakpointsContainer().read( offset );
-	    }
+        getBreakpointsContainer().read( offset );
 		return data[offset & 0xffff] & 0xff;
 	}
 
@@ -58,10 +56,8 @@ public class Memory extends IMemoryRegion
 		final int realOffsetHi = (realOffsetLo+1) & 0xffff;
 		data[ realOffsetLo ] = low;
 		data[ realOffsetHi ] = hi;
-        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
-            getBreakpointsContainer().write( realOffsetLo );
-            getBreakpointsContainer().write( realOffsetHi );
-        }
+        getBreakpointsContainer().write( realOffsetLo );
+        getBreakpointsContainer().write( realOffsetHi );
 	}
 
 	@Override
@@ -89,10 +85,6 @@ public class Memory extends IMemoryRegion
     @Override
     public int readByteNoSideEffects(int offset) 
     {
-        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
-            getBreakpointsContainer().read( offset );
-        }
-                
         return data[offset & 0xffff] & 0xff;
     }
 }

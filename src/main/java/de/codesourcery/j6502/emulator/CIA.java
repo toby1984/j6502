@@ -14,7 +14,7 @@ import de.codesourcery.j6502.utils.Misc;
  *
  * @author tobias.gierke@code-sourcery.de
  */
-public class CIA extends Memory
+public abstract class CIA extends Memory
 {
     public static final int CIA_PRA        = 0x00;
     public static final int CIA_PRB        = 0x01;
@@ -32,7 +32,7 @@ public class CIA extends Memory
     public static final int CIA_ICR        = 0x0d;
     public static final int CIA_CRA        = 0x0e;
     public static final int CIA_CRB        = 0x0f;
-    
+
     public static final int IRQ_UNDERFLOW_TIMER_A = 1<<0;
     public static final int IRQ_UNDERFLOW_TIMER_B = 1<<1;
     public static final int IRQ_FLAG_PIN = 1<<4;    
@@ -281,9 +281,9 @@ CRB 	Control Timer B 	see CIA 1
 
     private long debugPreviousTapeSignalChangeTick=-1; // TODO: Debug code, remove when done
     private boolean previousTapeSignal;
-    
+
     public long tapeSlopeCounter = 0; // TODO: Debug code, remove when done
-    
+
     public long tickCounter = 0;
     private boolean todRunning;
 
@@ -310,7 +310,7 @@ CRB 	Control Timer B 	see CIA 1
 
     private boolean reloadTimerA = false;
     private boolean reloadTimerB = false;
-    
+
     private int raiseIRQ;
     private int irqMask;
     private int icr_read;
@@ -326,7 +326,7 @@ CRB 	Control Timer B 	see CIA 1
 
     public CIA(String identifier, AddressRange range)
     {
-		super(identifier, MemoryType.IOAREA , range);
+        super(identifier, MemoryType.IOAREA , range);
     }
 
     @Override
@@ -361,12 +361,12 @@ CRB 	Control Timer B 	see CIA 1
     public void reset()
     {
         super.reset();
-        
+
         reloadTimerA = false;
         reloadTimerB = false;
-        
+
         raiseIRQ = 0;
-        
+
         tapeSlopeCounter = 0;
 
         debugPreviousTapeSignalChangeTick = -1;
@@ -381,21 +381,31 @@ CRB 	Control Timer B 	see CIA 1
 
         timerARunning = false;
         timerBRunning = false;
-        
+
         timerAValue = 0x0;
         timerALatch = 0xffff;
-        
+
         timerBValue = 0x0;
         timerBLatch = 0xffff;
     }
-    
+
     @Override
-    public int readByte(int adr)
+    public int readByteNoSideEffects(int offset)
+    {
+        return readByte(offset,false);
+    }
+
+    @Override
+    public final int readByte(int adr) {
+        return readByte(adr,true);
+    }
+
+    protected int readByte(int adr,boolean applySideEffects)
     {
         final int offset = adr & 0b1111; // registers are mirrored/repeated every 16 bytes
         switch(offset)
         {
-        	/*
+            /*
         	 CRA 	Control Timer A
 
         Bit 0: 0 = Stop timer; 1 = Start timer
@@ -422,29 +432,33 @@ CRB 	Control Timer B
         %11 = Timer counts underflow of timer A if the CNT-pin is high
 
         Bit 7: 0 = Writing into the TOD register sets the clock time, 1 = Writing into the TOD register sets the alarm time.
-        	 */
-        	case CIA_CRA:
-        		int result = super.readByte(offset);
-        		if ( timerARunning ) {
-        			result |=  (1<<0);
-        		} else {
-        			result &= ~(1<<0);
-        		}
-        		result &= ~(1<<4); // clear strobe bit
-        		return result;
-        	case CIA_CRB:
-                result = super.readByte(offset);
-        		if ( timerBRunning ) {
-        			result |=  (1<<0);
-        		} else {
-        			result &= ~(1<<0);
-        		}                
-        		result &= ~(1<<4); // clear strobe bit
+             */
+            case CIA_CRA:
+                // super.readByte() invokes memory breakpoint controller as a side effect
+                int result = applySideEffects ? super.readByte(offset) : super.readByteNoSideEffects(offset);
+                if ( timerARunning ) {
+                    result |=  (1<<0);
+                } else {
+                    result &= ~(1<<0);
+                }
+                result &= ~(1<<4); // clear strobe bit
+                return result;
+            case CIA_CRB:
+                // super.readByte() invokes memory breakpoint controller as a side effect
+                result = applySideEffects ? super.readByte(offset) : super.readByteNoSideEffects(offset);
+                if ( timerBRunning ) {
+                    result |=  (1<<0);
+                } else {
+                    result &= ~(1<<0);
+                }                
+                result &= ~(1<<4); // clear strobe bit
                 return result;
             case CIA_ICR:
                 result = icr_read & 0xff;
-                raiseIRQ = 0;
-                icr_read = 0;
+                if ( applySideEffects ) {
+                    raiseIRQ = 0;
+                    icr_read = 0;
+                }
                 return result;
                 /*
         Read: (Bit0..4 = INT DATA, Origin of the interrupt)
@@ -495,15 +509,16 @@ CRB 	Control Timer B
                 return result3;
             default:
         }
-        return super.readByte(offset);
+        // super.readByte() invokes memory breakpoint controller as a side effect
+        return applySideEffects ? super.readByte(offset) : super.readByteNoSideEffects(offset);
     }
 
     @Override
     public void writeByte(int adr , final byte value)
     {
         final int offset = adr & 0b1111; // registers are mirrored/repeated every 16 bytes
-		
-        // System.out.println("Write to "+this+" @ "+HexDump.toAdr( offset ) );
+        super.writeByte(offset, value);
+
         switch (offset)
         {
             // ============= Real time clock ==============
@@ -561,12 +576,12 @@ CRB 	Control Timer B
                     irqMask |= mask;
                 }
                 this.rtcAlarmIRQEnabled = (irqMask & 1<<2 ) != 0;	
-                
+
                 if ( raiseIRQ == 0 && ( icr_read & irqMask ) != 0 ) 
                 {
                     raiseIRQ = icr_read & irqMask;
                 }
-                
+
                 if ( Constants.CIA_DEBUG && (oldMask != irqMask ) ) {
                     System.out.println( this+" ICR = "+Integer.toBinaryString( irqMask ) );
                 }
@@ -601,10 +616,10 @@ CRB 	Control Timer B
                  * Bit 6: Direction of the serial shift register, 0 = SP-pin is input (read), 1 = SP-pin is output (write)
                  * Bit 7: Real Time Clock, 0 = 60 Hz, 1 = 50 Hz
                  */
-            	if ( (value & 1<<5 ) != 0 )
-            	{
-            		throw new RuntimeException("Counting CNT slopes is not supported for "+this+" , Timer A");
-            	}
+                if ( (value & 1<<5 ) != 0 )
+                {
+                    throw new RuntimeException("Counting CNT slopes is not supported for "+this+" , Timer A");
+                }
                 boolean oldState = timerARunning;
                 timerARunning = ( value & 1) != 0;
                 if ( Constants.CIA_DEBUG_VERBOSE ) {
@@ -635,15 +650,15 @@ CRB 	Control Timer B
                  *
                  * Bit 7: 0 = Writing into the TOD register sets the clock time, 1 = Writing into the TOD register sets the alarm time.
                  */
-            	switch( (value >> 5) & 0b11 ) 
-            	{
-            		case 0b00: // Timer counts System cycle
-            		case 0b10: // Timer counts underflow of timer A
-            			break;
-            		case 0b01: // Timer counts positive slope on CNT-pin
-            		case 0b11: // Timer counts underflow of timer A if the CNT-pin is high
-            			throw new RuntimeException("Unsupported timer mode for "+this+", timer B: %"+Integer.toBinaryString( value) );
-            	}
+                switch( (value >> 5) & 0b11 ) 
+                {
+                    case 0b00: // Timer counts System cycle
+                    case 0b10: // Timer counts underflow of timer A
+                        break;
+                    case 0b01: // Timer counts positive slope on CNT-pin
+                    case 0b11: // Timer counts underflow of timer A if the CNT-pin is high
+                        throw new RuntimeException("Unsupported timer mode for "+this+", timer B: %"+Integer.toBinaryString( value) );
+                }
                 oldState = timerBRunning;
                 timerBRunning = ( value & 1) != 0;
                 if ( Constants.CIA_DEBUG_VERBOSE ) {
@@ -661,7 +676,6 @@ CRB 	Control Timer B
                 }
                 break;
         }
-        super.writeByte(offset, value);
     }
 
     private void increaseRTC(CPU cpu)
@@ -697,29 +711,31 @@ CRB 	Control Timer B
 
     public void tick(CPU cpu)
     {
-        
+
         if ( raiseIRQ != 0 ) 
         {
-            final boolean timerAUnder = (raiseIRQ & IRQ_UNDERFLOW_TIMER_A) != 0 ;
-            final boolean timerBUnder = (raiseIRQ & IRQ_UNDERFLOW_TIMER_B) != 0;
-            final boolean flagChange = (raiseIRQ & IRQ_FLAG_PIN) != 0;
-            // System.out.println("IRQ raised "+this+" , mask = "+(timerAUnder ? "TIMER_A" : "" )+" | "+(timerBUnder? "TIMER_B" : "")+" | "+(flagChange?"FLAG":""));
+            if ( Constants.CIA_DEBUG_TIMER_IRQS) {
+             final boolean timerAUnder = (raiseIRQ & IRQ_UNDERFLOW_TIMER_A) != 0 ;
+             final boolean timerBUnder = (raiseIRQ & IRQ_UNDERFLOW_TIMER_B) != 0;
+             final boolean flagChange = (raiseIRQ & IRQ_FLAG_PIN) != 0;
+             System.out.println("IRQ raised "+this+" , mask = "+(timerAUnder ? "TIMER_A" : "" )+" | "+(timerBUnder? "TIMER_B" : "")+" | "+(flagChange?"FLAG":""));
+            }
             cpu.queueInterrupt( IRQType.REGULAR );
             raiseIRQ = 0;
         }
-        
+
         if ( reloadTimerA ) {
             // System.out.println("Reloading "+this+" , timer A = "+timerALatch);
             timerAValue = timerALatch;
             reloadTimerA = false;
         }
-        
+
         if ( reloadTimerB ) {
             // System.out.println("Reloading "+this+" , timer B = "+timerBLatch);
             timerBValue = timerBLatch;
             reloadTimerB = false;
         }
-        
+
         // call BEFORE bumping tickCounter because this method needs to know when it's called the first time after a reset
         handleCassette( cpu ); 
 
@@ -804,7 +820,7 @@ CRB 	Control Timer B
     {
         // empty implementation, subclass needs override & invoke doHandleCassette() 
     }
-    
+
     protected final void doHandleCassette(CPU cpu) 
     {
         if ( tickCounter != 0 ) 
@@ -853,7 +869,7 @@ CRB 	Control Timer B
         }
         reloadTimerA = true;
     }
-    
+
     private void handleTimerBUnderflow(int crb,CPU cpu)
     {
         // ICR Bit 1: 1 = Interrupt release through timer B underflow

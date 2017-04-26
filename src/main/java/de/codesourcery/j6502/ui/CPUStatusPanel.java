@@ -19,6 +19,7 @@ import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.SwingConstants;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.EmulatorDriver.IEmulationListener;
@@ -191,7 +192,13 @@ public abstract class CPUStatusPanel extends BufferedView implements WindowLocat
         lines.add("Cycles: "+cpu.cycles);
         lines.add("Total cycles: "+Emulator.totalCycles);
         lines.add("Last ins duration: "+cpu.lastInsDuration);
-        lines.add("Previous PC: "+HexDump.toAdr( cpu.previousPC ) );
+        if ( Constants.CPU_RECORD_BACKTRACE ) 
+        {
+            final int[] bt = cpu.getBacktrace();
+            if ( bt.length > 0 ) {
+                lines.add("Previous PC: "+HexDump.toAdr( bt[ bt.length-1 ] ) );
+            }
+        }
         lines.add(" A: "+HexDump.byteToString( (byte) cpu.getAccumulator() ) );
         lines.add(" X: $"+HexDump.byteToString( (byte) cpu.getX()) );
         lines.add(" Y: $"+HexDump.byteToString( (byte) cpu.getY()) );

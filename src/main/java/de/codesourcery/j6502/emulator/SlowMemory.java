@@ -40,25 +40,19 @@ public class SlowMemory extends IMemoryRegion
 
     @Override
     public int readByte(int offset) {
-        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
-            getBreakpointsContainer().read( offset );
-        }
+        getBreakpointsContainer().read( offset );
         return data[offset & 0xffff] & 0xff;
     }
 
     @Override
     public int readByteNoSideEffects(int offset) {
-        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
-            getBreakpointsContainer().read( offset );
-        }        
+        getBreakpointsContainer().read( offset );
         return data[offset & 0xffff] & 0xff;
     }	
 
     @Override
     public void writeByte(int offset, byte value) {
-        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
-            getBreakpointsContainer().write( offset );
-        }
+        getBreakpointsContainer().write( offset );
         data[offset & 0xffff]=value;
     }
 

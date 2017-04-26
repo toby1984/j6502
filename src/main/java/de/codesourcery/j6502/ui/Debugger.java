@@ -84,6 +84,7 @@ import de.codesourcery.j6502.emulator.BreakpointsController;
 import de.codesourcery.j6502.emulator.BreakpointsController.IBreakpointLister;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.D64File;
+import de.codesourcery.j6502.emulator.EmulationStateManager;
 import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.EmulatorDriver;
 import de.codesourcery.j6502.emulator.EmulatorDriver.IEmulationListener;
@@ -168,6 +169,8 @@ public class Debugger
             return Debugger.this.getBreakPointsController();
         }
     };
+    
+    protected final EmulationStateManager emulationStateManager = new EmulationStateManager( driver );
 
     private final BreakpointsController c64BreakpointsController = new BreakpointsController( emulator.getCPU() , emulator.getMemory() );
     private BreakpointsController floppyBreakpointsController;
@@ -236,7 +239,6 @@ public class Debugger
     {
         driver.addEmulationListener( new IEmulationListener()
         {
-
             @Override
             public void emulationStopped(Throwable t, boolean stoppedOnBreakpoint)
             {
@@ -709,6 +711,32 @@ public class Debugger
     private void loadMemoryRegion() {
         new SaveRestoreMemoryDialog( DialogMode.RESTORE ).setVisible( true );
     }    
+    
+    private void saveEmulatorState() throws IOException 
+    {
+        final JFileChooser chooser = new JFileChooser();
+        if ( chooser.showSaveDialog( null ) == JFileChooser.APPROVE_OPTION ) 
+        {
+            try ( FileOutputStream out = new FileOutputStream( chooser.getSelectedFile() ) ) 
+            {
+                emulationStateManager.saveEmulationState( out );
+                info("Saved state to "+chooser.getSelectedFile().getAbsolutePath());
+            }
+        }
+    }
+
+    private void restoreEmulatorState() throws IOException 
+    {
+        final JFileChooser chooser = new JFileChooser();
+        if ( chooser.showOpenDialog( null ) == JFileChooser.APPROVE_OPTION ) 
+        {
+            try ( FileInputStream in = new FileInputStream( chooser.getSelectedFile() ) ) 
+            {
+                emulationStateManager.restoreEmulationState( in );
+                info("Restored state from "+chooser.getSelectedFile().getAbsolutePath());
+            }
+        }
+    }      
 
     private JMenuBar createMenu()
     {
@@ -722,9 +750,37 @@ public class Debugger
         item.addActionListener( event -> saveMemoryRegion() );
         menu.add( item );
 
-        item = new JMenuItem("Load memory region...");
+        item = new JMenuItem("Restore memory region...");
         item.addActionListener( event -> loadMemoryRegion() );
-        menu.add( item );        
+        menu.add( item );    
+        
+        menu.addSeparator();
+        
+        // state
+        item = new JMenuItem("Save emulator state...");
+        item.addActionListener( event -> 
+        {
+            try {
+                saveEmulatorState();
+            } catch(IOException e) {
+                error("Saving state failed: "+e.getMessage());
+            }
+        } );
+        menu.add( item );
+
+        item = new JMenuItem("Restore emulator state...");
+        item.addActionListener( event -> 
+        {
+            try {
+                restoreEmulatorState();
+            } 
+            catch(IOException e) {
+                error("Restoring state failed: "+e.getMessage());
+            }                
+        } );
+        menu.add( item );          
+        
+        menu.addSeparator();
 
         // disk handling
         item = new JMenuItem("Insert disk...");
@@ -734,6 +790,8 @@ public class Debugger
         item = new JMenuItem("Eject disk...");
         item.addActionListener( event -> ejectDisk() );
         menu.add( item );
+        
+        menu.addSeparator();
 
         // tape handling
         menu.addSeparator();

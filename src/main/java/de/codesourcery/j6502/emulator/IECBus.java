@@ -3,18 +3,13 @@ package de.codesourcery.j6502.emulator;
 import java.util.ArrayList;
 import java.util.List;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.emulator.diskdrive.DiskDrive;
 import de.codesourcery.j6502.ui.BusStateContainer;
 
 public class IECBus implements Bus
 {
-	public static final boolean CAPTURE_BUS_SNAPSHOTS = true;
-
 	private final BusStateContainer busStateContainer = new BusStateContainer(this);
-
-	public static final boolean DEBUG_WIRE_LEVEL = false;
-	public static final boolean DEBUG_DEVICE_LEVEL_VERBOSE = false;
-	public static final boolean DEBUG_DEVICE_LEVEL = true;
 
 	// current cycle count
 	protected long cycle;
@@ -104,7 +99,7 @@ public class IECBus implements Bus
 			sumClk &= dev.getClock();
 		}
 
-		if ( CAPTURE_BUS_SNAPSHOTS )
+		if ( Constants.IEC_CAPTURE_BUS_SNAPSHOTS )
 		{
 			if ( sumClk != clkSum || sumData != dataSum || this.atn != cpu.getATN() )
 			{

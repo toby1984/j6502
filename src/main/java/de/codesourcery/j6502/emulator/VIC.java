@@ -12,7 +12,7 @@ import de.codesourcery.j6502.emulator.MemorySubsystem.RAMView;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.Misc;
 
-public class VIC extends IMemoryRegion
+public class VIC extends IMemoryRegion implements IStatefulPart
 {
     private static final int RASTER_IRQ_X_COORDINATE = 76; // only on 6569
 
@@ -2174,5 +2174,19 @@ display window.
     {
         return  beamX >= FIRST_GFX_DISPLAY_AREA_X && beamY >= FIRST_GFX_DISPLAY_AREA_Y &&
                 beamX <= LAST_GFX_DISPLAY_AREA_X && beamY <= LAST_GFX_DISPLAY_AREA_Y;
+    }
+
+    @Override
+    public void restoreState(EmulationState state)
+    {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void saveState(EmulationState state)
+    {
+        // TODO Auto-generated method stub
+        
     }     
 }
