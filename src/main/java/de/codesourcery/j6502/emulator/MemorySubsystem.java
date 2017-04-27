@@ -114,7 +114,7 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
      */
     private byte plaLatchBits = 0; // address $01
 
-    private final IMemoryRegion ram0= new SlowMemory("RAM #0",MemoryType.RAM,Bank.BANK0.range) {
+    private final IMemoryRegion ram0= new Memory("RAM #0",MemoryType.RAM,Bank.BANK0.range) {
 
         @Override
         public void reset()
@@ -187,7 +187,7 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
     private final IMemoryRegion ram3= new Memory("RAM #3",MemoryType.RAM,Bank.BANK3.range);
     private final IMemoryRegion ram4= new Memory("RAM #4",MemoryType.RAM,Bank.BANK4.range);
 
-    private final IMemoryRegion ram5= new SlowMemory("RAM #5",MemoryType.RAM,Bank.BANK5.range) { // $D000 - $DFFF = 4096 bytes
+    private final IMemoryRegion ram5= new Memory("RAM #5",MemoryType.RAM,Bank.BANK5.range) { // $D000 - $DFFF = 4096 bytes
         @Override
         public int readByte(int offset)
         {

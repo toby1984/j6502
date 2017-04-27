@@ -12,10 +12,10 @@ import org.apache.commons.lang.StringUtils;
 import de.codesourcery.j6502.emulator.AddressRange;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPUImpl;
+import de.codesourcery.j6502.emulator.CPUImpl.ByteProvider;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.emulator.IMemoryRegion.MemoryType;
 import de.codesourcery.j6502.emulator.Memory;
-import de.codesourcery.j6502.emulator.CPUImpl.ByteProvider;
 import de.codesourcery.j6502.utils.HexDump;
 
 public class Disassembler

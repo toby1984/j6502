@@ -14,6 +14,8 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static de.codesourcery.j6502.emulator.SerializationHelper.*;
+
 import org.apache.commons.lang.Validate;
 
 import de.codesourcery.j6502.utils.Misc;
@@ -200,7 +202,7 @@ public class EmulationState
             {
                 chksum.write( type.typeId );
                 chksum.write( version );
-                writeInt( payloadLength() , chksum );
+                writeIntNoTag( payloadLength() , chksum );
                 if ( payload != null ) {
                     chksum.write( payload );
                 }
@@ -297,6 +299,11 @@ public class EmulationState
         if ( ! Arrays.equals( MAGIC , Arrays.copyOf(first.payload , MAGIC.length) ) ) { 
             throw new IOException("File magic not recognized");
         }
+        
+        final int headerCount = EmulationState.getHeaderCount( first );
+        if ( headerCount != result.entries.size() ) {
+            throw new IOException("Expected "+headerCount+" header entries but got only "+result.entries.size());
+        }
 
         return result;
     }
@@ -308,13 +315,13 @@ public class EmulationState
             return null;
         }
         final EntryType type = EntryType.fromTypeId( (byte) value );
-        final byte version = (byte) readByte( in );
-        final int checksum = readInt( in );
-        final int payloadLength = readInt( in );
+        final byte version = (byte) readByteNoTag( in );
+        final int checksum = readIntNoTag( in );
+        final int payloadLength = readIntNoTag( in );
         final byte[] payload = new byte[ payloadLength ];
         for ( int i = 0 ; i < payloadLength ; i++ ) 
         {
-            payload[i] = (byte) readByte( in ); 
+            payload[i] = (byte) readByteNoTag( in ); 
         }
 
         final EmulationStateEntry result = new EmulationStateEntry( type , version , payload );
@@ -385,8 +392,8 @@ public class EmulationState
 
             out.write( entry.type.typeId );
             out.write( entry.version );
-            writeInt( entry.checksum , out );
-            writeInt( entry.payloadLength() , out );
+            writeIntNoTag( entry.checksum , out );
+            writeIntNoTag( entry.payloadLength() , out );
             if ( entry.payload != null ) {
                 out.write( entry.payload );
             }
@@ -403,89 +410,6 @@ public class EmulationState
         }
         return out.toByteArray();
     }
-
-    public static int readByte(InputStream in) throws IOException {
-        final int value = in.read();
-        if ( value == -1 ) {
-            throw new EOFException("Premature end of file");
-        }
-        return value & 0xff;
-    }
-    
-    public static void writeLong(long value, OutputStream out) throws IOException {
-
-        writeInt( (int) (( value >> 32) & 0xffffffff) , out );
-        writeInt( (int) (value & 0xffffffff) , out );
-    }
-    
-    public static long readLong(InputStream in) throws IOException {
-
-        final long hi = readInt( in ) & 0xffffffff;
-        final long lo = readInt( in ) & 0xffffffff;
-        return hi << 32 | lo;
-    }    
-    
-    public static void writeIntArray(int[] array, OutputStream out) throws IOException {
-        writeInt( array.length , out );
-        for (  int v : array ) {
-            writeInt( v , out );
-        }
-    }
-    
-    public static int[] readIntArray(InputStream in) throws IOException {
-        final int len = readInt( in );
-        final int[] result = new int[len];
-        for ( int i = 0 ; i < len ; i++ ) {
-            result[i] = readByte(in);
-        }
-        return result;
-    }
-    
-    public static void populateIntArray(int[] arrayToFill, InputStream in) throws IOException {
-        final int len = readInt( in );
-        if ( len != arrayToFill.length ) {
-            throw new IllegalArgumentException("Input array has size "+arrayToFill.length+" but de-serialized array has size "+len);
-        }
-        for ( int i = 0 ; i < len ; i++ ) {
-            arrayToFill[i] = readInt(in);
-        }
-    }
-    
-    public static void writeInt(int value, OutputStream out) throws IOException {
-
-        writeShort( (short) ((value >> 16) & 0xffff), out );
-        writeShort( (short) (value & 0xffff), out );
-    }
-    
-    public static int readInt(InputStream in) throws IOException {
-
-        final int hi = readShort( in ) & 0xffff; 
-        final int lo = readShort( in ) & 0xffff;
-        return hi << 16 | lo;
-    }
-    
-    public static void writeShort(int value, OutputStream out) throws IOException {
-
-        out.write( (value >>  8) & 0xff );
-        out.write( (value      ) & 0xff );
-    }    
-    
-    public static short readShort(InputStream in) throws IOException {
-
-        final int hi = readByte( in ) & 0xff;
-        final int lo = readByte( in ) & 0xff;
-        return (short) (hi << 8 | lo);
-    }     
-    
-    public static void writeBoolean(boolean value,OutputStream out) throws IOException 
-    {
-        out.write( value ? 0xff : 0 );
-    }
-    
-    public static boolean readBoolean(InputStream in) throws IOException 
-    {
-        return readByte( in ) != 0;
-    }    
 
     @Override
     public String toString()

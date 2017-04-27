@@ -3,6 +3,8 @@ package de.codesourcery.j6502.emulator.diskdrive;
 import de.codesourcery.j6502.emulator.AddressRange;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPU.IRQType;
+import de.codesourcery.j6502.emulator.IMemoryRegion.MemoryType;
+import de.codesourcery.j6502.emulator.Memory;
 import de.codesourcery.j6502.emulator.Memory;
 import de.codesourcery.j6502.utils.HexDump;
 

@@ -8,6 +8,8 @@ import java.io.IOException;
 
 import org.apache.commons.io.HexDump;
 
+import static de.codesourcery.j6502.emulator.SerializationHelper.*;
+
 import de.codesourcery.j6502.emulator.EmulationState.EmulationStateEntry;
 import de.codesourcery.j6502.emulator.EmulationState.EntryType;
 import junit.framework.TestCase;
@@ -27,13 +29,13 @@ public class EmulationStateTest extends TestCase
         final int[] test2 = new int[test.length];
         
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        EmulationState.writeIntArray(test , out );
+        writeIntArray(test , out );
         
         final byte[] data = out.toByteArray();
         HexDump.dump(data , 0 , System.out , 0 );
         
         final ByteArrayInputStream byteIn = new ByteArrayInputStream(data);
-        EmulationState.populateIntArray(test2 , byteIn );
+        populateIntArray(test2 , byteIn );
         assertArrayEquals( test, test2 );
     }    
     

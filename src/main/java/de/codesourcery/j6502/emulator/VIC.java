@@ -1,5 +1,7 @@
 package de.codesourcery.j6502.emulator;
 
+import static de.codesourcery.j6502.emulator.SerializationHelper.*;
+
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -11,11 +13,11 @@ import java.util.Arrays;
 
 import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.emulator.CPU.IRQType;
+import de.codesourcery.j6502.emulator.EmulationState.EmulationStateEntry;
+import de.codesourcery.j6502.emulator.EmulationState.EntryType;
 import de.codesourcery.j6502.emulator.MemorySubsystem.RAMView;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.Misc;
-
-import static de.codesourcery.j6502.emulator.EmulationState.*;
 
 public class VIC extends IMemoryRegion implements IStatefulPart
 {
@@ -2294,9 +2296,6 @@ display window.
             writeBoolean( displayEnabledChanged , out );        
             writeInt( graphicsMode.identifier() , out );
 
-            // recalculateHorizontalBorders();
-            // recalculateVerticalBorders();
-
             writeInt( triggeredInterruptFlags , out );; // no interrupts triggered
             writeInt( enabledInterruptFlags , out ); // all IRQs disabled
 
@@ -2348,7 +2347,6 @@ display window.
             writeIntArray( spriteY , out );
 
             new EmulationStateEntry(EntryType.VIC_FIELDS, 1 ).setPayload( out.toByteArray() ).addTo( state );
-
         } 
         catch (IOException e) 
         {

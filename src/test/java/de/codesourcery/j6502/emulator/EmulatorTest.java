@@ -69,7 +69,7 @@ public class EmulatorTest  extends TestCase
         benchmark( toTest , 50 , 50 );
     }
 
-    private CPU prepareTest(Assembler a, Memory memory) throws IOException 
+    private CPU prepareTest(Assembler a, IMemoryRegion memory) throws IOException 
     {
         String source = "";
         try ( InputStream in = getClass().getResourceAsStream("/endless_test.asm") ) 

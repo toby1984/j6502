@@ -1,5 +1,8 @@
 package de.codesourcery.j6502.emulator;
 
+import static de.codesourcery.j6502.emulator.SerializationHelper.readInt;
+import static de.codesourcery.j6502.emulator.SerializationHelper.writeInt;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -7,7 +10,6 @@ import java.io.OutputStream;
 import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.Constants;
-import de.codesourcery.j6502.emulator.EmulationState.EmulationStateEntry;
 import de.codesourcery.j6502.emulator.EmulationState.EntryType;
 import de.codesourcery.j6502.emulator.Keyboard.Key;
 import de.codesourcery.j6502.emulator.tapedrive.TapeDrive;
@@ -17,7 +19,7 @@ import de.codesourcery.j6502.emulator.tapedrive.TapeDrive;
  *
  * @author tobias.gierke@code-sourcery.de
  */
-public class IOArea extends SlowMemory implements IStatefulPart
+public class IOArea extends Memory implements IStatefulPart
 {
     public final KeyboardBuffer keyboardBuffer = new KeyboardBuffer();
 
@@ -54,14 +56,14 @@ public class IOArea extends SlowMemory implements IStatefulPart
 
         @Override
         protected void saveFieldsHook(OutputStream out) throws IOException {
-            EmulationState.writeInt( joy1Mask , out );
-            EmulationState.writeInt( joy2Mask , out );
+            writeInt( joy1Mask , out );
+            writeInt( joy2Mask , out );
         }
         
         @Override
         protected void loadFieldsHook(InputStream in) throws IOException {
-            joy1Mask = EmulationState.readInt( in );
-            joy2Mask = EmulationState.readInt( in );
+            joy1Mask = readInt( in );
+            joy2Mask = readInt( in );
         }
         
         @Override

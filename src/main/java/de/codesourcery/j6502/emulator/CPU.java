@@ -11,6 +11,8 @@ import java.util.stream.Collectors;
 import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.utils.HexDump;
 
+import static de.codesourcery.j6502.emulator.SerializationHelper.*;
+
 public class CPU
 {
 	public static final int RESET_VECTOR_LOCATION = 0xfffc;
@@ -46,13 +48,13 @@ public class CPU
         final ByteArrayInputStream in = new ByteArrayInputStream(data);
         try 
         {
-            cycles = EmulationState.readLong( in );
-            pc = EmulationState.readInt( in );
-            accumulator = EmulationState.readInt( in );
-            x = EmulationState.readInt( in );
-            y = EmulationState.readInt( in );
-            sp = EmulationState.readShort( in );
-            flags = (byte) EmulationState.readByte( in );
+            cycles = readLong( in );
+            pc = readInt( in );
+            accumulator = readInt( in );
+            x = readInt( in );
+            y = readInt( in );
+            sp = readShort( in );
+            flags = (byte) readByte( in );
         } 
         catch (IOException e) 
         {
@@ -65,13 +67,13 @@ public class CPU
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         try 
         {
-            EmulationState.writeLong( cycles , out );
-            EmulationState.writeInt( pc , out );
-            EmulationState.writeInt( accumulator , out );
-            EmulationState.writeInt( x , out );
-            EmulationState.writeInt( y , out );
-            EmulationState.writeShort( sp , out );
-            out.write( flags );
+            writeLong( cycles , out );
+            writeInt( pc , out );
+            writeInt( accumulator , out );
+            writeInt( x , out );
+            writeInt( y , out );
+            writeShort( sp , out );
+            writeByte( flags , out );
             return out.toByteArray();
         } 
         catch (IOException e) 

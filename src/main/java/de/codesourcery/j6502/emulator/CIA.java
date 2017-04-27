@@ -14,6 +14,8 @@ import de.codesourcery.j6502.emulator.EmulationState.EmulationStateEntry;
 import de.codesourcery.j6502.emulator.EmulationState.EntryType;
 import de.codesourcery.j6502.utils.Misc;
 
+import static de.codesourcery.j6502.emulator.SerializationHelper.*;
+
 /**
  * Very inaccurate CIA6526 implementation.
  *
@@ -21,7 +23,7 @@ import de.codesourcery.j6502.utils.Misc;
  *
  * @author tobias.gierke@code-sourcery.de
  */
-public abstract class CIA extends SlowMemory implements IStatefulPart
+public abstract class CIA extends Memory implements IStatefulPart
 {
     public static final int CIA_PRA        = 0x00;
     public static final int CIA_PRB        = 0x01;
@@ -350,74 +352,75 @@ CRB 	Control Timer B 	see CIA 1
 
     protected final void saveState(OutputStream out) throws IOException
     {
-        EmulationState.writeBoolean( previousTapeSignal , out );
-        EmulationState.writeLong( tapeSlopeCounter , out );
-        EmulationState.writeLong( tickCounter , out );
-        EmulationState.writeBoolean( todRunning , out ); 
-        out.write( timeOfDay.identifier & 0xff );
-        EmulationState.writeInt( tod10s , out );
-        EmulationState.writeInt( todSeconds , out );
-        EmulationState.writeInt( todMinutes, out );
-        EmulationState.writeInt( todHours, out );
-        EmulationState.writeBoolean( rtcAlarmIRQEnabled, out );
-        out.write( todAlarmTimeOfDay.identifier & 0xff );
+        SerializationHelper.writeBoolean( previousTapeSignal , out );
+        writeLong( tapeSlopeCounter , out );
+        writeLong( tickCounter , out );
+        writeBoolean( todRunning , out ); 
+        SerializationHelper.writeByte( timeOfDay.identifier & 0xff , out );
+        writeInt( tod10s , out );
+        writeInt( todSeconds , out );
+        writeInt( todMinutes, out );
+        writeInt( todHours, out );
+        writeBoolean( rtcAlarmIRQEnabled, out );
+        
+        SerializationHelper.writeByte( todAlarmTimeOfDay.identifier & 0xff , out );
 
-        EmulationState.writeInt( todAlarm10s, out );
-        EmulationState.writeInt( todAlarmSeconds, out );
-        EmulationState.writeInt( todAlarmMinutes, out );
-        EmulationState.writeInt( todAlarmHours, out );
+        writeInt( todAlarm10s, out );
+        writeInt( todAlarmSeconds, out );
+        writeInt( todAlarmMinutes, out );
+        writeInt( todAlarmHours, out );
 
-        EmulationState.writeBoolean( reloadTimerA, out );
-        EmulationState.writeBoolean( reloadTimerB, out );        
+        writeBoolean( reloadTimerA, out );
+        writeBoolean( reloadTimerB, out );        
 
-        EmulationState.writeInt( raiseIRQ, out );
-        EmulationState.writeInt( irqMask, out );
-        EmulationState.writeInt( icr_read, out );   
+        writeInt( raiseIRQ, out );
+        writeInt( irqMask, out );
+        writeInt( icr_read, out );   
 
-        EmulationState.writeBoolean( timerARunning, out );
-        EmulationState.writeBoolean( timerBRunning, out );     
+        writeBoolean( timerARunning, out );
+        writeBoolean( timerBRunning, out );     
 
-        EmulationState.writeInt( timerAValue, out );
-        EmulationState.writeInt( timerALatch, out );
+        writeInt( timerAValue, out );
+        writeInt( timerALatch, out );
 
-        EmulationState.writeInt( timerBValue, out );
-        EmulationState.writeInt( timerBLatch, out );        
+        writeInt( timerBValue, out );
+        writeInt( timerBLatch, out );        
     }
 
     protected final void loadState(InputStream in) throws IOException 
     {
-        previousTapeSignal = EmulationState.readBoolean( in );
-        tapeSlopeCounter = EmulationState.readLong( in );
-        tickCounter  = EmulationState.readLong( in );
-        todRunning = EmulationState.readBoolean( in ); 
-        timeOfDay = TimeOfDay.fromIdentifier( (byte) EmulationState.readByte( in ) );
-        tod10s = EmulationState.readInt( in );
-        todSeconds = EmulationState.readInt( in );
-        todMinutes = EmulationState.readInt( in );
-        todHours = EmulationState.readInt( in );
-        rtcAlarmIRQEnabled = EmulationState.readBoolean( in );
-        todAlarmTimeOfDay = TimeOfDay.fromIdentifier( (byte) EmulationState.readByte( in ) );
+        previousTapeSignal = readBoolean( in );
+        tapeSlopeCounter = readLong( in );
+        tickCounter  = readLong( in );
+        todRunning = readBoolean( in ); 
+        timeOfDay = TimeOfDay.fromIdentifier( (byte) SerializationHelper.readByte( in ) );
+        tod10s = readInt( in );
+        todSeconds = readInt( in );
+        todMinutes = readInt( in );
+        todHours = readInt( in );
+        rtcAlarmIRQEnabled = readBoolean( in );
+        todAlarmTimeOfDay = TimeOfDay.fromIdentifier( (byte) SerializationHelper.readByte( in ) );
 
-        todAlarm10s = EmulationState.readInt( in );
-        todAlarmSeconds = EmulationState.readInt( in );
-        todAlarmMinutes = EmulationState.readInt( in );
-        todAlarmHours = EmulationState.readInt( in );
+        todAlarm10s = readInt( in );
+        todAlarmSeconds = readInt( in );
+        todAlarmMinutes = readInt( in );
+        todAlarmHours = readInt( in );
 
-        reloadTimerA = EmulationState.readBoolean( in );
-        reloadTimerB = EmulationState.readBoolean( in );        
+        reloadTimerA = readBoolean( in );
+        reloadTimerB = readBoolean( in );        
 
-        raiseIRQ = EmulationState.readInt( in );
-        irqMask = EmulationState.readInt( in );
-        icr_read = EmulationState.readInt( in );   
+        raiseIRQ = readInt( in );
+        irqMask = readInt( in );
+        icr_read = readInt( in );   
 
-        timerARunning = EmulationState.readBoolean( in );
-        timerBRunning = EmulationState.readBoolean( in );     
+        timerARunning = readBoolean( in );
+        timerBRunning = readBoolean( in );     
 
-        timerAValue = EmulationState.readInt( in );
-        timerALatch = EmulationState.readInt( in );
+        timerAValue = readInt( in );
+        timerALatch = readInt( in );
 
-        timerBValue = EmulationState.readInt( in );
-        timerBLatch = EmulationState.readInt( in );  
+        timerBValue = readInt( in );
+        timerBLatch = readInt( in );  
     }    
 
     public CIA(String identifier, AddressRange range)

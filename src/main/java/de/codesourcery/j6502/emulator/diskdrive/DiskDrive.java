@@ -4,9 +4,8 @@ import de.codesourcery.j6502.emulator.AddressRange;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPUImpl;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
-import de.codesourcery.j6502.emulator.Memory;
 import de.codesourcery.j6502.emulator.MemorySubsystem;
-import de.codesourcery.j6502.emulator.SlowMemory;
+import de.codesourcery.j6502.emulator.Memory;
 import de.codesourcery.j6502.emulator.WriteOnceMemory;
 import de.codesourcery.j6502.utils.HexDump;
 
@@ -194,7 +193,7 @@ public class DiskDrive extends IMemoryRegion
         {
             return new Memory( "RAM" , MemoryType.RAM, adrRange );
         }
-        return new SlowMemory( "RAM" , MemoryType.RAM, adrRange ) {
+        return new Memory( "RAM" , MemoryType.RAM, adrRange ) {
 
             public void writeByte(int offset, byte value) 
             {

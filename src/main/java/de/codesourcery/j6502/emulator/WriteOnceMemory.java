@@ -28,15 +28,6 @@ public final class WriteOnceMemory extends Memory {
 		this.writeProtected = true;
 	}
 
-	@Override
-	public void bulkWrite(int startingAddress, byte[] data, int datapos,int len)
-	{
-		if ( writeProtected ) {
-			throw new UnsupportedOperationException("Can't write to write-protected memory  "+this);
-		}
-		super.bulkWrite(startingAddress, data, datapos, len);
-	}
-	
 	public boolean isWriteProtected() {
         return writeProtected;
     }
