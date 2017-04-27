@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.emulator;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.utils.HexDump;
 
 /**
@@ -22,19 +23,21 @@ public class Memory extends IMemoryRegion
     {
         return HexDump.INSTANCE.dump( (short) (getAddressRange().getStartAddress()+offset),this,offset,len);
     }
-
+    
     @Override
     public void reset()
     {
         for ( int i = 0 , len = data.length ; i < len ; i++ )
         {
-            writeByte(i,(byte) 0);
+            writeByteNoSideEffects(i,(byte) 0);
         }
     }
 
     @Override
     public int readByte(int offset) {
-        getBreakpointsContainer().read( offset );
+        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
+            getBreakpointsContainer().read( offset );
+        }
         return data[offset & 0xffff] & 0xff;
     }
 
@@ -45,7 +48,9 @@ public class Memory extends IMemoryRegion
 
     @Override
     public void writeByte(int offset, byte value) {
-        getBreakpointsContainer().write( offset );
+        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
+            getBreakpointsContainer().write( offset );
+        }
         data[offset & 0xffff]=value;
     }
     
@@ -59,24 +64,25 @@ public class Memory extends IMemoryRegion
         final byte low = (byte) value;
         final byte hi = (byte) (value>>8);
 
-        int realOffset = offset & 0xffff;
-        writeByte( realOffset, low );
-        realOffset = (realOffset+1) & 0xffff;
-        writeByte( realOffset , hi );
+        final int realOffsetLo = offset & 0xffff;
+        final int realOffsetHi = (realOffsetLo+1) & 0xffff;
+        writeByte( realOffsetLo, low );
+        writeByte( realOffsetHi , hi );
     }
 
     @Override
     public final int readWord(int offset)
     {
-        int realOffset = offset & 0xffff;
-        final byte low = (byte) readByte( realOffset );
-        realOffset = (realOffset+1) & 0xffff;
-        final byte hi = (byte) readByte( realOffset );
+        final int realOffsetLo = offset & 0xffff;
+        final int realOffsetHi = (realOffsetLo+1) & 0xffff;
+        
+        final int low = readByte( realOffsetLo );
+        final int hi = readByte( realOffsetHi );
         return (hi<<8|low) & 0xffff;
     }
 
     @Override
-    public final void bulkWrite(int startingAddress, byte[] data, int datapos, int len)
+    public void bulkWrite(int startingAddress, byte[] data, int datapos, int len)
     {
         final int realOffset = startingAddress & 0xffff;
         final int size = getAddressRange().getSizeInBytes();

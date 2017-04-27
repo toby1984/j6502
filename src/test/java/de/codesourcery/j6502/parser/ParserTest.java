@@ -1,6 +1,5 @@
 package de.codesourcery.j6502.parser;
 
-import junit.framework.TestCase;
 import de.codesourcery.j6502.assembler.AddressingMode;
 import de.codesourcery.j6502.assembler.parser.Identifier;
 import de.codesourcery.j6502.assembler.parser.Lexer;
@@ -12,8 +11,10 @@ import de.codesourcery.j6502.assembler.parser.ast.AST;
 import de.codesourcery.j6502.assembler.parser.ast.AbsoluteOperand;
 import de.codesourcery.j6502.assembler.parser.ast.CommentNode;
 import de.codesourcery.j6502.assembler.parser.ast.EquNode;
+import de.codesourcery.j6502.assembler.parser.ast.IASTNode;
 import de.codesourcery.j6502.assembler.parser.ast.IValueNode;
 import de.codesourcery.j6502.assembler.parser.ast.ImmediateOperand;
+import de.codesourcery.j6502.assembler.parser.ast.IncludeBinaryNode;
 import de.codesourcery.j6502.assembler.parser.ast.IndirectOperandX;
 import de.codesourcery.j6502.assembler.parser.ast.IndirectOperandY;
 import de.codesourcery.j6502.assembler.parser.ast.InitializedMemoryNode;
@@ -23,6 +24,8 @@ import de.codesourcery.j6502.assembler.parser.ast.NumberLiteral.Notation;
 import de.codesourcery.j6502.assembler.parser.ast.OperatorNode;
 import de.codesourcery.j6502.assembler.parser.ast.SetOriginNode;
 import de.codesourcery.j6502.assembler.parser.ast.Statement;
+import de.codesourcery.j6502.assembler.parser.ast.StringLiteralNode;
+import junit.framework.TestCase;
 
 public class ParserTest extends TestCase {
 
@@ -31,6 +34,19 @@ public class ParserTest extends TestCase {
 	private void parse(String s) {
 		ast = new Parser( new Lexer(new Scanner(s) ) ).parse();
 	}
+	
+    public void testParseIncBin() 
+    {
+        parse(".incbin \"/home/tobi/tmp/Pic0.koa\"");
+        assertNotNull(ast);
+        assertEquals(1,ast.getChildCount());
+        IASTNode stmt = ast.child(0);
+        assertEquals( Statement.class , stmt.getClass() );
+        assertEquals(1,stmt.getChildCount());
+        IASTNode incBin = stmt.child(0);
+        assertEquals( IncludeBinaryNode.class , incBin.getClass() );        
+        assertEquals( "/home/tobi/tmp/Pic0.koa" , ((IncludeBinaryNode) incBin).path );
+    }	
 
 	public void testParseEmptySource1() {
 		parse("");
@@ -65,6 +81,23 @@ public class ParserTest extends TestCase {
 		assertEquals( (short) 3 , ((IValueNode) node.child(2)).getWordValue() );
 		assertEquals( (short) 4 , ((IValueNode) node.child(3)).getWordValue() );
 	}
+	
+    public void testByteInitializedMemoryWithString() {
+        parse("    .byte $01,2,3,$4,\"abc\"");
+        assertNotNull(ast);
+        assertEquals(1,ast.children.size());
+
+        assertTrue( ast.child(0) instanceof Statement);
+        assertTrue( ast.child(0).child(0) instanceof InitializedMemoryNode);
+
+        final InitializedMemoryNode node = (InitializedMemoryNode) ast.child(0).child(0);
+        assertEquals( 5 , node.getChildCount() );
+        assertEquals( (short) 1 , ((IValueNode) node.child(0)).getWordValue() );
+        assertEquals( (short) 2 , ((IValueNode) node.child(1)).getWordValue() );
+        assertEquals( (short) 3 , ((IValueNode) node.child(2)).getWordValue() );
+        assertEquals( (short) 4 , ((IValueNode) node.child(3)).getWordValue() );
+        assertEquals( "abc", ((StringLiteralNode) node.child(4)).value );
+    }	
 
 	public void testParseEmptySource2() {
 		parse("     \n\n\n    ");
@@ -137,21 +170,27 @@ public class ParserTest extends TestCase {
 		assertEquals( 10 , num.getWordValue() );
 	}	
 
-	public void testParseEquWithNumber() {
+    public void testParseEquWithNumber() {
 
-		parse("label: .equ $0a");
+        parse("label: .equ $0a");
 
+        assertNotNull(ast);
+        assertEquals(1,ast.children.size());
+
+        assertTrue( ast.child(0) instanceof Statement);
+        assertTrue( ast.child(0).child(0) instanceof EquNode);
+        assertTrue( ast.child(0).child(0).child(0) instanceof NumberLiteral);
+
+        EquNode node = (EquNode) ast.child(0).child(0);
+        assertEquals( new Identifier("label") , node.getIdentifier() );
+        NumberLiteral num = (NumberLiteral) ast.child(0).child(0).child(0);
+        assertEquals( 10 , num.getWordValue() );
+    }
+    
+	public void testParseComplexExpression() 
+	{
+        parse("abc .equ ( 1 * 2 ) + 3");
 		assertNotNull(ast);
-		assertEquals(1,ast.children.size());
-
-		assertTrue( ast.child(0) instanceof Statement);
-		assertTrue( ast.child(0).child(0) instanceof EquNode);
-		assertTrue( ast.child(0).child(0).child(0) instanceof NumberLiteral);
-
-		EquNode node = (EquNode) ast.child(0).child(0);
-		assertEquals( new Identifier("label") , node.getIdentifier() );
-		NumberLiteral num = (NumberLiteral) ast.child(0).child(0).child(0);
-		assertEquals( 10 , num.getWordValue() );
 	}
 	
 	public void testParseEquWithUnaryMinus()

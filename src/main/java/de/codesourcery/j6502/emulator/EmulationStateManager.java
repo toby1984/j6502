@@ -39,8 +39,8 @@ public class EmulationStateManager
         }
     }
 
-    public void saveEmulationState(OutputStream out) throws IOException {
-
+    public void saveEmulationState(OutputStream out) throws IOException 
+    {
         driver.setMode(Mode.SINGLE_STEP);
         
         final EmulationState state = EmulationState.newInstance();
@@ -58,5 +58,6 @@ public class EmulationStateManager
             // FIXME: save floppy state            
         }
         state.write( out );
+        System.out.println("=============\nState\n==========="+state);
     }
 }

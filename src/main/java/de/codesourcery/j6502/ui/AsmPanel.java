@@ -918,7 +918,11 @@ public abstract class AsmPanel extends JPanel implements IDebuggerView
 
 			// TODO: Remove debug code, just a quick hack to get the binary into Vice64 via Copy&Paste
 			System.out.println("10 for x=0 to "+(binary.length-1)+" : read a : poke "+binaryStartAddress+"+x,a : next");
-			for ( int i = 0 , lineNo = 20 ; i < binary.length ; lineNo += 1)
+			final int step = 5;
+			int lineNo = 10+step;
+            System.out.println( lineNo+" sys "+binaryStartAddress);    
+            lineNo += step;
+			for ( int i = 0  ; i < binary.length ; lineNo += step)
 			{
 				System.out.print( lineNo+" data ");
 				for ( int j = 0 ; j < 10 && i < binary.length ; j++ , i++ )
@@ -931,6 +935,7 @@ public abstract class AsmPanel extends JPanel implements IDebuggerView
 				}
 				System.out.println();
 			}
+            System.out.print( lineNo+" SYS "+binaryStartAddress);			
 			// TODO: End debug code
 
 			compilationMessageModel.addMessage( new CompilationMessage("Code compiled ok ("+binary.length+" bytes)", Severity.INFO ) );

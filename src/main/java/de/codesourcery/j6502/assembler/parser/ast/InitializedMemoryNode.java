@@ -2,12 +2,14 @@ package de.codesourcery.j6502.assembler.parser.ast;
 
 import de.codesourcery.j6502.assembler.ICompilationContext;
 import de.codesourcery.j6502.assembler.exceptions.ValueUnavailableException;
+import de.codesourcery.j6502.utils.CharsetConverter;
 import de.codesourcery.j6502.utils.ITextRegion;
 
 public class InitializedMemoryNode extends ASTNode implements ICompilationContextAware {
 
 	public static enum Type {
-		BYTES;
+		BYTES,
+		WORDS;
 	}
 
 	public final InitializedMemoryNode.Type type;
@@ -25,7 +27,15 @@ public class InitializedMemoryNode extends ASTNode implements ICompilationContex
 	{
 		for ( final IASTNode child : children )
 		{
-			if ( child instanceof IValueNode)
+		    if ( child instanceof StringLiteralNode) 
+		    {
+		        for ( char c : ((StringLiteralNode) child).value.toCharArray() ) 
+		        {
+		            byte value = CharsetConverter.asciiToPET( c );
+		            context.writeByte( value );
+		        }
+		    } 
+		    else if ( child instanceof IValueNode)
 			{
 				final IValueNode value = (IValueNode) child;
 				if ( value.isValueAvailable() ) {
@@ -34,6 +44,9 @@ public class InitializedMemoryNode extends ASTNode implements ICompilationContex
 						case BYTES:
 							context.writeByte( value.getByteValue() );
 							break;
+						case WORDS:
+						    context.writeWord( value.getWordValue() );
+						    break;
 						default:
 							throw new RuntimeException("Internal error,unhandled type "+type);
 					}
@@ -42,6 +55,8 @@ public class InitializedMemoryNode extends ASTNode implements ICompilationContex
 				{
 					throw new ValueUnavailableException( value );
 				}
+			} else {
+			    throw new RuntimeException("Internal error,unhandled child node: "+child); 
 			}
 		}
 	}

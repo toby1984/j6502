@@ -17,6 +17,14 @@ public class LexerTest extends TestCase
 		assertToken(TokenType.EOF,"",1);
 		assertTrue( lexer.eof() );
 	}
+	
+	public void testLexIncBin() {
+        lex(".incbin \"/home/tobi/tmp/Pic0.koa\"");
+        while ( ! lexer.eof() ) {
+            Token next = lexer.next();
+            System.out.println("Got: "+next);
+        }
+	}
 
 	public void testLexMultipleTokens() {
 		lex( "a 1bc , :" );
@@ -138,14 +146,16 @@ public class LexerTest extends TestCase
 
 	public void testLexByteMeta() {
 		lex(".byte");
-		assertToken(TokenType.META_BYTE,".byte",0);
+		assertToken(TokenType.DOT,".",0);
+		assertToken(TokenType.CHARACTERS,"byte",1);
 		assertToken(TokenType.EOF,"",5);
 		assertTrue( lexer.eof() );
 	}
 
 	public void testLexEquMeta() {
 		lex(".equ");
-		assertToken(TokenType.META_EQU,".equ",0);
+        assertToken(TokenType.DOT,".",0);		
+        assertToken(TokenType.CHARACTERS,"equ",1);        
 		assertToken(TokenType.EOF,"",4);
 		assertTrue( lexer.eof() );
 	}

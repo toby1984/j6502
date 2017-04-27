@@ -1,5 +1,6 @@
 package de.codesourcery.j6502.emulator.diskdrive;
 
+import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.emulator.AddressRange;
 import de.codesourcery.j6502.emulator.CPU;
 import de.codesourcery.j6502.emulator.CPUImpl;
@@ -11,8 +12,6 @@ import de.codesourcery.j6502.utils.HexDump;
 
 public class DiskDrive extends IMemoryRegion 
 {
-    protected static final boolean TRACK_JOBQUEUE = false;
-
     private static final int ROM_START1 = 0x8000;
     private static final int ROM_START2 = 0xc000;
 
@@ -189,7 +188,7 @@ public class DiskDrive extends IMemoryRegion
     private IMemoryRegion createRAM() 
     {
         final AddressRange adrRange = new AddressRange(0,2*1024);
-        if ( ! TRACK_JOBQUEUE ) 
+        if ( ! Constants.DISKDRIVE_TRACK_JOBQUEUE ) 
         {
             return new Memory( "RAM" , MemoryType.RAM, adrRange );
         }

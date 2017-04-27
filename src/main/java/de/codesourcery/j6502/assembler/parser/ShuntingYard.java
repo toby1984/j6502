@@ -103,43 +103,7 @@ When there are no more tokens to read:
     			op.setType( Operator.UNARY_PLUS );
     		}
     	}
-    	this.expectingValue = true; // TODO: Does not properly handle postfix operators
-
-        if ( tok1.isFunction() )
-        {
-            // Push 0 onto the arg count stack. If the were values stack has a value on it, pop it and push true. Push false onto were values.
-            this.argsCountStack.push(Integer.valueOf(0));
-            if ( ! this.argsMarkerStack.isEmpty() )
-            {
-                this.argsMarkerStack.pop();
-                this.argsMarkerStack.push( Boolean.TRUE );
-            }
-            this.argsMarkerStack.push(Boolean.FALSE);
-            this.stack.push(tok1);
-            return;
-        }
-
-        if ( tok1.isParensOpen() )
-        {
-            this.stack.push(tok1);
-            return;
-        }
-
-        if ( tok1.isArgumentDelimiter() )
-        {
-            if ( ! isFunctionOnStack() ) {
-                throw new ParseException("Unexpected argument delimiter",tok1.getTextRegion());
-            }
-            popUntil(ExpressionTokenType.PARENS_OPEN );
-
-            // Pop were values into w. If w is true, pop arg count into a, increment a and push back into arg count. Push false into were values.
-            if ( this.argsMarkerStack.pop() ) {
-                this.argsCountStack.push(this.argsCountStack.pop() +  1 );
-            }
-            this.argsMarkerStack.push(Boolean.FALSE);
-            return;
-        }
-
+    	
         if ( tok1.isParensClose() )
         {
             if ( ! popUntil(ExpressionTokenType.PARENS_OPEN ) ) {
@@ -156,11 +120,47 @@ When there are no more tokens to read:
             else {
                 // not a function invocation, wrap in ExpressionNode
                 final ExpressionToken pop = this.valueQueue.pop();
-            	final ExpressionNode expr = new ExpressionNode( openingParens.getTextRegion() );
-            	expr.mergeRegion( tok1.getTextRegion() );
+                final ExpressionNode expr = new ExpressionNode( openingParens.getTextRegion() );
+                expr.mergeRegion( tok1.getTextRegion() );
                 expr.insertChild( 0 , pop.getNode() );
                 this.valueQueue.push( new ExpressionToken( ExpressionTokenType.EXPRESSION , expr ) );
             }
+            return;
+        }    	
+    	
+    	this.expectingValue = true; // TODO: Does not properly handle postfix operators
+
+        if ( tok1.isParensOpen() )
+        {
+            this.stack.push(tok1);
+            return;
+        }
+        
+        if ( tok1.isFunction() )
+        {
+            // Push 0 onto the arg count stack. If the were values stack has a value on it, pop it and push true. Push false onto were values.
+            this.argsCountStack.push(Integer.valueOf(0));
+            if ( ! this.argsMarkerStack.isEmpty() )
+            {
+                this.argsMarkerStack.pop();
+                this.argsMarkerStack.push( Boolean.TRUE );
+            }
+            this.argsMarkerStack.push(Boolean.FALSE);
+            this.stack.push(tok1);
+            return;
+        }
+        if ( tok1.isArgumentDelimiter() )
+        {
+            if ( ! isFunctionOnStack() ) {
+                throw new ParseException("Unexpected argument delimiter",tok1.getTextRegion());
+            }
+            popUntil(ExpressionTokenType.PARENS_OPEN );
+
+            // Pop were values into w. If w is true, pop arg count into a, increment a and push back into arg count. Push false into were values.
+            if ( this.argsMarkerStack.pop() ) {
+                this.argsCountStack.push(this.argsCountStack.pop() +  1 );
+            }
+            this.argsMarkerStack.push(Boolean.FALSE);
             return;
         }
 

@@ -17,6 +17,9 @@ public class Constants
     public static final boolean EMULATORDRIVER_DEBUG_CMDS = false;
     public static final boolean EMULATORDRIVER_INVOKE_CALLBACK = true;
     
+    // Floppy drive
+    public static final boolean DISKDRIVE_TRACK_JOBQUEUE = true;    
+    
     /**
      * Careful, this interval is also used to re-calibrate the CPU's delay loop.
      * Setting it to a larger value will make the emulation worse at keeping

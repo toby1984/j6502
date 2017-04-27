@@ -1010,10 +1010,16 @@ public class VIC extends IMemoryRegion implements IStatefulPart
                 {
                     switch( ( currentVideoData & 0b1100_0000) >>> 6 )
                     {
+                        /*
+ | "00": Background color 0 ($d021)      |
+ | "01": Color from bits 4-7 of c-data   |
+ | "10": Color from bits 0-3 of c-data   |
+ | "11": Color from bits 8-11 of c-data  |                         
+                         */
                         case 0b00: pixelColor = rgbBackgroundColor; break;
                         case 0b01: pixelColor = RGB_BG_COLORS[ (currentColor >> 4) & 0b1111 ]; break;
                         case 0b10: pixelColor = RGB_FG_COLORS[ currentColor & 0b1111 ] ; break;
-                        case 0b11: pixelColor = RGB_FG_COLORS[ currentGlyph & 0b1111 ] ; break;
+                        case 0b11: pixelColor = RGB_FG_COLORS[ currentGlyph & 0b1111 ] ; break;                                                
                         default: throw new RuntimeException("Unreachable code reached");
                     }
                     if ( (bitCounter % 2) == 0 ) {
@@ -1110,7 +1116,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         private int glyphData(int displayY)
         {
             final GraphicsMode mode = graphicsMode;
-            if ( mode.textMode && mode.extendedColorMode )
+            if ( (mode.textMode && mode.extendedColorMode ) || (mode.bitMapMode && mode.multiColorMode ) )
             {
                 final int rowStartOffset = (displayY/8)*40;
                 int charPtr = videoRAMAdr+rowStartOffset+dataPtr;
@@ -1131,9 +1137,9 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             }
 
             // bitmap mode
-            if ( mode.multiColorMode ) {
-                return colorMemory.readByte( 0x800 + rowStartOffset + dataPtr );
-            }
+//            if ( mode.multiColorMode ) {
+//                return colorMemory.readByte( 0x800 + rowStartOffset + dataPtr );
+//            }
             return vicAddressView.readByte( videoRAMAdr + rowStartOffset + dataPtr );
         }
         @Override
@@ -1612,7 +1618,11 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         glyphDataAdr  = bankAdr + glyphRAMOffset;
 
         sprite0DataPtrAddress = bankAdr + videoRAMOffset + 1024 - 8;
-
+        printMemoryMapping();
+    }
+    
+    private void printMemoryMapping() 
+    {
         if ( Constants.VIC_DEBUG_MEMORY_LAYOUT ) {
             System.out.println("VIC: Bank @ "+HexDump.toAdr( bankAdr )+"");
             System.out.println("VIC: Video RAM @ "+HexDump.toAdr( videoRAMAdr ) );
@@ -1853,7 +1863,9 @@ display window.
     private int readByte(int offset,boolean applySideEffects) 
     {
         final int trimmed = ( offset & 0xffff);
-        breakpointsContainer.read( trimmed );
+        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
+            breakpointsContainer.read( trimmed );
+        }
         switch( trimmed )
         {
             /* sprite registers */
@@ -1957,7 +1969,9 @@ display window.
     public void writeByte(int offset, byte value)
     {
         final int trimmed = ( offset & 0xffff);
-        breakpointsContainer.write( trimmed );
+        if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
+            breakpointsContainer.write( trimmed );
+        }
         switch( trimmed )
         {
             /* sprite registers */
@@ -2223,7 +2237,8 @@ display window.
             rasterIRQLine = readInt( out );
 
             imagePixelPtr = readInt( out );
-
+            populateIntArray( imagePixelData , out );
+            
             beamX = readInt( out );
             beamY = readInt( out );
 
@@ -2274,6 +2289,10 @@ display window.
             spriteXhi = readInt( out );
 
             populateIntArray( spriteY , out );
+            
+            System.out.println("*** after restore ***");
+            System.out.println( graphicsMode );
+            updateMemoryMapping();
         } 
         catch(IOException e) 
         {
@@ -2295,6 +2314,8 @@ display window.
             writeBoolean( displayEnabledNewState , out );
             writeBoolean( displayEnabledChanged , out );        
             writeInt( graphicsMode.identifier() , out );
+            
+            System.out.println("*** during save: "+graphicsMode);
 
             writeInt( triggeredInterruptFlags , out );; // no interrupts triggered
             writeInt( enabledInterruptFlags , out ); // all IRQs disabled
@@ -2302,7 +2323,8 @@ display window.
             writeInt( rasterIRQLine , out );
 
             writeInt( imagePixelPtr , out );
-
+            writeIntArray( imagePixelData , out );
+            
             writeInt( beamX , out );
             writeInt( beamY , out );
 

@@ -15,6 +15,22 @@ public class OperatorNode extends ASTNode implements IValueNode
 		Validate.notNull(op, "op must not be NULL");
 		this.operator = op;
 	}
+	
+	@Override
+	public String toString() 
+	{
+	    if ( operator.operandCount != getChildCount() ) {
+	        return "Operator: "+operator.symbol+" (expected "+operator.operandCount+" children but got "+getChildCount()+")";
+	    }
+	    if ( operator.operandCount == 2) 
+	    {
+	        return child(0).toString()+operator.symbol+child(1).toString();
+	    }
+	    if ( operator.isLeftAssociative() ) {
+	        return child(0).toString()+operator.symbol;
+	    } 
+        return operator.symbol+child(0).toString();
+	}
 
 	@Override
 	public int evaluate() {

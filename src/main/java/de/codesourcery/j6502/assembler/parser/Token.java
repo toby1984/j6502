@@ -23,6 +23,11 @@ public final class Token {
 		this.text = text;
 		this.offset = offset;
 	}
+	
+	public boolean isCharacters(String s) 
+	{
+	    return hasType(TokenType.CHARACTERS) && s.equalsIgnoreCase( text );
+	}
 
 	public boolean hasType(TokenType t) {
 		return t.equals( this.type );

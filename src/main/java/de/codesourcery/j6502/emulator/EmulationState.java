@@ -38,7 +38,8 @@ public class EmulationState
         CIA2_RAM((byte) 8),
         CIA2_FIELDS((byte) 9),
         VIC_RAM((byte) 10),
-        VIC_FIELDS((byte) 11);
+        VIC_FIELDS((byte) 11),
+        IO_AREA((byte) 12);
 
         public final byte typeId;
 
@@ -179,7 +180,6 @@ public class EmulationState
             final int expected = calcChecksum();
             final int actual = checksum;
             final boolean result = expected == actual;
-            System.out.println( expected+" = "+actual+" => "+result);
             if ( ! result ) {
                 new Exception("dummy").printStackTrace();
             }
@@ -388,7 +388,6 @@ public class EmulationState
                 setHeaderCount( entry , entries.size() );
             }
             entry.setChecksum( entry.calcChecksum( chksum ).checksum );
-            System.out.println("calculated checksum: "+Misc.to32BitHex( entry.checksum ) );
 
             out.write( entry.type.typeId );
             out.write( entry.version );

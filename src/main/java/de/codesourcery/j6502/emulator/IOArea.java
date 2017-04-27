@@ -10,6 +10,7 @@ import java.io.OutputStream;
 import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.Constants;
+import de.codesourcery.j6502.emulator.EmulationState.EmulationStateEntry;
 import de.codesourcery.j6502.emulator.EmulationState.EntryType;
 import de.codesourcery.j6502.emulator.Keyboard.Key;
 import de.codesourcery.j6502.emulator.tapedrive.TapeDrive;
@@ -64,6 +65,9 @@ public class IOArea extends Memory implements IStatefulPart
         protected void loadFieldsHook(InputStream in) throws IOException {
             joy1Mask = readInt( in );
             joy2Mask = readInt( in );
+        }
+        
+        protected void afterLoadState() {
         }
         
         @Override
@@ -270,11 +274,17 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
                 super.writeByte(adr, value);
             }
         }
+        
+        @Override
+        protected void afterLoadState() 
+        {
+            final int oldValue = super.readByteNoSideEffects(CIA_PRA);
+            vic.setCurrentBankNo( oldValue & 0b11 );
+        }
 
         private String toLogical(String msg,boolean level) {
             return msg+" "+(level?"HIGH":"LOW");
         }
-
         
         protected int readByte(int adr,boolean applySideEffects)
         {
@@ -540,16 +550,20 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
     @Override
     public void restoreState(EmulationState state)
     {
+        state.getEntry(EntryType.IO_AREA).applyPayload( this , false );
+        
+        vic.restoreState( state );
         cia1.restoreState( state );
         cia2.restoreState( state );
-        vic.restoreState( state );
     }
 
     @Override
     public void saveState(EmulationState state)
     {
+        new EmulationStateEntry(EntryType.IO_AREA,1).setPayload( this ).addTo( state );
+        
+        vic.saveState( state );
         cia1.saveState( state );
         cia2.saveState( state );
-        vic.saveState( state );
     }
 }

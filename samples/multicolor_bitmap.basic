@@ -1,0 +1,2 @@
+poke 53265,peek(53265) or 32
+poke 53270,peek(53270) or 16

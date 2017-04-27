@@ -352,6 +352,7 @@ CRB 	Control Timer B 	see CIA 1
 
     protected final void saveState(OutputStream out) throws IOException
     {
+        writeLong( debugPreviousTapeSignalChangeTick , out );
         SerializationHelper.writeBoolean( previousTapeSignal , out );
         writeLong( tapeSlopeCounter , out );
         writeLong( tickCounter , out );
@@ -389,6 +390,7 @@ CRB 	Control Timer B 	see CIA 1
 
     protected final void loadState(InputStream in) throws IOException 
     {
+        debugPreviousTapeSignalChangeTick = readLong( in );
         previousTapeSignal = readBoolean( in );
         tapeSlopeCounter = readLong( in );
         tickCounter  = readLong( in );
@@ -454,7 +456,8 @@ CRB 	Control Timer B 	see CIA 1
         final ByteArrayInputStream in = entry.toByteArrayInputStream();
         try {
             loadFieldsHook( in );
-            loadState( in );
+            loadState( in );  
+            afterLoadState();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -462,6 +465,8 @@ CRB 	Control Timer B 	see CIA 1
     protected abstract void saveFieldsHook(OutputStream out) throws IOException;
     
     protected abstract void loadFieldsHook(InputStream out) throws IOException;
+    
+    protected abstract void afterLoadState();
 
     private void initTOD() {
 

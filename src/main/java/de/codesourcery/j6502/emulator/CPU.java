@@ -48,6 +48,8 @@ public class CPU
         final ByteArrayInputStream in = new ByteArrayInputStream(data);
         try 
         {
+            populateIntArray( backtraceRingBuffer , in );
+            backtraceRingBufferElements = readInt( in );
             cycles = readLong( in );
             pc = readInt( in );
             accumulator = readInt( in );
@@ -55,6 +57,9 @@ public class CPU
             y = readInt( in );
             sp = readShort( in );
             flags = (byte) readByte( in );
+            lastInsDuration = readInt( in );
+            breakOnInterrupt = readBoolean(in);
+            breakpointReached = readBoolean(in);
         } 
         catch (IOException e) 
         {
@@ -67,6 +72,8 @@ public class CPU
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         try 
         {
+            writeIntArray( backtraceRingBuffer , out );
+            writeInt( backtraceRingBufferElements , out );
             writeLong( cycles , out );
             writeInt( pc , out );
             writeInt( accumulator , out );
@@ -74,6 +81,11 @@ public class CPU
             writeInt( y , out );
             writeShort( sp , out );
             writeByte( flags , out );
+            
+            writeInt( lastInsDuration , out );
+            writeBoolean(breakOnInterrupt , out );
+            writeBoolean( breakpointReached , out );
+            
             return out.toByteArray();
         } 
         catch (IOException e) 
