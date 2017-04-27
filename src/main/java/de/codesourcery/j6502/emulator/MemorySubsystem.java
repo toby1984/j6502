@@ -650,18 +650,6 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
     }
 
     @Override
-    public boolean isReadsReturnWrites(int offset)
-    {
-        final int wrappedOffset = offset & 0xffff;
-        final IMemoryRegion region = readRegions[ readMap[ wrappedOffset ] ];
-        if ( region instanceof WriteOnceMemory ) { // ROM mapped to this location
-            return false;
-        }
-        final int translatedOffset = wrappedOffset - region.getAddressRange().getStartAddress();
-        return region.isReadsReturnWrites( translatedOffset );
-    }
-
-    @Override
     public void writeWord(int offset,short value)
     {
         final byte low = (byte) value;
@@ -774,11 +762,6 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
         public String dump(int offset, int len)
         {
             return HexDump.INSTANCE.dump( (short) (getAddressRange().getStartAddress()+offset),this,offset,len);
-        }
-
-        @Override
-        public boolean isReadsReturnWrites(int offset) {
-            return true;
         }
 
         @Override

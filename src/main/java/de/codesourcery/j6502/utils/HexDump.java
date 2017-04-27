@@ -107,11 +107,6 @@ public class HexDump {
 			}
 
 			@Override
-			public boolean isReadsReturnWrites(int offset) {
-	             throw new UnsupportedOperationException();
-			}
-
-			@Override
 			public void bulkWrite(int startingAddress, byte[] data,int datapos, int len) {
 				throw new UnsupportedOperationException();
 			}

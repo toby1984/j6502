@@ -131,11 +131,6 @@ public class DiskDrive extends IMemoryRegion
         }
 
         @Override
-        public boolean isReadsReturnWrites(int offset) {
-            return false;
-        }
-
-        @Override
         public String dump(int offset, int len) {
             return "<non-existant memory>";
         }
@@ -333,11 +328,6 @@ public class DiskDrive extends IMemoryRegion
     @Override
     public String dump(int offset, int len) {
         return HexDump.INSTANCE.dump( (short) (getAddressRange().getStartAddress()+offset),this,offset,len);
-    }
-
-    @Override
-    public boolean isReadsReturnWrites(int offset) {
-        return true;
     }
 
     public DiskHardware getHardware() {

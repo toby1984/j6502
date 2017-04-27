@@ -1277,7 +1277,6 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         {
             private final RAMView ram = mainMemory.getRAMView();
 
-            @Override public boolean isReadsReturnWrites(int offset) { throw new UnsupportedOperationException("not implemented"); }
             @Override public String dump(int offset, int len) { throw new UnsupportedOperationException("not implemented"); }
             @Override public void bulkWrite(int startingAddress, byte[] data, int datapos,int len) { throw new UnsupportedOperationException("not implemented"); }
             @Override public void writeWord(int offset, short value) { throw new UnsupportedOperationException("not implemented"); }
@@ -1836,11 +1835,6 @@ display window.
         {
             graphics.drawImage( frontBuffer , 0 , 0 , width, height , null );
         }
-    }
-
-    @Override
-    public boolean isReadsReturnWrites(int offset) {
-        return false; // not for all registers
     }
 
     @Override

@@ -44,10 +44,10 @@ public class Constants
     public static final boolean VIC_DEBUG_MEMORY_LAYOUT = true;
     
     // CIA class constants
-    public static final boolean CIA_DEBUG = true;
-    public static final boolean CIA_DEBUG_VERBOSE = true;
-    public static final boolean CIA_DEBUG_TIMER_LOAD = true;
-    public static final boolean CIA_DEBUG_TIMER_IRQS = true;
+    public static final boolean CIA_DEBUG = false;
+    public static final boolean CIA_DEBUG_VERBOSE = false;
+    public static final boolean CIA_DEBUG_TIMER_LOAD = false;
+    public static final boolean CIA_DEBUG_TIMER_IRQS = false;
     public static final boolean CIA_DEBUG_TAPE_SLOPE = false;
     
     // Debugger class constants

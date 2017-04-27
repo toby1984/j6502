@@ -120,11 +120,6 @@ public class Disassembler
 	            throw new UnsupportedOperationException();
 			}
 
-		    @Override
-			public boolean isReadsReturnWrites(int offset) {
-	            throw new UnsupportedOperationException();
-		    }
-
 			@Override
 			public void reset() {
 				throw new UnsupportedOperationException();

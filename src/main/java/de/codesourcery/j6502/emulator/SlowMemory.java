@@ -33,11 +33,6 @@ public class SlowMemory extends IMemoryRegion
     }
 
     @Override
-    public boolean isReadsReturnWrites(int offset) {
-        return true;
-    }
-
-    @Override
     public int readByte(int offset) {
         getBreakpointsContainer().read( offset );
         return data[offset & 0xffff] & 0xff;

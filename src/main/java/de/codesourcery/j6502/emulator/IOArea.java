@@ -536,11 +536,6 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
     }
 
     @Override
-    public boolean isReadsReturnWrites(int offset) {
-        return false;
-    }
-
-    @Override
     public void restoreState(EmulationState state)
     {
         cia1.restoreState( state );

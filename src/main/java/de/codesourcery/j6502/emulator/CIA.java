@@ -424,11 +424,6 @@ CRB 	Control Timer B 	see CIA 1
     {
         super(identifier, MemoryType.IOAREA , range);
     }    
-
-    @Override
-    public boolean isReadsReturnWrites(int offset) {
-        return false; // not for all registers
-    }
     
     protected final void saveState(EmulationState state,EntryType ramType,EntryType fieldType) 
     {

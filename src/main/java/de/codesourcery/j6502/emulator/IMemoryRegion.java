@@ -77,8 +77,6 @@ public abstract class IMemoryRegion
 	
 	public abstract String dump(int offset, int len);
 
-	public abstract boolean isReadsReturnWrites(int offset);
-
 	/**
 	 * Reads a byte without triggering side-effects related to
 	 * memory-mapped I/O (like clearing IRQs etc.).
