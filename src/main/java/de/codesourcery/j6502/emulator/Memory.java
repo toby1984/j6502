@@ -11,11 +11,11 @@ import de.codesourcery.j6502.utils.HexDump;
  */
 public class Memory extends IMemoryRegion
 {
-    private final byte[] data;
+    private final int[] data;
 
     public Memory(String identifier, MemoryType type,AddressRange range) {
         super(identifier, type , range);
-        this.data = new byte[ range.getSizeInBytes() ];
+        this.data = new int[ range.getSizeInBytes() ];
     }
 
     @Override
@@ -38,12 +38,12 @@ public class Memory extends IMemoryRegion
         if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
             getBreakpointsContainer().read( offset );
         }
-        return data[offset & 0xffff] & 0xff;
+        return data[offset & 0xffff];
     }
 
     @Override
     public int readByteNoSideEffects(int offset) {
-        return data[offset & 0xffff] & 0xff;
+        return data[offset & 0xffff];
     }	
 
     @Override
@@ -51,12 +51,12 @@ public class Memory extends IMemoryRegion
         if ( Constants.MEMORY_SUPPORT_BREAKPOINTS ) {
             getBreakpointsContainer().write( offset );
         }
-        data[offset & 0xffff]=value;
+        data[offset & 0xffff]=value & 0xff;
     }
     
     @Override
     public void writeByteNoSideEffects(int offset, byte value) {
-        data[offset & 0xffff]=value;
+        data[offset & 0xffff]=value & 0xff;
     }
 
     @Override
@@ -78,7 +78,7 @@ public class Memory extends IMemoryRegion
         
         final int low = readByte( realOffsetLo );
         final int hi = readByte( realOffsetHi );
-        return (hi<<8|low) & 0xffff;
+        return (hi<<8|low);
     }
 
     @Override
