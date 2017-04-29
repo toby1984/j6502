@@ -38,6 +38,8 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -174,9 +176,9 @@ public class Debugger
 
     private final BreakpointsController c64BreakpointsController = new BreakpointsController( emulator.getCPU() , emulator.getMemory() );
     private BreakpointsController floppyBreakpointsController;
-    private volatile CPU debugCPU = emulator.getCPU();
-    private volatile IMemoryRegion debugMemory = emulator.getMemory();
-    private volatile BreakpointsController breakpointsController = c64BreakpointsController;
+    private final AtomicReference<CPU> debugCPU = new AtomicReference<>(emulator.getCPU());
+    private final AtomicReference<IMemoryRegion> debugMemory = new AtomicReference<>(emulator.getMemory());
+    private final AtomicReference<BreakpointsController> breakpointsController = new AtomicReference<>(c64BreakpointsController);
     private DebugTarget debugTarget = DebugTarget.COMPUTER;
 
     private final JDesktopPane desktop = new JDesktopPane();
@@ -910,21 +912,21 @@ public class Debugger
 
         if ( debugC64 || floppy == null )
         {
-            debugCPU = emulator.getCPU();
-            debugMemory =  emulator.getMemory();
-            breakpointsController = c64BreakpointsController;
+            debugCPU.set(emulator.getCPU());
+            debugMemory.set(emulator.getMemory());
+            breakpointsController.set(c64BreakpointsController);
         } else {
-            debugCPU = floppy.getCPU();
-            debugMemory = floppy.getMemory();
+            debugCPU.set(floppy.getCPU());
+            debugMemory.set(floppy.getMemory());
 
             if ( floppyBreakpointsController == null ) {
-                floppyBreakpointsController = new BreakpointsController( debugCPU , debugMemory );
+                floppyBreakpointsController = new BreakpointsController( debugCPU.get() , debugMemory.get() );
             }
-            breakpointsController = floppyBreakpointsController;
+            breakpointsController.set(floppyBreakpointsController);
         }
 
-        breakpointsController.addBreakpointListener( disassembly );
-        breakpointsController.addBreakpointListener( bpModel );
+        breakpointsController.get().addBreakpointListener( disassembly );
+        breakpointsController.get().addBreakpointListener( bpModel );
         disassembly.allBreakpointsChanged();
         bpModel.allBreakpointsChanged();
     }
@@ -1697,7 +1699,7 @@ public class Debugger
     protected final class ScreenPanel extends JPanel implements WindowLocationHelper.IDebuggerView {
 
         private Component frame;
-        private volatile boolean isDisplayed;
+        private final AtomicBoolean isDisplayed = new AtomicBoolean();
 
         public ScreenPanel()
         {
@@ -1741,12 +1743,12 @@ public class Debugger
 
         @Override
         public void setDisplayed(boolean yesNo) {
-            this.isDisplayed = yesNo;
+            this.isDisplayed.set(yesNo);
         }
 
         @Override
         public boolean isDisplayed() {
-            return isDisplayed;
+            return isDisplayed.get();
         }
 
         @Override
@@ -2160,17 +2162,17 @@ public class Debugger
 
     protected final CPU getCPU()
     {
-        return debugCPU;
+        return debugCPU.get();
     }
 
     protected final IMemoryRegion getMemory()
     {
-        return debugMemory;
+        return debugMemory.get();
     }
 
     protected final BreakpointsController getBreakPointsController()
     {
-        return breakpointsController;
+        return breakpointsController.get();
     }
 
     protected static void error(String msg) {

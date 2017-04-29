@@ -16,6 +16,7 @@ import de.codesourcery.j6502.emulator.CPU.IRQType;
 import de.codesourcery.j6502.emulator.EmulationState.EmulationStateEntry;
 import de.codesourcery.j6502.emulator.EmulationState.EntryType;
 import de.codesourcery.j6502.emulator.MemorySubsystem.RAMView;
+import de.codesourcery.j6502.ui.Main;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.Misc;
 
@@ -440,25 +441,31 @@ public class VIC extends IMemoryRegion implements IStatefulPart
 
     // color palette taken from http://www.pepto.de/projects/colorvic/
 
-    public static final Color Black     = color(  0,  0,  0);
-    public static final Color White     = color(255,255,255);
-    public static final Color Red       = color(104, 55, 43);
-    public static final Color Cyan      = color(112,164,178);
-    public static final Color Violet    = color(111, 61,134);
-    public static final Color Green     = color( 88,141, 67);
-    public static final Color Blue      = color( 53, 40,121);
-    public static final Color Yellow    = color(184,199,111);
-    public static final Color Orange    = color(111, 79, 37);
-    public static final Color Brown     = color( 67, 57,  0);
-    public static final Color Lightred  = color(154,103, 89);
-    public static final Color Grey1     = color( 68, 68, 68);
-    public static final Color Grey2     = color(108,108,108);
-    public static final Color Lightgreen= color(154,210,132);
-    public static final Color Lightblue = color(108, 94,181);
-    public static final Color Lightgrey = color(149,149,149);
+    public static final Color Black     = color (0x000000 );
+    public static final Color White     = color( 0xffffff );
+    public static final Color Red       = color( 0x880000 );
+    public static final Color Cyan      = color( 0xaaffee );
+    public static final Color Violet    = color( 0xcc44cc );
+    public static final Color Green     = color( 0x00cc55 );
+    public static final Color Blue      = color( 0x0000aa );
+    public static final Color Yellow    = color( 0xeeee77); 
+    public static final Color Orange    = color( 0xdd8855 );
+    public static final Color Brown     = color( 0x664400);
+    public static final Color Lightred  = color( 0xf77777 );
+    public static final Color Grey1     = color( 0x333333 );
+    public static final Color Grey2     = color( 0x777777 );
+    public static final Color Lightgreen= color( 0xaaff66 );
+    public static final Color Lightblue = color( 0x0088ff );
+    public static final Color Lightgrey = color( 0xbbbbbb );
 
-    private static Color color(int r,int g,int b) { return new Color(r,g,b); }
-
+    private static Color color(int value) 
+    {
+        final int r = ( value >>> 16 ) & 0xff;
+        final int g = ( value >>> 8 ) & 0xff;
+        final int b = value & 0xff;
+        return new Color(r,g,b); 
+    }
+    
     public static final Color[] AWT_COLORS = { Black,White,Red,Cyan,Violet,Green,Blue,Yellow,Orange,Brown,Lightred,Grey1,Grey2,Lightgreen,Lightblue,Lightgrey};
 
     /**
@@ -879,7 +886,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             final int color = (data & bitMask) != 0 ? sprite.getMainColorRGB() : SPRITE_TRANSPARENT_COLOR;  
             // advance to next pixel in row
             pixelCounter++;
-            if ( ! sprite.isDoubleWidth() || (pixelCounter % 2 )== 0 ) 
+            if ( ! sprite.isDoubleWidth() || (pixelCounter & 1 )== 0 ) 
             {
                 if ( bitMask == 1 ) {
                     byteNumber++;
@@ -948,7 +955,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             // advance to next pixel in row
             pixelCounter++;
             final boolean isDoubleWidth = sprite.isDoubleWidth();
-            if ( ( isDoubleWidth && (pixelCounter % 4 )== 0 ) || (! isDoubleWidth && ( pixelCounter % 2 ) == 0 ) ) 
+            if ( ( isDoubleWidth && (pixelCounter & 0b11 )== 0 ) || (! isDoubleWidth && ( pixelCounter & 0b1 ) == 0 ) ) 
             {
                 if ( bitMask == 0b11 ) {
                     byteNumber++;
@@ -983,17 +990,14 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         @Override
         public int getRGBColor()
         {
-            if ( (bitCounter % 8) == 0 )
+            if ( (bitCounter & 0b111) == 0 )
             {
                 // calculate Y offset relative to start of display area
                 final int displayY  = beamY - FIRST_GFX_DISPLAY_AREA_Y;
-                if ( displayY >= 0 ) // Check probably not needed 
-                {
-                    currentVideoData  = videoData( displayY );
-                    currentColor = colorData( displayY );
-                    currentGlyph = glyphData( displayY );
-                    dataPtr++;
-                }
+                currentVideoData  = videoData( displayY );
+                currentColor = colorData( displayY );
+                currentGlyph = glyphData( displayY );
+                dataPtr++;
             }
             bitCounter++;
 
@@ -1017,12 +1021,12 @@ public class VIC extends IMemoryRegion implements IStatefulPart
  | "11": Color from bits 8-11 of c-data  |                         
                          */
                         case 0b00: pixelColor = rgbBackgroundColor; break;
-                        case 0b01: pixelColor = RGB_BG_COLORS[ (currentColor >> 4) & 0b1111 ]; break;
-                        case 0b10: pixelColor = RGB_FG_COLORS[ currentColor & 0b1111 ] ; break;
-                        case 0b11: pixelColor = RGB_FG_COLORS[ currentGlyph & 0b1111 ] ; break;                                                
+                        case 0b01: pixelColor = RGB_BG_COLORS[ (currentGlyph >> 4) & 0b1111 ]; break;
+                        case 0b10: pixelColor = RGB_FG_COLORS[ currentGlyph & 0b1111 ] ; break;
+                        case 0b11: pixelColor = RGB_FG_COLORS[ currentColor & 0b1111 ] ; break;                                                
                         default: throw new RuntimeException("Unreachable code reached");
                     }
-                    if ( (bitCounter % 2) == 0 ) {
+                    if ( (bitCounter & 1) == 0 ) {
                         currentVideoData <<= 2;
                     }
                 }
@@ -1075,7 +1079,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
                         case 0b11: pixelColor = RGB_FG_COLORS[ currentColor & 0b0111 ]; break;
                         default: throw new RuntimeException("Unreachable code reached");
                     }
-                    if ( (bitCounter % 2) == 0 ) {
+                    if ( (bitCounter & 1) == 0 ) {
                         currentVideoData <<= 2;
                     }
                 } else { // MC character mode , regular glyph (color <= 7)
@@ -1110,38 +1114,23 @@ public class VIC extends IMemoryRegion implements IStatefulPart
 
             // bitmap mode
             final int bitmapRowStartOffset = (displayY/8)*40*8;
+            // final int bitmapRowStartOffset = (displayY/8)*40;
             return vicAddressView.readByte( bitmapRAMAdr + bitmapRowStartOffset + dataPtr*8 + rowOffset );
         }
 
         private int glyphData(int displayY)
         {
-            final GraphicsMode mode = graphicsMode;
-            if ( (mode.textMode && mode.extendedColorMode ) || (mode.bitMapMode && mode.multiColorMode ) )
-            {
-                final int rowStartOffset = (displayY/8)*40;
-                int charPtr = videoRAMAdr+rowStartOffset+dataPtr;
-                return vicAddressView.readByte( charPtr );
-            }
-            return 0;
+            final int rowStartOffset = (displayY/8)*40;
+            int charPtr = videoRAMAdr+rowStartOffset+dataPtr;
+            return vicAddressView.readByte( charPtr );
         }
 
         private int colorData(int displayY)
         {
             final int rowStartOffset = (displayY/8)*40;
-
-            // fetch data from color ram
-            final GraphicsMode mode = graphicsMode;
-            if ( mode.textMode )
-            {
-                return colorMemory.readByte( 0x800 + rowStartOffset + dataPtr );
-            }
-
-            // bitmap mode
-//            if ( mode.multiColorMode ) {
-//                return colorMemory.readByte( 0x800 + rowStartOffset + dataPtr );
-//            }
-            return vicAddressView.readByte( videoRAMAdr + rowStartOffset + dataPtr );
+            return colorMemory.readByte( 0x800 + rowStartOffset + dataPtr );
         }
+        
         @Override
         public void onStartOfLine()
         {
@@ -2131,6 +2120,7 @@ display window.
                 } else {
                     rasterIRQLine &= ~(1<<8);
                 }
+                this.graphicsMode = GraphicsMode.get( this );                
                 recalculateVerticalBorders();
                 break;
             case VIC_CTRL2:
@@ -2374,5 +2364,5 @@ display window.
         {
             throw new RuntimeException(e);
         }        
-    }     
+    }
 }

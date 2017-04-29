@@ -10,15 +10,15 @@ package de.codesourcery.j6502;
 public class Constants 
 {
     // various Memory implementations
-    public static final boolean MEMORY_SUPPORT_BREAKPOINTS = true;
+    public static final boolean MEMORY_SUPPORT_BREAKPOINTS = false;
     public static final boolean MEMORY_DEBUG_STATE_PERSISTENCE = true;
     
     // EmulatorDriver class constants
     public static final boolean EMULATORDRIVER_DEBUG_CMDS = false;
-    public static final boolean EMULATORDRIVER_INVOKE_CALLBACK = true;
+    public static final boolean EMULATORDRIVER_INVOKE_CALLBACK = false;
     
     // Floppy drive
-    public static final boolean DISKDRIVE_TRACK_JOBQUEUE = true;    
+    public static final boolean DISKDRIVE_TRACK_JOBQUEUE = false;    
     
     /**
      * Careful, this interval is also used to re-calibrate the CPU's delay loop.
@@ -33,7 +33,7 @@ public class Constants
     public static final boolean CPUIMPL_DEBUG_TAPE = false;       
     
     // CPU class constants
-    public static final boolean CPU_RECORD_BACKTRACE = true;
+    public static final boolean CPU_RECORD_BACKTRACE = false;
     public static final int CPU_BACKTRACE_RINGBUFFER_SIZE = 64; // MUST be a power of 2 , don't forget to update BACKTRACE_RINGBUFFER_SIZE_MASK !!!
     public static final int CPU_BACKTRACE_RINGBUFFER_SIZE_MASK = 0b111111;
     

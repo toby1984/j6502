@@ -301,6 +301,7 @@ public abstract class EmulatorDriver extends Thread
 
         Cmd cmd = null;
         
+        BreakpointsController brkCtrl = getBreakPointsController();
         while( true )
         {
             if ( isRunnable )
@@ -388,7 +389,8 @@ public abstract class EmulatorDriver extends Thread
                 cyclesUntilNextTick = Constants.EMULATORDRIVER_CALLBACK_INVOKE_CYCLES;
                 startTime = System.currentTimeMillis();
                 adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
-
+                brkCtrl = getBreakPointsController();
+                
                 onStart();
             }
 
@@ -410,7 +412,7 @@ public abstract class EmulatorDriver extends Thread
 
                     cyclesUntilNextTick--;
 
-                    if ( getBreakPointsController().checkIsAtBreakpoint() ) 
+                    if ( brkCtrl.checkIsAtBreakpoint() ) 
                     {
                         isRunnable = false;
                         cmd = stopCommand( false , true ); // assign to cmd so that next loop iteration will know why we stopped execution
@@ -468,6 +470,7 @@ public abstract class EmulatorDriver extends Thread
                 startTime = now;
                 cyclesUntilNextTick = Constants.EMULATORDRIVER_CALLBACK_INVOKE_CYCLES;
                 adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
+                brkCtrl = getBreakPointsController();
             }
         }
     }

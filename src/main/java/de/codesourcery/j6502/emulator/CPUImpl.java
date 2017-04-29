@@ -1134,6 +1134,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
         penaltyop = false;
         penaltyaddr = false;
 
+        //         isAccumulatorImmediate = adrModeTable[opcode] == acc;
         adrModeTable[opcode].run();
         optable[opcode].run();
 
@@ -1309,6 +1310,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
         return toWordString( provider.readWord() & 0xffff );
     }
 
+    protected boolean isAccumulatorImmediate;
     protected final Runnable[] adrModeTable = new Runnable[]
             {
                     /*        |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */
