@@ -25,16 +25,16 @@ public final class CPUImpl
     protected CPU cpu;
     protected boolean penaltyop, penaltyaddr;
 
-    protected int ea, reladdr, value, result;
+    protected int ea, reladdr, value;
     protected byte oldstatus;
-    
+
     protected abstract class AbstractRunnable 
     {
         public abstract void run();
     }
-    
+
     protected final NOPRunnable NOP = new NOPRunnable();
-    
+
     protected final class NOPRunnable extends AbstractRunnable 
     {
         @Override
@@ -60,20 +60,20 @@ public final class CPUImpl
     protected void clearcarry() {
         cpu.clearFlag( Flag.CARRY );
     }
-    
+
     protected void setzero() {
         cpu.setFlag( Flag.ZERO );
     }
-    
+
     protected void clearzero() {
         cpu.clearFlag(Flag.ZERO);
     }
-    
+
     protected void setinterrupt()
     {
         cpu.setFlag( Flag.IRQ_DISABLE );
     }
-    
+
     protected void clearinterrupt()
     {
         cpu.clearFlag( Flag.IRQ_DISABLE );
@@ -82,30 +82,30 @@ public final class CPUImpl
     protected void setdecimal() {
         cpu.setFlag(Flag.DECIMAL_MODE);
     }
-    
+
     protected void cleardecimal() {
         cpu.clearFlag(Flag.DECIMAL_MODE);
     }
 
     protected void setoverflow() { 
-    	cpu.setFlag(Flag.OVERFLOW); 
+        cpu.setFlag(Flag.OVERFLOW); 
     }
 
     protected void clearoverflow() { 
-    	cpu.clearFlag(Flag.OVERFLOW); 
+        cpu.clearFlag(Flag.OVERFLOW); 
     }
 
     protected int readAndWrite6502(int address) {
-	    int value = memory.readByte( address );
-	    memory.writeByte( address , (byte) value );
-		return value;
+        int value = memory.readByte( address );
+        memory.writeByte( address , (byte) value );
+        return value;
     }
     protected void setsign() { 
-    	cpu.setFlag(Flag.NEGATIVE); 
+        cpu.setFlag(Flag.NEGATIVE); 
     }
 
     protected void clearsign() { 
-    	cpu.clearFlag(Flag.NEGATIVE); 
+        cpu.clearFlag(Flag.NEGATIVE); 
     }
 
     //flag calculation macros
@@ -279,6 +279,32 @@ public final class CPUImpl
         }
     };
 
+    protected final AbstractRunnable indJmp = new AbstractRunnable() { // indirect (JMP)
+        @Override
+        public void run() 
+        {
+            /* 6502 quirk:
+             * The 6502's memory indirect jump instruction, JMP (<address>), is partially broken. 
+             * If <address> is hex xxFF (i.e., any word ending in FF), 
+             * the processor will not jump to the address stored in xxFF and xxFF+1 as expected, 
+             * but rather the one defined by xxFF and xx00.
+             * For example, JMP ($10FF) would jump to the address stored in 10FF and 1000, 
+             * instead of the one stored in 10FF and 1100). 
+             */
+            final int adr = memory.readWord( cpu.pc() );
+            if ( ( adr & 0xff) == 0xff )
+            {
+                final int low = memory.readByte( adr );
+                final int hi = memory.readByte( adr & 0xff00 );
+                ea = memory.readWord( hi<<8 | low );
+            } 
+            else {
+                ea = memory.readWord( adr );
+            }
+            cpu.incPC(2);
+        }
+    };    
+
     protected final AbstractRunnable indx = new AbstractRunnable() {
         @Override
         public void run() { // (indirect,X)
@@ -330,7 +356,7 @@ public final class CPUImpl
             write6502(ea, saveval);
         }
     }
-    
+
     protected int read6502(int address)
     {
         return memory.readByte( address );
@@ -342,11 +368,42 @@ public final class CPUImpl
     }    
 
     //instruction handler functions
-    protected final AbstractRunnable adc = new AbstractRunnable() {
+    protected final AbstractRunnable adcNew = new AbstractRunnable() {
+
+        @Override
+        public void run() 
+        {
+            penaltyop = true;
+            value = getvalue();
+            int a = cpu.getAccumulator();
+            int result = a + value + (cpu.isSet( Flag.CARRY ) ? 1 : 0);
+            
+            carrycalc(result);
+            zerocalc(result);
+            overflowcalc(result, a, value);
+            signcalc(result);
+            
+            if ( cpu.isSet( Flag.DECIMAL_MODE ) ) 
+            {
+                clearcarry();
+                
+                if ((a & 0x0F) > 0x09) {
+                    a += 0x06;
+                }
+                if ((a & 0xF0) > 0x90) {
+                    a += 0x60;
+                    setcarry();
+                }
+            }
+            saveaccum(result);
+        }
+    };
+    
+    protected final AbstractRunnable adcOld = new AbstractRunnable() {
         @Override
         public void run() {
             penaltyop = true;
-        	value = getvalue();
+            value = getvalue();
 
             if ( cpu.isSet( Flag.DECIMAL_MODE) )
             {
@@ -461,8 +518,8 @@ public final class CPUImpl
         @Override
         public void run() {
             penaltyop = true;
-        	value = getvalue();
-            result = cpu.getAccumulator() & value;
+            value = getvalue();
+            int result = cpu.getAccumulator() & value;
 
             zerocalc(result);
             signcalc(result);
@@ -483,7 +540,7 @@ public final class CPUImpl
              */
             putvalue(value);
 
-            result = value << 1;
+            int result = value << 1;
 
             carrycalc(result);
             zerocalc(result);
@@ -548,7 +605,7 @@ public final class CPUImpl
         @Override
         public void run() {
             value = getvalue();
-            result = cpu.getAccumulator() & value;
+            int result = cpu.getAccumulator() & value;
 
             cpu.setFlag( CPU.Flag.ZERO , (result & 0xff) == 0);
             cpu.setFlag( Flag.NEGATIVE , (value & (1<<7)) != 0 );
@@ -684,7 +741,7 @@ public final class CPUImpl
         public void run() {
             penaltyop = true;
             value = getvalue();
-            result = cpu.getAccumulator() - value;
+            int result = cpu.getAccumulator() - value;
 
             if ( cpu.getAccumulator() >= (value & 0x00FF)) {
                 setcarry();
@@ -706,7 +763,7 @@ public final class CPUImpl
         @Override
         public void run() {
             value = getvalue();
-            result = cpu.getY() - value;
+            int result = cpu.getY() - value;
 
             if ( cpu.getY() >= (value & 0x00FF)) {
                 setcarry();
@@ -731,7 +788,7 @@ public final class CPUImpl
             value = getvalue();
 
             final int x = cpu.getX();
-            result = x - value;
+            int result = x - value;
 
             if (x >= (value & 0x00FF) ) {
                 setcarry();
@@ -753,7 +810,7 @@ public final class CPUImpl
         @Override
         public void run() {
             value = getvaluereadwrite();
-            result = value - 1;
+            int result = value - 1;
 
             zerocalc(result);
             signcalc(result);
@@ -787,7 +844,7 @@ public final class CPUImpl
         public void run() {
             penaltyop = true;
             value = getvalue();
-            result = cpu.getAccumulator() ^ value;
+            int result = cpu.getAccumulator() ^ value;
 
             zerocalc(result);
             signcalc(result);
@@ -808,7 +865,7 @@ public final class CPUImpl
              */
             putvalue(value);
 
-            result = value + 1;
+            int result = value + 1;
 
             zerocalc(result);
             signcalc(result);
@@ -899,7 +956,7 @@ public final class CPUImpl
         @Override
         public void run() {
             value = getvaluereadwrite();
-            result = value >>> 1;
+            int result = value >>> 1;
 
             if ( (value & 1) != 0 ) {
                 setcarry();
@@ -921,17 +978,17 @@ public final class CPUImpl
             // and https://retrocomputing.stackexchange.com/questions/145/why-does-6502-indexed-lda-take-an-extra-cycle-at-page-boundaries
             // the additional cycle penalty on page boundary crossings applies only to address calculations
             // Since NOP does none of them I don't think this can be a penalty operation.
-            
-//        switch (opcode) {
-//            case 0x1C:
-//            case 0x3C:
-//            case 0x5C:
-//            case 0x7C:
-//            case 0xDC:
-//            case 0xFC:
-//                penaltyop = true;
-//                break;
-//        }
+
+            //        switch (opcode) {
+            //            case 0x1C:
+            //            case 0x3C:
+            //            case 0x5C:
+            //            case 0x7C:
+            //            case 0xDC:
+            //            case 0xFC:
+            //                penaltyop = true;
+            //                break;
+            //        }
         }
     };
 
@@ -940,7 +997,7 @@ public final class CPUImpl
         public void run() {
             penaltyop = true;
             value = getvalue();
-            result = cpu.getAccumulator() | value;
+            int result = cpu.getAccumulator() | value;
 
             zerocalc(result);
             signcalc(result);
@@ -960,7 +1017,9 @@ public final class CPUImpl
         @Override
         public void run() {
             final byte flags = cpu.getFlagBits();
-            push8( flags  & 0xff );
+            // quirk: The status bits pushed on the stack by PHP have the breakpoint bit set.
+            // see http://nesdev.com/6502bugs.txt
+            push8( CPU.Flag.BREAK.set( flags ) & 0xff );
         }
     };
 
@@ -988,7 +1047,7 @@ public final class CPUImpl
         @Override
         public void run() {
             value = getvaluereadwrite();
-            result = (value << 1) | ( cpu.isSet( Flag.CARRY) ? 1 : 0 );
+            int result = (value << 1) | ( cpu.isSet( Flag.CARRY) ? 1 : 0 );
 
             carrycalc(result);
             zerocalc(result);
@@ -1002,6 +1061,7 @@ public final class CPUImpl
         @Override
         public void run() {
             value = getvaluereadwrite();
+            int result;
             if (  cpu.isSet(Flag.CARRY ) ) {
                 result = (value >>> 1) | 1 << 7;
             } else {
@@ -1039,11 +1099,45 @@ public final class CPUImpl
         }
     };
 
-    protected final AbstractRunnable sbc = new AbstractRunnable() {
+    protected final AbstractRunnable sbcNew = new AbstractRunnable() {
+
+        @Override
+        public void run() 
+        {
+            penaltyop = true;
+            value = getvalue() ^ 0x00FF;
+            int a = cpu.getAccumulator();
+            
+            int result = a + value + (cpu.isSet( Flag.CARRY ) ? 1 : 0 );
+
+            carrycalc(result);
+            zerocalc(result);
+            overflowcalc(result, a, value);
+            signcalc(result);
+
+            if ( cpu.isSet( Flag.DECIMAL_MODE ) ) 
+            {
+                clearcarry();
+
+                a -= 0x66;
+                if ((a & 0x0F) > 0x09) {
+                    a += 0x06;
+                }
+                if ((a & 0xF0) > 0x90) {
+                    a += 0x60;
+                    setcarry();
+                }
+            }
+
+            saveaccum(result);
+        }
+    };
+
+    protected final AbstractRunnable sbcOld = new AbstractRunnable() {
         @Override
         public void run() {
             penaltyop = true;
-        	value = getvalue();
+            value = getvalue();
 
             int a = cpu.getAccumulator();
 
@@ -1228,7 +1322,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
         @Override
         public void run() {
             inc.run();
-            sbc.run();
+            sbcNew.run();
             if (penaltyop && penaltyaddr) {
                 cpu.cycles--;
             }
@@ -1279,7 +1373,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
         @Override
         public void run() {
             ror.run();
-            adc.run();
+            adcNew.run();
             if (penaltyop && penaltyaddr) {
                 cpu.cycles--;
             }
@@ -1289,7 +1383,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
     public void executeInstruction()
     {
         final int initialPC;
-        
+
         if ( Constants.CPU_RECORD_BACKTRACE ) {
             initialPC = cpu.recordPC();
         } else {
@@ -1298,46 +1392,46 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
 
         // TODO: Remove tape debug code
 
-//        if ( initialPC == 0xF92C) 
-//        {
-//            final int correction = memory.readByte( 0xb0 );
-//            System.out.println("Speed correction: "+correction+" (%"+StringUtils.leftPad( Integer.toBinaryString(correction ) , 8 , '0' )+")" );
-//        } 
-//        else if ( initialPC == 0xF9D5) 
-//        {
-//            final WavePeriod first = memory.readByte( 0xd7 ) == 0 ? WavePeriod.SHORT : WavePeriod.MEDIUM;
-//            final WavePeriod second = cpu.getX() == 0 ? WavePeriod.SHORT : WavePeriod.MEDIUM;
-//            System.out.println("Detected pair ("+first+","+second+")");
-//        } 
-//        else if ( initialPC == 0xFA10 ) 
-//        {
-//            System.out.println("Long pulse received");
-//        } 
-//        else if ( initialPC == 0xF98B ) 
-//        {
-//            System.out.println("parity error");
-//        } 
-//        else if ( initialPC == 0xFA8F2 ) 
-//        {
-//            System.out.println("Read error (parity)");
-//        } 
-//        else if ( initialPC == 0xFA57 ) 
-//        {
-//            System.out.println("Read error");
-//        } 
-//        else if ( initialPC == 0xF959 ) 
-//        {
-//            final int elapsedLo = memory.readByte( 0xb1 ) & 0xff;
-//            final int elapsedHi = cpu.getAccumulator() & 0xff;
-//            final int elapsedCycles = (elapsedHi << 8 | elapsedLo)*4;
-//            System.out.println("Elapsed cycles: "+elapsedCycles);
-//        }
-//        else if ( initialPC == 0xFA08 ) 
-//        {
-//            final int value = memory.readByte( 0xbf ); 
-//            final int bit = memory.readByte( 0xa3 ); 
-//            System.out.println("Byte is now: %"+StringUtils.leftPad( Integer.toBinaryString( value ) , 8 , "0" )+" , bit "+bit+" , ($"+Integer.toHexString(value) );
-//        }
+        //        if ( initialPC == 0xF92C) 
+        //        {
+        //            final int correction = memory.readByte( 0xb0 );
+        //            System.out.println("Speed correction: "+correction+" (%"+StringUtils.leftPad( Integer.toBinaryString(correction ) , 8 , '0' )+")" );
+        //        } 
+        //        else if ( initialPC == 0xF9D5) 
+        //        {
+        //            final WavePeriod first = memory.readByte( 0xd7 ) == 0 ? WavePeriod.SHORT : WavePeriod.MEDIUM;
+        //            final WavePeriod second = cpu.getX() == 0 ? WavePeriod.SHORT : WavePeriod.MEDIUM;
+        //            System.out.println("Detected pair ("+first+","+second+")");
+        //        } 
+        //        else if ( initialPC == 0xFA10 ) 
+        //        {
+        //            System.out.println("Long pulse received");
+        //        } 
+        //        else if ( initialPC == 0xF98B ) 
+        //        {
+        //            System.out.println("parity error");
+        //        } 
+        //        else if ( initialPC == 0xFA8F2 ) 
+        //        {
+        //            System.out.println("Read error (parity)");
+        //        } 
+        //        else if ( initialPC == 0xFA57 ) 
+        //        {
+        //            System.out.println("Read error");
+        //        } 
+        //        else if ( initialPC == 0xF959 ) 
+        //        {
+        //            final int elapsedLo = memory.readByte( 0xb1 ) & 0xff;
+        //            final int elapsedHi = cpu.getAccumulator() & 0xff;
+        //            final int elapsedCycles = (elapsedHi << 8 | elapsedLo)*4;
+        //            System.out.println("Elapsed cycles: "+elapsedCycles);
+        //        }
+        //        else if ( initialPC == 0xFA08 ) 
+        //        {
+        //            final int value = memory.readByte( 0xbf ); 
+        //            final int bit = memory.readByte( 0xa3 ); 
+        //            System.out.println("Byte is now: %"+StringUtils.leftPad( Integer.toBinaryString( value ) , 8 , "0" )+" , bit "+bit+" , ($"+Integer.toHexString(value) );
+        //        }
 
         final int opcode = read6502( initialPC ) & 0xff;
 
@@ -1533,7 +1627,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
                     /* 3 */     rel, indy,  imp, indy,  igb,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, igw , absx, absx, absx, /* 3 */
                     /* 4 */     imp, indx,  imp, indx,  igb,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso, /* 4 */
                     /* 5 */     rel, indy,  imp, indy,  igb,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, igw , absx, absx, absx, /* 5 */
-                    /* 6 */     imp, indx,  imp, indx,  igb,   zp,   zp,   zp,  imp,  imm,  acc,  imm,  ind, abso, abso, abso, /* 6 */
+                    /* 6 */     imp, indx,  imp, indx,  igb,   zp,   zp,   zp,  imp,  imm,  acc,  imm,indJmp,abso, abso, abso, /* 6 */
                     /* 7 */     rel, indy,  imp, indy,  igb,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, igw , absx, absx, absx, /* 7 */
                     /* 8 */     igb, indx,  igb, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso, /* 8 */
                     /* 9 */     rel, indy,  imp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, absx, absx, absy, absy, /* 9 */
@@ -1575,16 +1669,16 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
                     /* 3 */      bmi,  and,  hlt,  rla,  skb,  and,  rol,  rla,  sec,  and,  nop,  rla,  skw,  and,  rol,  rla, /* 3 */
                     /* 4 */      rti,  eor,  hlt,  sre,  skb,  eor,  lsr,  sre,  pha,  eor,  lsr,  nop,  jmp,  eor,  lsr,  sre, /* 4 */
                     /* 5 */      bvc,  eor,  hlt,  sre,  skb,  eor,  lsr,  sre,  cli,  eor,  nop,  sre,  skw,  eor,  lsr,  sre, /* 5 */
-                    /* 6 */      rts,  adc,  hlt,  rra,  skb,  adc,  ror,  rra,  pla,  adc,  ror,  nop,  jmp,  adc,  ror,  rra, /* 6 */
-                    /* 7 */      bvs,  adc,  hlt,  rra,  skb,  adc,  ror,  rra,  sei,  adc,  nop,  rra,  skw,  adc,  ror,  rra, /* 7 */
+                    /* 6 */      rts,  adcNew,  hlt,  rra,  skb,  adcNew,  ror,  rra,  pla,  adcNew,  ror,  nop,  jmp,  adcNew,  ror,  rra, /* 6 */
+                    /* 7 */      bvs,  adcNew,  hlt,  rra,  skb,  adcNew,  ror,  rra,  sei,  adcNew,  nop,  rra,  skw,  adcNew,  ror,  rra, /* 7 */
                     /* 8 */      skb,  sta,  skb,  axs,  sty,  sta,  stx,  axs,  dey,  nop,  txa,  nop,  sty,  sta,  stx,  axs, /* 8 */
                     /* 9 */      bcc,  sta,  hlt,  nop,  sty,  sta,  stx,  axs,  tya,  sta,  txs,  nop,  nop,  sta,  nop,  nop, /* 9 */
                     /* A */      ldy,  lda,  ldx,  lax,  ldy,  lda,  ldx,  lax,  tay,  lda,  tax,  nop,  ldy,  lda,  ldx,  lax, /* A */
                     /* B */      bcs,  lda,  hlt,  lax,  ldy,  lda,  ldx,  lax,  clv,  lda,  tsx,  lax,  ldy,  lda,  ldx,  lax, /* B */
                     /* C */      cpy,  cmp,  skb,  dcp,  cpy,  cmp,  dec,  dcp,  iny,  cmp,  dex,  nop,  cpy,  cmp,  dec,  dcp, /* C */
                     /* D */      bne,  cmp,  hlt,  dcp,  skb,  cmp,  dec,  dcp,  cld,  cmp,  nop,  dcp,  skw,  cmp,  dec,  dcp, /* D */
-                    /* E */      cpx,  sbc,  skb,  isb,  cpx,  sbc,  inc,  isb,  inx,  sbc,  nop,  sbc,  cpx,  sbc,  inc,  isb, /* E */
-                    /* F */      beq,  sbc,  hlt,  isb,  skb,  sbc,  inc,  isb,  sed,  sbc,  nop,  isb,  skw,  sbc,  inc,  isb  /* F */
+                    /* E */      cpx,  sbcNew,  skb,  isb,  cpx,  sbcNew,  inc,  isb,  inx,  sbcNew,  nop,  sbcNew,  cpx,  sbcNew,  inc,  isb, /* E */
+                    /* F */      beq,  sbcNew,  hlt,  isb,  skb,  sbcNew,  inc,  isb,  sed,  sbcNew,  nop,  isb,  skw,  sbcNew,  inc,  isb  /* F */
             };
 
     protected static final int[] TICK_TABLE= new int[]

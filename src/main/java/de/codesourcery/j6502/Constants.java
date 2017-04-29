@@ -15,10 +15,10 @@ public class Constants
     
     // EmulatorDriver class constants
     public static final boolean EMULATORDRIVER_DEBUG_CMDS = false;
-    public static final boolean EMULATORDRIVER_INVOKE_CALLBACK = false;
+    public static final boolean EMULATORDRIVER_INVOKE_CALLBACK = true;
     
     // Floppy drive
-    public static final boolean DISKDRIVE_TRACK_JOBQUEUE = false;    
+    public static final boolean DISKDRIVE_TRACK_JOBQUEUE = true;    
     
     /**
      * Careful, this interval is also used to re-calibrate the CPU's delay loop.
@@ -33,7 +33,7 @@ public class Constants
     public static final boolean CPUIMPL_DEBUG_TAPE = false;       
     
     // CPU class constants
-    public static final boolean CPU_RECORD_BACKTRACE = false;
+    public static final boolean CPU_RECORD_BACKTRACE = true;
     public static final int CPU_BACKTRACE_RINGBUFFER_SIZE = 64; // MUST be a power of 2 , don't forget to update BACKTRACE_RINGBUFFER_SIZE_MASK !!!
     public static final int CPU_BACKTRACE_RINGBUFFER_SIZE_MASK = 0b111111;
     
@@ -45,6 +45,9 @@ public class Constants
     public static final boolean VIC_DEBUG_DRAW_RASTER_IRQ_LINE = true;
     public static final boolean VIC_DEBUG_SPRITES = true;
     public static final boolean VIC_DEBUG_MEMORY_LAYOUT = true;
+    
+    public static final boolean VIC_SPRITE_SPRITE_COLLISIONS = true;
+    public static final boolean VIC_SPRITE_BACKGROUND_COLLISIONS = true;
     
     // CIA class constants
     public static final boolean CIA_DEBUG = false;

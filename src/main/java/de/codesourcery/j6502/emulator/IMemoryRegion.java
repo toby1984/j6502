@@ -85,7 +85,6 @@ public abstract class IMemoryRegion
 	 * @return
 	 */
 	public abstract int readByteNoSideEffects(int offset);
-	
 
 	@Override
 	public String toString() {

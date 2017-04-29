@@ -16,7 +16,6 @@ import de.codesourcery.j6502.emulator.CPU.IRQType;
 import de.codesourcery.j6502.emulator.EmulationState.EmulationStateEntry;
 import de.codesourcery.j6502.emulator.EmulationState.EntryType;
 import de.codesourcery.j6502.emulator.MemorySubsystem.RAMView;
-import de.codesourcery.j6502.ui.Main;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.Misc;
 
@@ -843,15 +842,18 @@ public class VIC extends IMemoryRegion implements IStatefulPart
             }            
             contributingSprite = sprite0;
         }
-        if ( backgroundCollisionMask != 0 ) {
+        if ( Constants.VIC_SPRITE_BACKGROUND_COLLISIONS && backgroundCollisionMask != 0 ) {
             spriteBackgroundCollision |= backgroundCollisionMask;
             spriteBackgroundCollisionDetected = true;
         }
         if ( contributingSprite != null ) 
         {
-            if ( spriteSpriteCollisionMask != 0 ) {
-                spriteSpriteCollision |= spriteSpriteCollisionMask;
-                spriteSpriteCollisionDetected = true;
+            if ( Constants.VIC_SPRITE_SPRITE_COLLISIONS ) 
+            {
+                if ( spriteSpriteCollisionMask != 0 ) {
+                    spriteSpriteCollision |= spriteSpriteCollisionMask;
+                    spriteSpriteCollisionDetected = true;
+                }
             }
 
             // sprite-background rendering priority: only render sprite color if the background is a background color
@@ -1157,7 +1159,6 @@ public class VIC extends IMemoryRegion implements IStatefulPart
 
     // @GuardedBy( frontBuffer );
     private int[] imagePixelData;
-
     private int imagePixelPtr;
 
     private long previousFrameTimestamp; // TODO: DEBUG code
@@ -1950,8 +1951,7 @@ display window.
 
     @Override
     public void writeByteNoSideEffects(int offset, byte value) {
-        // nothing to do here as this class
-        // does not rely on storing arbitrary stuff in a base class
+        throw new UnsupportedOperationException("writeByteNoSideEffects() not implemented");
     }
 
     @Override
@@ -2205,11 +2205,13 @@ display window.
     @Override
     public void restoreState(EmulationState state)
     {
-        state.getEntry(EntryType.VIC_RAM).applyPayload( this , false );
+        state.getEntry(EntryType.VIC_RAM).applyPayload(  vicAddressView , false );
 
         final ByteArrayInputStream out = state.getEntry(EntryType.VIC_FIELDS).toByteArrayInputStream();
 
-        try {
+        try 
+        {
+            memoryMapping = readInt( out );            
             vicCtrl1 = readInt( out );
             vicCtrl2 = readInt( out  );
 
@@ -2296,7 +2298,10 @@ display window.
         new EmulationStateEntry(EntryType.VIC_RAM , 0 ).setPayload( this ).addTo( state );
 
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try {
+        try 
+        {
+            writeInt( memoryMapping , out );
+            
             writeInt( vicCtrl1 , out );
             writeInt( vicCtrl2 , out );
 

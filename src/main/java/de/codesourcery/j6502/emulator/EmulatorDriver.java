@@ -331,8 +331,10 @@ public abstract class EmulatorDriver extends Thread
                                     ((RunnableCmd) cmd).visitor.accept( emulator );
                                 }
                                 continue; // start over as the Runnable might've issued a new command that needs processing
-                            default:
-                                throw new RuntimeException("Unreachable code reached");
+                            case START:
+                                break;
+                           default:
+                               throw new RuntimeException("Unreachable code reached");
                         }       
                     } finally {
                         cmd.ackIfNecessary();
