@@ -23,11 +23,24 @@ public final class CPUImpl
 {
     protected IMemoryRegion memory;
     protected CPU cpu;
-
     protected boolean penaltyop, penaltyaddr;
 
     protected int ea, reladdr, value, result;
     protected byte oldstatus;
+    
+    protected abstract class AbstractRunnable 
+    {
+        public abstract void run();
+    }
+    
+    protected final NOPRunnable NOP = new NOPRunnable();
+    
+    protected final class NOPRunnable extends AbstractRunnable 
+    {
+        @Override
+        public void run() {
+        }
+    }
 
     public CPUImpl(CPU cpu,IMemoryRegion region)
     {
@@ -156,102 +169,140 @@ public final class CPUImpl
     }
 
     //addressing mode functions, calculates effective addresses
-    protected final Runnable imp = () -> {}; //implied
+    protected final AbstractRunnable imp = NOP; //implied
 
-    protected final Runnable  acc = () -> {};  //accumulator
+    protected final AbstractRunnable  acc = NOP;  //accumulator
 
-    protected Runnable imm = () -> { //immediate
-        ea = cpu.pc();
-        cpu.incPC();
-    };
-
-    protected final Runnable zp = () -> { //zero-page
-        ea = read6502( cpu.pc() );
-        cpu.incPC();
-    };
-
-    protected final Runnable zpx = () -> { //zero-page,X
-        ea = (read6502( cpu.pc() ) + cpu.getX() ) & 0xFF; //zero-page wraparound
-        cpu.incPC();
-    };
-
-    protected final Runnable zpy = () -> { //zero-page,Y
-        ea = (read6502( cpu.pc() ) + cpu.getY() ) & 0xFF; //zero-page wraparound
-        cpu.incPC();
-    };
-
-    protected final Runnable  rel = () -> { //relative for branch ops (8-bit immediate value, sign-extended)
-        reladdr = read6502(cpu.pc());
-        cpu.incPC();
-        if ( (reladdr & 0x80) != 0 ) // negative branch offset ?
-        {
-            reladdr |= 0xFFFFFF00; // sign extent byte -> int
-        }
-    };
-
-    protected final Runnable abso= () -> { //absolute
-        ea = memory.readWord( cpu.pc() );
-        cpu.incPC(2);
-    };
-
-    protected final Runnable absx = () -> { //absolute,X
-        ea = memory.readWord( cpu.pc() );
-        final int startpage = ea & 0xFF00;
-        ea += cpu.getX();
-
-        if (startpage != (ea & 0xFF00)) { //one cycle penalty for page-crossing
-            penaltyaddr = true;
-        }
-
-        cpu.incPC(2);
-    };
-
-    protected final Runnable absy = () -> { //absolute,Y
-        ea = memory.readWord( cpu.pc() );
-        final int startpage = ea & 0xFF00;
-        ea += cpu.getY();
-
-        if (startpage != (ea & 0xFF00)) { //one cycle penalty for page-crossing
-            penaltyaddr = true;
-        }
-        cpu.incPC(2);
-    };
-
-    protected final Runnable igb = () ->
+    protected AbstractRunnable imm = new AbstractRunnable() 
     {
-        cpu.incPC();
+        @Override
+        public void run() { //immediate
+            ea = cpu.pc();
+            cpu.incPC();
+        }
     };
 
-    protected final Runnable igw = () ->
-    {
-        cpu.incPC(2);
+    protected final AbstractRunnable zp = new AbstractRunnable() {
+        @Override
+        public void run() { //zero-page
+            ea = read6502( cpu.pc() );
+            cpu.incPC();
+        }
     };
 
-    protected final Runnable ind = () -> { //indirect
-        int eahelp = memory.readWord( cpu.pc() );
-        int eahelp2 = (eahelp & 0xFF00) | ((eahelp + 1) & 0x00FF); //replicate 6502 page-boundary wraparound bug
-        ea = read6502(eahelp) | (read6502(eahelp2) << 8);
-        cpu.incPC(2);
+    protected final AbstractRunnable zpx = new AbstractRunnable() {
+        @Override
+        public void run() { //zero-page,X
+            ea = (read6502( cpu.pc() ) + cpu.getX() ) & 0xFF; //zero-page wraparound
+            cpu.incPC();
+        }
     };
 
-    protected final Runnable indx = () -> { // (indirect,X)
-
-        int eahelp = ( read6502( cpu.pc() ) + cpu.getX() ) & 0xFF; //zero-page wraparound for table pointer
-        cpu.incPC();
-        ea = read6502(eahelp & 0x00FF) | read6502((eahelp+1) & 0x00FF) << 8;
+    protected final AbstractRunnable zpy = new AbstractRunnable() {
+        @Override
+        public void run() { //zero-page,Y
+            ea = (read6502( cpu.pc() ) + cpu.getY() ) & 0xFF; //zero-page wraparound
+            cpu.incPC();
+        }
     };
 
-    protected final Runnable indy = () -> { // (indirect),Y
-        final int eahelp = read6502(cpu.pc());
-        cpu.incPC();
+    protected final AbstractRunnable  rel = new AbstractRunnable() {
+        @Override
+        public void run() { //relative for branch ops (8-bit immediate value, sign-extended)
+            reladdr = read6502(cpu.pc());
+            cpu.incPC();
+            if ( (reladdr & 0x80) != 0 ) // negative branch offset ?
+            {
+                reladdr |= 0xFFFFFF00; // sign extent byte -> int
+            }
+        }
+    };
 
-        final int eahelp2 = (eahelp & 0xFF00) | ((eahelp + 1) & 0x00FF); //zero-page wraparound
-        ea = read6502(eahelp) | (read6502(eahelp2) << 8);
-        final int startpage = ea & 0xFF00;
-        ea += cpu.getY();
+    protected final AbstractRunnable abso= new AbstractRunnable() {
+        @Override
+        public void run() { //absolute
+            ea = memory.readWord( cpu.pc() );
+            cpu.incPC(2);
+        }
+    };
 
-        if (startpage != (ea & 0xFF00)) { //one cycle penalty for page-crossing
-            penaltyaddr = true;
+    protected final AbstractRunnable absx = new AbstractRunnable() {
+        @Override
+        public void run() { //absolute,X
+            ea = memory.readWord( cpu.pc() );
+            final int startpage = ea & 0xFF00;
+            ea += cpu.getX();
+
+            if (startpage != (ea & 0xFF00)) { //one cycle penalty for page-crossing
+                penaltyaddr = true;
+            }
+
+            cpu.incPC(2);
+        }
+    };
+
+    protected final AbstractRunnable absy = new AbstractRunnable() {
+        @Override
+        public void run() { //absolute,Y
+            ea = memory.readWord( cpu.pc() );
+            final int startpage = ea & 0xFF00;
+            ea += cpu.getY();
+
+            if (startpage != (ea & 0xFF00)) { //one cycle penalty for page-crossing
+                penaltyaddr = true;
+            }
+            cpu.incPC(2);
+        }
+    };
+
+    protected final AbstractRunnable igb = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.incPC();
+        }
+    };
+
+    protected final AbstractRunnable igw = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.incPC(2);
+        }
+    };
+
+    protected final AbstractRunnable ind = new AbstractRunnable() {
+        @Override
+        public void run() { //indirect
+            int eahelp = memory.readWord( cpu.pc() );
+            int eahelp2 = (eahelp & 0xFF00) | ((eahelp + 1) & 0x00FF); //replicate 6502 page-boundary wraparound bug
+            ea = read6502(eahelp) | (read6502(eahelp2) << 8);
+            cpu.incPC(2);
+        }
+    };
+
+    protected final AbstractRunnable indx = new AbstractRunnable() {
+        @Override
+        public void run() { // (indirect,X)
+
+            int eahelp = ( read6502( cpu.pc() ) + cpu.getX() ) & 0xFF; //zero-page wraparound for table pointer
+            cpu.incPC();
+            ea = read6502(eahelp & 0x00FF) | read6502((eahelp+1) & 0x00FF) << 8;
+        }
+    };
+
+    protected final AbstractRunnable indy = new AbstractRunnable() {
+        @Override
+        public void run() { // (indirect),Y
+            final int eahelp = read6502(cpu.pc());
+            cpu.incPC();
+
+            final int eahelp2 = (eahelp & 0xFF00) | ((eahelp + 1) & 0x00FF); //zero-page wraparound
+            ea = read6502(eahelp) | (read6502(eahelp2) << 8);
+            final int startpage = ea & 0xFF00;
+            ea += cpu.getY();
+
+            if (startpage != (ea & 0xFF00)) { //one cycle penalty for page-crossing
+                penaltyaddr = true;
+            }
         }
     };
 
@@ -291,40 +342,41 @@ public final class CPUImpl
     }    
 
     //instruction handler functions
-    protected final Runnable adc = () ->
-    {
-        penaltyop = true;
-		value = getvalue();
+    protected final AbstractRunnable adc = new AbstractRunnable() {
+        @Override
+        public void run() {
+            penaltyop = true;
+        	value = getvalue();
 
-        if ( cpu.isSet( Flag.DECIMAL_MODE) )
-        {
-            /*
-             * - When the carry is clear, ADC NUM performs the calculation A = A + NUM
-             * - When the carry is set, ADC NUM performs the calculation A = A + NUM + 1
-             * - When the carry is clear, SBC NUM performs the calculation A = A - NUM - 1
-             * - When the carry is set, SBC NUM performs the calculation A = A - NUM
-             *
-             * The only difference is that ADC and SBC perform a binary calculation in binary mode, and perform a BCD calculation in decimal mode.
-             *
-             * The ADC and SBC instructions affect the accumulator and the C, N, V, and Z flags.
-             *  In decimal mode, the accumulator contains the result of the addition or subtraction, as expected.
-             *  In decimal mode, after an ADC, the carry is set if the result was greater than 99 ($99)
-             *  and clear otherwise, and after a SBC, the carry is clear if the result was less than 0 and set otherwise. A few examples are in order:
-             *
-             *  In binary mode, subtraction has a wraparound effect.
-             *  For example $00 - $01 = $FF (and the carry is clear).
-             *  In decimal mode, there is a similar wraparound effect: $00 - $01 = $99, and the carry is clear.
-             *
-             *  In binary mode, the Z flag simply indicates where the result of the instruction is non-zero (Z flag clear) or zero (Z flag set).
-             *  In decimal mode, the Z flag has the same meaning.
-             *
-             *  A common (and correct) interpretation of the N flag is that it contains the value of the high bit (i.e. bit 7) of the result of the instruction.
-             *  This interpretation is the meaning of the N flag in decimal mode.
-             */
+            if ( cpu.isSet( Flag.DECIMAL_MODE) )
+            {
+                /*
+                 * - When the carry is clear, ADC NUM performs the calculation A = A + NUM
+                 * - When the carry is set, ADC NUM performs the calculation A = A + NUM + 1
+                 * - When the carry is clear, SBC NUM performs the calculation A = A - NUM - 1
+                 * - When the carry is set, SBC NUM performs the calculation A = A - NUM
+                 *
+                 * The only difference is that ADC and SBC perform a binary calculation in binary mode, and perform a BCD calculation in decimal mode.
+                 *
+                 * The ADC and SBC instructions affect the accumulator and the C, N, V, and Z flags.
+                 *  In decimal mode, the accumulator contains the result of the addition or subtraction, as expected.
+                 *  In decimal mode, after an ADC, the carry is set if the result was greater than 99 ($99)
+                 *  and clear otherwise, and after a SBC, the carry is clear if the result was less than 0 and set otherwise. A few examples are in order:
+                 *
+                 *  In binary mode, subtraction has a wraparound effect.
+                 *  For example $00 - $01 = $FF (and the carry is clear).
+                 *  In decimal mode, there is a similar wraparound effect: $00 - $01 = $99, and the carry is clear.
+                 *
+                 *  In binary mode, the Z flag simply indicates where the result of the instruction is non-zero (Z flag clear) or zero (Z flag set).
+                 *  In decimal mode, the Z flag has the same meaning.
+                 *
+                 *  A common (and correct) interpretation of the N flag is that it contains the value of the high bit (i.e. bit 7) of the result of the instruction.
+                 *  This interpretation is the meaning of the N flag in decimal mode.
+                 */
 
-            // TODO: Implement BCD mode according to http://www.6502.org/tutorials/decimal_mode.html
+                // TODO: Implement BCD mode according to http://www.6502.org/tutorials/decimal_mode.html
 
-            /*
+                /*
 1a. AL = (A & $0F) + (B & $0F) + C
 1b. If AL >= $0A, then AL = ((AL + $06) & $0F) + $10
 1c. A = (A & $F0) + (B & $F0) + AL
@@ -332,40 +384,41 @@ public final class CPUImpl
 1e. If (A >= $A0), then A = A + $60
 1f. The accumulator result is the lower 8 bits of A
 1g. The carry result is 1 if A >= $100, and is 0 if A < $100
-             */
+                 */
 
-            int a = cpu.getAccumulator();
-            int b = value;
-            int c = ( cpu.isSet( Flag.CARRY ) ? 1 : 0 );
+                int a = cpu.getAccumulator();
+                int b = value;
+                int c = ( cpu.isSet( Flag.CARRY ) ? 1 : 0 );
 
-            int al = ( a & 0x0f ) + ( b & 0x0f ) + c;
-            if ( al >= 0x0a ) {
-                al = (( al + 0x06 ) & 0x0f ) + 0x10;
-            }
-            a = ( a & 0xf0 ) + ( b & 0xf0 ) + al;
-            if ( a >= 0xa0 ) {
-                a = a + 0x60;
-            }
-            cpu.setAccumulator( a & 0xff );
-            cpu.setFlag( Flag.CARRY , a >= 0x100 );
+                int al = ( a & 0x0f ) + ( b & 0x0f ) + c;
+                if ( al >= 0x0a ) {
+                    al = (( al + 0x06 ) & 0x0f ) + 0x10;
+                }
+                a = ( a & 0xf0 ) + ( b & 0xf0 ) + al;
+                if ( a >= 0xa0 ) {
+                    a = a + 0x60;
+                }
+                cpu.setAccumulator( a & 0xff );
+                cpu.setFlag( Flag.CARRY , a >= 0x100 );
 
-            /*
+                /*
 2a. AL = (A & $0F) + (B & $0F) + C
 2b. If AL >= $0A, then AL = ((AL + $06) & $0F) + $10
 2c. A = (A & $F0) + (B & $F0) + AL, using signed (twos complement) arithmetic
 2e. The N flag result is 1 if bit 7 of A is 1, and is 0 if bit 7 if A is 0
 2f. The V flag result is 1 if A < -128 or A > 127, and is 0 if -128 <= A <= 127
-             */
+                 */
 
-            byte t1 = (byte) (a & 0xf0);
-            byte t2 = (byte) (b & 0xf0);
-            int tmpA = t1 + t2 + al;
-            cpu.setFlag(CPU.Flag.NEGATIVE , (tmpA & 0b1000_0000) != 0 );
-            cpu.setFlag(CPU.Flag.OVERFLOW , (a < -128 || a > 127 ) );
+                byte t1 = (byte) (a & 0xf0);
+                byte t2 = (byte) (b & 0xf0);
+                int tmpA = t1 + t2 + al;
+                cpu.setFlag(CPU.Flag.NEGATIVE , (tmpA & 0b1000_0000) != 0 );
+                cpu.setFlag(CPU.Flag.OVERFLOW , (a < -128 || a > 127 ) );
 
-            return;
+                return;
+            }
+            adc( cpu.getAccumulator() , value , cpu.isSet(Flag.CARRY) ? 1 : 0 );
         }
-        adc( cpu.getAccumulator() , value , cpu.isSet(Flag.CARRY) ? 1 : 0 );
     };
 
     private int bcdToBinary(int value ) {
@@ -404,391 +457,471 @@ public final class CPUImpl
         cpu.setAccumulator(result);
     }
 
-    protected final Runnable and = () ->
-    {
-        penaltyop = true;
-		value = getvalue();
-        result = cpu.getAccumulator() & value;
+    protected final AbstractRunnable and = new AbstractRunnable() {
+        @Override
+        public void run() {
+            penaltyop = true;
+        	value = getvalue();
+            result = cpu.getAccumulator() & value;
 
-        zerocalc(result);
-        signcalc(result);
+            zerocalc(result);
+            signcalc(result);
 
-        saveaccum(result);
+            saveaccum(result);
+        }
     };
 
-    protected final Runnable asl = () ->
-    {
-        value = getvaluereadwrite();
+    protected final AbstractRunnable asl = new AbstractRunnable() {
+        @Override
+        public void run() {
+            value = getvaluereadwrite();
 
-        /* http://dustlayer.com/c64-coding-tutorials/2013/4/8/episode-2-3-did-i-interrupt-you
-         * Now as coders are looking for optimization all the time somebody found out that the decrement command dec
-         * can be used to do both operations with just one single command.
-         * This works because dec is a so-called Read-Modify-Write command that writes back the original value during the modify cycle.
-         */
-        putvalue(value);
+            /* http://dustlayer.com/c64-coding-tutorials/2013/4/8/episode-2-3-did-i-interrupt-you
+             * Now as coders are looking for optimization all the time somebody found out that the decrement command dec
+             * can be used to do both operations with just one single command.
+             * This works because dec is a so-called Read-Modify-Write command that writes back the original value during the modify cycle.
+             */
+            putvalue(value);
 
-        result = value << 1;
+            result = value << 1;
 
-        carrycalc(result);
-        zerocalc(result);
-        signcalc(result);
+            carrycalc(result);
+            zerocalc(result);
+            signcalc(result);
 
-        putvalue(result);
+            putvalue(result);
+        }
     };
 
-    protected final Runnable bcc = () ->
-    {
-        if ( cpu.isNotSet( CPU.Flag.CARRY) )
-        {
-            final int oldpc = cpu.pc();
-            cpu.incPC( reladdr );
-            if ((oldpc & 0xFF00) != ( cpu.pc() & 0xFF00))
+    protected final AbstractRunnable bcc = new AbstractRunnable() {
+        @Override
+        public void run() {
+            if ( cpu.isNotSet( CPU.Flag.CARRY) )
             {
-                cpu.cycles += 2; //check if jump crossed a page boundary
-            }
-            else {
-                cpu.cycles++;
-            }
-        }
-    };
-
-    protected final Runnable bcs = () ->
-    {
-        if (cpu.isSet( CPU.Flag.CARRY ) )
-        {
-            final int oldpc = cpu.pc();
-            cpu.incPC( reladdr );
-            if ((oldpc & 0xFF00) != ( cpu.pc() & 0xFF00)) {
-                cpu.cycles += 2; //check if jump crossed a page boundary
-            }
-            else {
-                cpu.cycles++;
+                final int oldpc = cpu.pc();
+                cpu.incPC( reladdr );
+                if ((oldpc & 0xFF00) != ( cpu.pc() & 0xFF00))
+                {
+                    cpu.cycles += 2; //check if jump crossed a page boundary
+                }
+                else {
+                    cpu.cycles++;
+                }
             }
         }
     };
 
-    protected final Runnable beq = () ->
-    {
-        if ( cpu.isSet(Flag.ZERO ) ) {
-            final int oldpc = cpu.pc();
-            cpu.incPC( reladdr );
-            if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00)) {
-                cpu.cycles += 2; //check if jump crossed a page boundary
-            }
-            else {
-                cpu.cycles++;
-            }
-        }
-    };
-
-    protected final Runnable bit = () -> {
-        value = getvalue();
-        result = cpu.getAccumulator() & value;
-
-        cpu.setFlag( CPU.Flag.ZERO , (result & 0xff) == 0);
-        cpu.setFlag( Flag.NEGATIVE , (value & (1<<7)) != 0 );
-        cpu.setFlag( Flag.OVERFLOW , (value & (1<<6)) != 0 );
-    };
-
-    protected final Runnable bmi = () ->
-    {
-        if ( cpu.isSet(Flag.NEGATIVE) )
-        {
-            final int oldpc = cpu.pc();
-            cpu.incPC( reladdr );
-
-            if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00))
+    protected final AbstractRunnable bcs = new AbstractRunnable() {
+        @Override
+        public void run() {
+            if (cpu.isSet( CPU.Flag.CARRY ) )
             {
-                cpu.cycles += 2; //check if jump crossed a page boundary
-            }
-            else {
-                cpu.cycles++;
-            }
-        }
-    };
-
-    protected final Runnable bne = () ->
-    {
-        if ( cpu.isNotSet(Flag.ZERO) )
-        {
-            final int oldpc = cpu.pc();
-            cpu.incPC( reladdr );
-            if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00)) {
-                cpu.cycles += 2; //check if jump crossed a page boundary
-            }
-            else {
-                cpu.cycles++;
+                final int oldpc = cpu.pc();
+                cpu.incPC( reladdr );
+                if ((oldpc & 0xFF00) != ( cpu.pc() & 0xFF00)) {
+                    cpu.cycles += 2; //check if jump crossed a page boundary
+                }
+                else {
+                    cpu.cycles++;
+                }
             }
         }
     };
 
-    protected final Runnable bpl = () ->
-    {
-        if ( cpu.isNotSet(Flag.NEGATIVE) )
-        {
-            final int oldpc = cpu.pc();
-            cpu.incPC( reladdr );
-            if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00)) {
-                cpu.cycles += 2; //check if jump crossed a page boundary
-            }
-            else {
-                cpu.cycles++;
-            }
-        }
-    };
-
-    protected final Runnable brk = () ->
-    {
-        cpu.queueInterrupt( CPU.IRQType.BRK );
-    };
-
-    protected final Runnable bvc = () -> {
-        if ( cpu.isNotSet( Flag.OVERFLOW ) )
-        {
-            final int oldpc = cpu.pc();
-            cpu.incPC( reladdr );
-            if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00)) {
-                cpu.cycles += 2; //check if jump crossed a page boundary
-            }
-            else {
-                cpu.cycles++;
+    protected final AbstractRunnable beq = new AbstractRunnable() {
+        @Override
+        public void run() {
+            if ( cpu.isSet(Flag.ZERO ) ) {
+                final int oldpc = cpu.pc();
+                cpu.incPC( reladdr );
+                if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00)) {
+                    cpu.cycles += 2; //check if jump crossed a page boundary
+                }
+                else {
+                    cpu.cycles++;
+                }
             }
         }
     };
 
-    protected final Runnable bvs = () ->
-    {
-        if ( cpu.isSet(Flag.OVERFLOW) )
-        {
-            final int oldpc = cpu.pc();
-            cpu.incPC( reladdr );
-            if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00))
+    protected final AbstractRunnable bit = new AbstractRunnable() {
+        @Override
+        public void run() {
+            value = getvalue();
+            result = cpu.getAccumulator() & value;
+
+            cpu.setFlag( CPU.Flag.ZERO , (result & 0xff) == 0);
+            cpu.setFlag( Flag.NEGATIVE , (value & (1<<7)) != 0 );
+            cpu.setFlag( Flag.OVERFLOW , (value & (1<<6)) != 0 );
+        }
+    };
+
+    protected final AbstractRunnable bmi = new AbstractRunnable() {
+        @Override
+        public void run() {
+            if ( cpu.isSet(Flag.NEGATIVE) )
             {
-                cpu.cycles += 2; //check if jump crossed a page boundary
+                final int oldpc = cpu.pc();
+                cpu.incPC( reladdr );
+
+                if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00))
+                {
+                    cpu.cycles += 2; //check if jump crossed a page boundary
+                }
+                else {
+                    cpu.cycles++;
+                }
+            }
+        }
+    };
+
+    protected final AbstractRunnable bne = new AbstractRunnable() {
+        @Override
+        public void run() {
+            if ( cpu.isNotSet(Flag.ZERO) )
+            {
+                final int oldpc = cpu.pc();
+                cpu.incPC( reladdr );
+                if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00)) {
+                    cpu.cycles += 2; //check if jump crossed a page boundary
+                }
+                else {
+                    cpu.cycles++;
+                }
+            }
+        }
+    };
+
+    protected final AbstractRunnable bpl = new AbstractRunnable() {
+        @Override
+        public void run() {
+            if ( cpu.isNotSet(Flag.NEGATIVE) )
+            {
+                final int oldpc = cpu.pc();
+                cpu.incPC( reladdr );
+                if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00)) {
+                    cpu.cycles += 2; //check if jump crossed a page boundary
+                }
+                else {
+                    cpu.cycles++;
+                }
+            }
+        }
+    };
+
+    protected final AbstractRunnable brk = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.queueInterrupt( CPU.IRQType.BRK );
+        }
+    };
+
+    protected final AbstractRunnable bvc = new AbstractRunnable() {
+        @Override
+        public void run() {
+            if ( cpu.isNotSet( Flag.OVERFLOW ) )
+            {
+                final int oldpc = cpu.pc();
+                cpu.incPC( reladdr );
+                if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00)) {
+                    cpu.cycles += 2; //check if jump crossed a page boundary
+                }
+                else {
+                    cpu.cycles++;
+                }
+            }
+        }
+    };
+
+    protected final AbstractRunnable bvs = new AbstractRunnable() {
+        @Override
+        public void run() {
+            if ( cpu.isSet(Flag.OVERFLOW) )
+            {
+                final int oldpc = cpu.pc();
+                cpu.incPC( reladdr );
+                if ((oldpc & 0xFF00) != (cpu.pc() & 0xFF00))
+                {
+                    cpu.cycles += 2; //check if jump crossed a page boundary
+                }
+                else {
+                    cpu.cycles++;
+                }
+            }
+        }
+    };
+
+    protected final AbstractRunnable clc = new AbstractRunnable() {
+        @Override
+        public void run() {
+            clearcarry();
+        }
+    };
+
+    protected final AbstractRunnable cld = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cleardecimal();
+        }
+    };
+
+    protected final AbstractRunnable cli = new AbstractRunnable() {
+        @Override
+        public void run() {
+            clearinterrupt();
+        }
+    };
+
+    protected final AbstractRunnable clv = new AbstractRunnable() {
+        @Override
+        public void run() {
+            clearoverflow();
+        }
+    };
+
+    protected final AbstractRunnable cmp = new AbstractRunnable() {
+        @Override
+        public void run() {
+            penaltyop = true;
+            value = getvalue();
+            result = cpu.getAccumulator() - value;
+
+            if ( cpu.getAccumulator() >= (value & 0x00FF)) {
+                setcarry();
             }
             else {
-                cpu.cycles++;
+                clearcarry();
             }
+            if ( result == 0) {
+                setzero();
+            }
+            else {
+                clearzero();
+            }
+            signcalc(result);
         }
     };
 
-    protected final Runnable clc = () -> clearcarry();
+    protected final AbstractRunnable cpy = new AbstractRunnable() {
+        @Override
+        public void run() {
+            value = getvalue();
+            result = cpu.getY() - value;
 
-    protected final Runnable cld = () -> cleardecimal();
+            if ( cpu.getY() >= (value & 0x00FF)) {
+                setcarry();
+            }
+            else {
+                clearcarry();
+            }
 
-    protected final Runnable cli = () ->  clearinterrupt();
-
-    protected final Runnable clv = () -> clearoverflow();
-
-    protected final Runnable cmp = () ->
-    {
-        penaltyop = true;
-        value = getvalue();
-        result = cpu.getAccumulator() - value;
-
-        if ( cpu.getAccumulator() >= (value & 0x00FF)) {
-            setcarry();
+            if ( result == 0 ) {
+                setzero();
+            }
+            else {
+                clearzero();
+            }
+            signcalc(result);
         }
-        else {
-            clearcarry();
+    };
+
+    protected final AbstractRunnable cpx= new AbstractRunnable() {
+        @Override
+        public void run() {
+            value = getvalue();
+
+            final int x = cpu.getX();
+            result = x - value;
+
+            if (x >= (value & 0x00FF) ) {
+                setcarry();
+            }
+            else {
+                clearcarry();
+            }
+            if ( result == 0) {
+                setzero();
+            }
+            else {
+                clearzero();
+            }
+            signcalc(result);
         }
-        if ( result == 0) {
-            setzero();
+    };
+
+    protected final AbstractRunnable dec = new AbstractRunnable() {
+        @Override
+        public void run() {
+            value = getvaluereadwrite();
+            result = value - 1;
+
+            zerocalc(result);
+            signcalc(result);
+
+            putvalue(result);
         }
-        else {
-            clearzero();
+    };
+
+    protected final AbstractRunnable dex = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.setX( cpu.getX() -1 );
+
+            zerocalc( cpu.getX() );
+            signcalc( cpu.getX() );
         }
-        signcalc(result);
     };
 
-    protected final Runnable cpy = () ->
-    {
-        value = getvalue();
-        result = cpu.getY() - value;
+    protected final AbstractRunnable dey=new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.setY( cpu.getY() -1 );
 
-        if ( cpu.getY() >= (value & 0x00FF)) {
-            setcarry();
+            zerocalc( cpu.getY() );
+            signcalc( cpu.getY() );
         }
-        else {
-            clearcarry();
+    };
+
+    protected final AbstractRunnable eor=new AbstractRunnable() {
+        @Override
+        public void run() {
+            penaltyop = true;
+            value = getvalue();
+            result = cpu.getAccumulator() ^ value;
+
+            zerocalc(result);
+            signcalc(result);
+
+            saveaccum(result);
         }
+    };
 
-        if ( result == 0 ) {
-            setzero();
+    protected final AbstractRunnable inc = new AbstractRunnable() {
+        @Override
+        public void run() {
+            value = getvaluereadwrite();
+
+            /* http://dustlayer.com/c64-coding-tutorials/2013/4/8/episode-2-3-did-i-interrupt-you
+             * Now as coders are looking for optimization all the time somebody found out that the decrement command dec
+             * can be used to do both operations with just one single command.
+             * This works because dec is a so-called Read-Modify-Write command that writes back the original value during the modify cycle.
+             */
+            putvalue(value);
+
+            result = value + 1;
+
+            zerocalc(result);
+            signcalc(result);
+
+            putvalue(result);
         }
-        else {
-            clearzero();
+    };
+
+    protected final AbstractRunnable inx = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.setX( cpu.getX()+1 );
+
+            zerocalc( cpu.getX() );
+            signcalc( cpu.getX() );
         }
-        signcalc(result);
     };
 
-    protected final Runnable cpx= () ->
-    {
-        value = getvalue();
+    protected final AbstractRunnable iny = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.setY( cpu.getY()+1 );
 
-        final int x = cpu.getX();
-        result = x - value;
-
-        if (x >= (value & 0x00FF) ) {
-            setcarry();
+            zerocalc( cpu.getY() );
+            signcalc(  cpu.getY() );
         }
-        else {
-            clearcarry();
+    };
+
+    protected final AbstractRunnable jmp = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.pc( ea );
         }
-        if ( result == 0) {
-            setzero();
+    };
+
+    protected final AbstractRunnable jsr = new AbstractRunnable() {
+        @Override
+        public void run() {
+            final int retAdr = cpu.pc()-1;
+            push16( retAdr );
+            cpu.pc( ea );
         }
-        else {
-            clearzero();
+    };
+
+    protected final AbstractRunnable lda = new AbstractRunnable() {
+        @Override
+        public void run() {
+            penaltyop = true;
+            value = getvalue();
+
+            final int a = value & 0x00FF;
+            cpu.setAccumulator( a );
+
+            zerocalc(a);
+            signcalc(a);
         }
-        signcalc(result);
     };
 
-    protected final Runnable dec = () -> {
-        value = getvaluereadwrite();
-        result = value - 1;
+    protected final AbstractRunnable ldx=new AbstractRunnable() {
+        @Override
+        public void run() {
+            penaltyop = true;
 
-        zerocalc(result);
-        signcalc(result);
+            value = getvalue();
+            final int x = value & 0x00FF;
 
-        putvalue(result);
-    };
+            cpu.setX( x );
 
-    protected final Runnable dex = () ->
-    {
-        cpu.setX( cpu.getX() -1 );
-
-        zerocalc( cpu.getX() );
-        signcalc( cpu.getX() );
-    };
-
-    protected final Runnable dey=() ->
-    {
-        cpu.setY( cpu.getY() -1 );
-
-        zerocalc( cpu.getY() );
-        signcalc( cpu.getY() );
-    };
-
-    protected final Runnable eor=() ->
-    {
-        penaltyop = true;
-        value = getvalue();
-        result = cpu.getAccumulator() ^ value;
-
-        zerocalc(result);
-        signcalc(result);
-
-        saveaccum(result);
-    };
-
-    protected final Runnable inc = () ->
-    {
-        value = getvaluereadwrite();
-
-        /* http://dustlayer.com/c64-coding-tutorials/2013/4/8/episode-2-3-did-i-interrupt-you
-         * Now as coders are looking for optimization all the time somebody found out that the decrement command dec
-         * can be used to do both operations with just one single command.
-         * This works because dec is a so-called Read-Modify-Write command that writes back the original value during the modify cycle.
-         */
-        putvalue(value);
-
-        result = value + 1;
-
-        zerocalc(result);
-        signcalc(result);
-
-        putvalue(result);
-    };
-
-    protected final Runnable inx = () ->
-    {
-        cpu.setX( cpu.getX()+1 );
-
-        zerocalc( cpu.getX() );
-        signcalc( cpu.getX() );
-    };
-
-    protected final Runnable iny = ()->
-    {
-        cpu.setY( cpu.getY()+1 );
-
-        zerocalc( cpu.getY() );
-        signcalc(  cpu.getY() );
-    };
-
-    protected final Runnable jmp = ()->
-    {
-        cpu.pc( ea );
-    };
-
-    protected final Runnable jsr = ()->
-    {
-        final int retAdr = cpu.pc()-1;
-        push16( retAdr );
-        cpu.pc( ea );
-    };
-
-    protected final Runnable lda = () ->
-    {
-        penaltyop = true;
-        value = getvalue();
-
-        final int a = value & 0x00FF;
-        cpu.setAccumulator( a );
-
-        zerocalc(a);
-        signcalc(a);
-    };
-
-    protected final Runnable ldx=()->
-    {
-        penaltyop = true;
-
-        value = getvalue();
-        final int x = value & 0x00FF;
-
-        cpu.setX( x );
-
-        zerocalc(x);
-        signcalc(x);
-    };
-
-    protected final Runnable ldy = () ->
-    {
-        penaltyop = true;
-        value = getvalue();
-        final int y = (value & 0x00FF);
-        cpu.setY(y);
-
-        zerocalc(y);
-        signcalc(y);
-    };
-
-    protected final Runnable lsr = () ->
-    {
-        value = getvaluereadwrite();
-        result = value >>> 1;
-
-        if ( (value & 1) != 0 ) {
-            setcarry();
+            zerocalc(x);
+            signcalc(x);
         }
-        else {
-            clearcarry();
-        }
-        zerocalc(result);
-        signcalc(result);
-
-        putvalue(result);
     };
 
-    protected final Runnable nop = () ->
-    {
-        // According to https://en.wikipedia.org/wiki/MOS_Technology_6502#Bugs_and_quirks
-        // and https://retrocomputing.stackexchange.com/questions/145/why-does-6502-indexed-lda-take-an-extra-cycle-at-page-boundaries
-        // the additional cycle penalty on page boundary crossings applies only to address calculations
-        // Since NOP does none of them I don't think this can be a penalty operation.
-        
+    protected final AbstractRunnable ldy = new AbstractRunnable() {
+        @Override
+        public void run() {
+            penaltyop = true;
+            value = getvalue();
+            final int y = (value & 0x00FF);
+            cpu.setY(y);
+
+            zerocalc(y);
+            signcalc(y);
+        }
+    };
+
+    protected final AbstractRunnable lsr = new AbstractRunnable() {
+        @Override
+        public void run() {
+            value = getvaluereadwrite();
+            result = value >>> 1;
+
+            if ( (value & 1) != 0 ) {
+                setcarry();
+            }
+            else {
+                clearcarry();
+            }
+            zerocalc(result);
+            signcalc(result);
+
+            putvalue(result);
+        }
+    };
+
+    protected final AbstractRunnable nop = new AbstractRunnable() {
+        @Override
+        public void run() {
+            // According to https://en.wikipedia.org/wiki/MOS_Technology_6502#Bugs_and_quirks
+            // and https://retrocomputing.stackexchange.com/questions/145/why-does-6502-indexed-lda-take-an-extra-cycle-at-page-boundaries
+            // the additional cycle penalty on page boundary crossings applies only to address calculations
+            // Since NOP does none of them I don't think this can be a penalty operation.
+            
 //        switch (opcode) {
 //            case 0x1C:
 //            case 0x3C:
@@ -799,282 +932,357 @@ public final class CPUImpl
 //                penaltyop = true;
 //                break;
 //        }
-    };
-
-    protected final Runnable ora = () ->
-    {
-        penaltyop = true;
-        value = getvalue();
-        result = cpu.getAccumulator() | value;
-
-        zerocalc(result);
-        signcalc(result);
-
-        saveaccum(result);
-    };
-
-    protected final Runnable pha = () ->
-    {
-        push8( cpu.getAccumulator() );
-    };
-
-    protected final Runnable php = () ->
-    {
-        final byte flags = cpu.getFlagBits();
-        push8( flags  & 0xff );
-    };
-
-    protected final Runnable pla = () ->
-    {
-        final int a = cpu.pop( memory );
-        cpu.setAccumulator(a);
-
-        zerocalc(a);
-        signcalc(a);
-    };
-
-    protected final Runnable plp = () ->
-    {
-        byte value = (byte) cpu.pop( memory ) ;
-        value = CPU.Flag.BREAK.clear( value );
-        cpu.setFlagBits( value );
-    };
-
-    protected final Runnable rol = () ->
-    {
-        value = getvaluereadwrite();
-        result = (value << 1) | ( cpu.isSet( Flag.CARRY) ? 1 : 0 );
-
-        carrycalc(result);
-        zerocalc(result);
-        signcalc(result);
-
-        putvalue(result);
-    };
-
-    protected final Runnable ror = () ->
-    {
-        value = getvaluereadwrite();
-        if (  cpu.isSet(Flag.CARRY ) ) {
-            result = (value >>> 1) | 1 << 7;
-        } else {
-            result = (value >>> 1);
         }
+    };
 
-        if ((value & 1) != 0 ) {
-            setcarry();
+    protected final AbstractRunnable ora = new AbstractRunnable() {
+        @Override
+        public void run() {
+            penaltyop = true;
+            value = getvalue();
+            result = cpu.getAccumulator() | value;
+
+            zerocalc(result);
+            signcalc(result);
+
+            saveaccum(result);
         }
-        else {
-            clearcarry();
+    };
+
+    protected final AbstractRunnable pha = new AbstractRunnable() {
+        @Override
+        public void run() {
+            push8( cpu.getAccumulator() );
         }
-        zerocalc(result);
-        signcalc(result);
-
-        putvalue(result);
     };
 
-    protected final Runnable rti = () ->
-    {
-        final int status = cpu.pop(memory);
-        cpu.setFlagBits( (byte) status );
-        value = pull16();
-        cpu.pc( value );
+    protected final AbstractRunnable php = new AbstractRunnable() {
+        @Override
+        public void run() {
+            final byte flags = cpu.getFlagBits();
+            push8( flags  & 0xff );
+        }
     };
 
-    protected final Runnable rts = () ->
-    {
-        value = pull16();
-        cpu.pc( value + 1 );
+    protected final AbstractRunnable pla = new AbstractRunnable() {
+        @Override
+        public void run() {
+            final int a = cpu.pop( memory );
+            cpu.setAccumulator(a);
+
+            zerocalc(a);
+            signcalc(a);
+        }
     };
 
-    protected final Runnable sbc = () ->
-    {
-        penaltyop = true;
-		value = getvalue();
+    protected final AbstractRunnable plp = new AbstractRunnable() {
+        @Override
+        public void run() {
+            byte value = (byte) cpu.pop( memory ) ;
+            value = CPU.Flag.BREAK.clear( value );
+            cpu.setFlagBits( value );
+        }
+    };
 
-        int a = cpu.getAccumulator();
+    protected final AbstractRunnable rol = new AbstractRunnable() {
+        @Override
+        public void run() {
+            value = getvaluereadwrite();
+            result = (value << 1) | ( cpu.isSet( Flag.CARRY) ? 1 : 0 );
 
-        if ( cpu.isSet( Flag.DECIMAL_MODE) )
-        {
-            // TODO: Implement BCD according to http://www.6502.org/tutorials/decimal_mode.html
+            carrycalc(result);
+            zerocalc(result);
+            signcalc(result);
 
-            /*
+            putvalue(result);
+        }
+    };
+
+    protected final AbstractRunnable ror = new AbstractRunnable() {
+        @Override
+        public void run() {
+            value = getvaluereadwrite();
+            if (  cpu.isSet(Flag.CARRY ) ) {
+                result = (value >>> 1) | 1 << 7;
+            } else {
+                result = (value >>> 1);
+            }
+
+            if ((value & 1) != 0 ) {
+                setcarry();
+            }
+            else {
+                clearcarry();
+            }
+            zerocalc(result);
+            signcalc(result);
+
+            putvalue(result);
+        }
+    };
+
+    protected final AbstractRunnable rti = new AbstractRunnable() {
+        @Override
+        public void run() {
+            final int status = cpu.pop(memory);
+            cpu.setFlagBits( (byte) status );
+            value = pull16();
+            cpu.pc( value );
+        }
+    };
+
+    protected final AbstractRunnable rts = new AbstractRunnable() {
+        @Override
+        public void run() {
+            value = pull16();
+            cpu.pc( value + 1 );
+        }
+    };
+
+    protected final AbstractRunnable sbc = new AbstractRunnable() {
+        @Override
+        public void run() {
+            penaltyop = true;
+        	value = getvalue();
+
+            int a = cpu.getAccumulator();
+
+            if ( cpu.isSet( Flag.DECIMAL_MODE) )
+            {
+                // TODO: Implement BCD according to http://www.6502.org/tutorials/decimal_mode.html
+
+                /*
 In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SBC instructions. Specifically:
 
-    When the carry is clear, SBC NUM performs the calculation A = A - NUM - 1
-    When the carry is set, SBC NUM performs the calculation A = A - NUM
+        When the carry is clear, SBC NUM performs the calculation A = A - NUM - 1
+        When the carry is set, SBC NUM performs the calculation A = A - NUM
 
-             */
-            int valueBin = bcdToBinary( value );
-            if ( cpu.isNotSet( Flag.CARRY ) ) {
-                valueBin++;
-            }
-            int accBin = bcdToBinary( a );
-
-            boolean carry = true;
-            for ( int i = 0 ; i < valueBin ; i++ ) {
-                accBin--;
-                if ( accBin == -1 ) {
-                    // after a SBC, the carry is clear if the result was less than 0 and set otherwise
-                    carry = false;
-                    accBin = 99;
+                 */
+                int valueBin = bcdToBinary( value );
+                if ( cpu.isNotSet( Flag.CARRY ) ) {
+                    valueBin++;
                 }
+                int accBin = bcdToBinary( a );
+
+                boolean carry = true;
+                for ( int i = 0 ; i < valueBin ; i++ ) {
+                    accBin--;
+                    if ( accBin == -1 ) {
+                        // after a SBC, the carry is clear if the result was less than 0 and set otherwise
+                        carry = false;
+                        accBin = 99;
+                    }
+                }
+                cpu.setFlag( Flag.CARRY , carry);
+                cpu.setFlag( Flag.ZERO , accBin == 0 );
+                cpu.setFlag( Flag.NEGATIVE , (accBin & 1<<7) != 0 );
+                cpu.setAccumulator( binaryToBcd( accBin ) );
+                return;
             }
-            cpu.setFlag( Flag.CARRY , carry);
-            cpu.setFlag( Flag.ZERO , accBin == 0 );
-            cpu.setFlag( Flag.NEGATIVE , (accBin & 1<<7) != 0 );
-            cpu.setAccumulator( binaryToBcd( accBin ) );
-            return;
+
+            /*
+             * ADC: Carry set   = +1 ,
+             * SBC: Carry clear = -1
+             */
+            final int carry = cpu.isSet( CPU.Flag.CARRY) ? 1: 0;
+            adc( a , ( ~value & 0xff ) , carry );
         }
-
-        /*
-         * ADC: Carry set   = +1 ,
-         * SBC: Carry clear = -1
-         */
-        final int carry = cpu.isSet( CPU.Flag.CARRY) ? 1: 0;
-        adc( a , ( ~value & 0xff ) , carry );
     };
 
-    protected final Runnable sec = () -> {
-        setcarry();
+    protected final AbstractRunnable sec = new AbstractRunnable() {
+        @Override
+        public void run() {
+            setcarry();
+        }
     };
 
-    protected final Runnable sed = () -> {
-        setdecimal();
+    protected final AbstractRunnable sed = new AbstractRunnable() {
+        @Override
+        public void run() {
+            setdecimal();
+        }
     };
 
-    protected final Runnable sei = () -> {
-        setinterrupt();
+    protected final AbstractRunnable sei = new AbstractRunnable() {
+        @Override
+        public void run() {
+            setinterrupt();
+        }
     };
 
-    protected final Runnable sta = () -> {
-        putvalue( cpu.getAccumulator() );
+    protected final AbstractRunnable sta = new AbstractRunnable() {
+        @Override
+        public void run() {
+            putvalue( cpu.getAccumulator() );
+        }
     };
 
-    protected final Runnable stx = () -> {
-        putvalue( cpu.getX() );
+    protected final AbstractRunnable stx = new AbstractRunnable() {
+        @Override
+        public void run() {
+            putvalue( cpu.getX() );
+        }
     };
 
-    protected final Runnable sty = () -> {
-        putvalue( cpu.getY() );
+    protected final AbstractRunnable sty = new AbstractRunnable() {
+        @Override
+        public void run() {
+            putvalue( cpu.getY() );
+        }
     };
 
-    protected final Runnable tax = () ->
-    {
-        cpu.setX( cpu.getAccumulator() );
+    protected final AbstractRunnable tax = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.setX( cpu.getAccumulator() );
 
-        zerocalc( cpu.getX() );
-        signcalc( cpu.getX() );
+            zerocalc( cpu.getX() );
+            signcalc( cpu.getX() );
+        }
     };
 
-    protected final Runnable tay = () ->
-    {
-        cpu.setY( cpu.getAccumulator() );
+    protected final AbstractRunnable tay = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.setY( cpu.getAccumulator() );
 
-        zerocalc( cpu.getY() );
-        signcalc( cpu.getY() );
+            zerocalc( cpu.getY() );
+            signcalc( cpu.getY() );
+        }
     };
 
-    protected final Runnable tsx= () ->
-    {
-        cpu.setX( cpu.getSP() );
+    protected final AbstractRunnable tsx= new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.setX( cpu.getSP() );
 
-        zerocalc( cpu.getX() );
-        signcalc( cpu.getX() );
+            zerocalc( cpu.getX() );
+            signcalc( cpu.getX() );
+        }
     };
 
-    protected final Runnable txa = () ->
-    {
-        cpu.setAccumulator( cpu.getX() );
+    protected final AbstractRunnable txa = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.setAccumulator( cpu.getX() );
 
-        zerocalc( cpu.getAccumulator() );
-        signcalc( cpu.getAccumulator() );
+            zerocalc( cpu.getAccumulator() );
+            signcalc( cpu.getAccumulator() );
+        }
     };
 
-    protected final Runnable txs = () ->
-    {
-        cpu.setSP( cpu.getX() );
+    protected final AbstractRunnable txs = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.setSP( cpu.getX() );
+        }
     };
 
-    protected final Runnable tya = () ->
-    {
-        cpu.setAccumulator( cpu.getY() );
+    protected final AbstractRunnable tya = new AbstractRunnable() {
+        @Override
+        public void run() {
+            cpu.setAccumulator( cpu.getY() );
 
-        zerocalc( cpu.getAccumulator() );
-        signcalc( cpu.getAccumulator() );
+            zerocalc( cpu.getAccumulator() );
+            signcalc( cpu.getAccumulator() );
+        }
     };
 
     //undocumented instructions
-    protected final Runnable lax = () ->
-    {
-        lda.run();
-        ldx.run();
-    };
-
-    protected final Runnable skb = () -> {};
-
-    protected final Runnable skw = () -> {};
-
-    protected final Runnable axs = () -> {
-        sta.run();
-        stx.run();
-        putvalue(cpu.getAccumulator() & cpu.getX() );
-        if (penaltyop && penaltyaddr) {
-            cpu.cycles--;
+    protected final AbstractRunnable lax = new AbstractRunnable() {
+        @Override
+        public void run() {
+            lda.run();
+            ldx.run();
         }
     };
 
-    protected final Runnable dcp = () ->
-    {
-        dec.run();
-        cmp.run();
-        if (penaltyop && penaltyaddr) {
-            cpu.cycles--;
+    protected final AbstractRunnable skb = NOP;
+
+    protected final AbstractRunnable skw = NOP;
+
+    protected final AbstractRunnable axs = new AbstractRunnable() {
+        @Override
+        public void run() {
+            sta.run();
+            stx.run();
+            putvalue(cpu.getAccumulator() & cpu.getX() );
+            if (penaltyop && penaltyaddr) {
+                cpu.cycles--;
+            }
         }
     };
 
-    protected final Runnable isb = () -> {
-        inc.run();
-        sbc.run();
-        if (penaltyop && penaltyaddr) {
-            cpu.cycles--;
+    protected final AbstractRunnable dcp = new AbstractRunnable() {
+        @Override
+        public void run() {
+            dec.run();
+            cmp.run();
+            if (penaltyop && penaltyaddr) {
+                cpu.cycles--;
+            }
         }
     };
 
-    protected final Runnable slo = () ->
-    {
-        asl.run();
-        ora.run();
-        if (penaltyop && penaltyaddr) {
-            cpu.cycles--;
+    protected final AbstractRunnable isb = new AbstractRunnable() {
+        @Override
+        public void run() {
+            inc.run();
+            sbc.run();
+            if (penaltyop && penaltyaddr) {
+                cpu.cycles--;
+            }
         }
     };
 
-    protected final Runnable rla = () -> {
-        rol.run();
-        and.run();
-        if (penaltyop && penaltyaddr) {
-            cpu.cycles--;
+    protected final AbstractRunnable slo = new AbstractRunnable() {
+        @Override
+        public void run() {
+            asl.run();
+            ora.run();
+            if (penaltyop && penaltyaddr) {
+                cpu.cycles--;
+            }
         }
     };
 
-    protected final Runnable sre = () -> {
-        lsr.run();
-        eor.run();
-        if (penaltyop && penaltyaddr) {
-            cpu.cycles--;
+    protected final AbstractRunnable rla = new AbstractRunnable() {
+        @Override
+        public void run() {
+            rol.run();
+            and.run();
+            if (penaltyop && penaltyaddr) {
+                cpu.cycles--;
+            }
         }
     };
 
-    protected final Runnable hlt = () -> {
-        throw new HLTException();
+    protected final AbstractRunnable sre = new AbstractRunnable() {
+        @Override
+        public void run() {
+            lsr.run();
+            eor.run();
+            if (penaltyop && penaltyaddr) {
+                cpu.cycles--;
+            }
+        }
     };
 
-    protected final Runnable rra = () -> {
-        ror.run();
-        adc.run();
-        if (penaltyop && penaltyaddr) {
-            cpu.cycles--;
+    protected final AbstractRunnable hlt = new AbstractRunnable() {
+        @Override
+        public void run() {
+            throw new HLTException();
+        }
+    };
+
+    protected final AbstractRunnable rra = new AbstractRunnable() {
+        @Override
+        public void run() {
+            ror.run();
+            adc.run();
+            if (penaltyop && penaltyaddr) {
+                cpu.cycles--;
+            }
         }
     };
 
@@ -1138,7 +1346,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
         penaltyop = false;
         penaltyaddr = false;
 
-        final Runnable adrMode = adrModeTable[opcode];
+        final AbstractRunnable adrMode = adrModeTable[opcode];
         isAccumulatorImmediate = adrMode == acc;
         adrMode.run();
         optable[opcode].run();
@@ -1234,7 +1442,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
 
     private InstructionPrinter getInstructionPrinter(int opcode)
     {
-        final Runnable adrMode = adrModeTable[ opcode ];
+        final AbstractRunnable adrMode = adrModeTable[ opcode ];
 
         if ( adrMode == igb ) {
             return pigb;
@@ -1316,7 +1524,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
     }
 
     protected boolean isAccumulatorImmediate;
-    protected final Runnable[] adrModeTable = new Runnable[]
+    protected final AbstractRunnable[] adrModeTable = new AbstractRunnable[]
             {
                     /*        |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */
                     /* 0 */     imp, indx,  imp, indx,  igb,   zp,   zp,   zp,  imp,  imm,  acc,  imm, igw , abso, abso, abso, /* 0 */
@@ -1358,7 +1566,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
                     /* F */      "BEQ",  "SBC",  "HLT",  "ISB",  "SKB",  "SBC",  "INC",  "ISB",  "SED",  "SBC",  "NOP",  "ISB",  "SKW",  "SBC",  "INC",  "ISB"  /* F */
             };
 
-    protected final Runnable[] optable= new Runnable[]
+    protected final AbstractRunnable[] optable= new AbstractRunnable[]
             {
                     /*        |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |      */
                     /* 0 */      brk,  ora,  hlt,  slo,  skb,  ora,  asl,  slo,  php,  ora,  asl,  nop,  skw,  ora,  asl,  slo, /* 0 */
