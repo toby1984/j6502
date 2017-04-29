@@ -27,7 +27,6 @@ public final class CPUImpl
     protected boolean penaltyop, penaltyaddr;
 
     protected int ea, reladdr, value, result;
-    protected int opcode;
     protected byte oldstatus;
 
     public CPUImpl(CPU cpu,IMemoryRegion region)
@@ -258,7 +257,7 @@ public final class CPUImpl
 
     protected int getvalue()
     {
-        if (adrModeTable[opcode] == acc) {
+        if ( isAccumulatorImmediate ) {
             return cpu.getAccumulator();
         }
         return read6502(ea);
@@ -266,14 +265,14 @@ public final class CPUImpl
 
     protected int getvaluereadwrite()
     {
-        if (adrModeTable[opcode] == acc) {
+        if ( isAccumulatorImmediate ) {
             return cpu.getAccumulator();
         }
         return readAndWrite6502(ea);
     }
 
     protected void putvalue(int saveval) {
-        if (adrModeTable[opcode & 0xff] == acc)
+        if ( isAccumulatorImmediate )
         {
             cpu.setAccumulator(saveval);
         } else {
@@ -785,16 +784,21 @@ public final class CPUImpl
 
     protected final Runnable nop = () ->
     {
-        switch (opcode) {
-            case 0x1C:
-            case 0x3C:
-            case 0x5C:
-            case 0x7C:
-            case 0xDC:
-            case 0xFC:
-                penaltyop = true;
-                break;
-        }
+        // According to https://en.wikipedia.org/wiki/MOS_Technology_6502#Bugs_and_quirks
+        // and https://retrocomputing.stackexchange.com/questions/145/why-does-6502-indexed-lda-take-an-extra-cycle-at-page-boundaries
+        // the additional cycle penalty on page boundary crossings applies only to address calculations
+        // Since NOP does none of them I don't think this can be a penalty operation.
+        
+//        switch (opcode) {
+//            case 0x1C:
+//            case 0x3C:
+//            case 0x5C:
+//            case 0x7C:
+//            case 0xDC:
+//            case 0xFC:
+//                penaltyop = true;
+//                break;
+//        }
     };
 
     protected final Runnable ora = () ->
@@ -1063,7 +1067,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
     };
 
     protected final Runnable hlt = () -> {
-        throw new HLTException(opcode);
+        throw new HLTException();
     };
 
     protected final Runnable rra = () -> {
@@ -1127,15 +1131,16 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
 //            System.out.println("Byte is now: %"+StringUtils.leftPad( Integer.toBinaryString( value ) , 8 , "0" )+" , bit "+bit+" , ($"+Integer.toHexString(value) );
 //        }
 
-        opcode = read6502( initialPC );
+        final int opcode = read6502( initialPC ) & 0xff;
 
         cpu.incPC();
 
         penaltyop = false;
         penaltyaddr = false;
 
-        //         isAccumulatorImmediate = adrModeTable[opcode] == acc;
-        adrModeTable[opcode].run();
+        final Runnable adrMode = adrModeTable[opcode];
+        isAccumulatorImmediate = adrMode == acc;
+        adrMode.run();
         optable[opcode].run();
 
         if ( Constants.CPUIMPL_TRACK_INSTRUCTION_DURATION ) 
