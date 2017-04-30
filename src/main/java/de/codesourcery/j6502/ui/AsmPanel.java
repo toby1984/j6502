@@ -72,7 +72,7 @@ import de.codesourcery.j6502.assembler.parser.ast.IASTNode;
 import de.codesourcery.j6502.assembler.parser.ast.InstructionNode;
 import de.codesourcery.j6502.assembler.parser.ast.NumberLiteral;
 import de.codesourcery.j6502.assembler.parser.ast.Statement;
-import de.codesourcery.j6502.emulator.Emulator;
+import de.codesourcery.j6502.emulator.EmulatorDriver;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.ITextRegion;
@@ -119,14 +119,22 @@ public abstract class AsmPanel extends JPanel implements IDebuggerView
 	private Component locationPeer;
 	private boolean displayed;
 
-	private int binaryStartAddress;
-	private byte[] binary;
+	protected static final class Binary 
+	{
+	    private final int binaryStartAddress;
+	    private final byte[] binary;
+	    
+        private Binary(int binaryStartAddress, byte[] binary) {
+            this.binaryStartAddress = binaryStartAddress;
+            this.binary = binary;
+        }
+	}
+	
+	private volatile Binary binary;
 
 	private File lastSavedFile;
 
-	private Emulator emulator;
-
-	private final JDesktopPane desktop;
+	private final EmulatorDriver driver;
 
 	private final ASTView astView = new ASTView();
 	private final SymbolTableView symbolTableView = new SymbolTableView();
@@ -498,15 +506,14 @@ public abstract class AsmPanel extends JPanel implements IDebuggerView
 		}
 	}
 
-	public AsmPanel(JDesktopPane desktop) {
+	public AsmPanel(JDesktopPane desktop,EmulatorDriver driver) {
 
-		this.desktop = desktop;
-
+	    this.driver = driver;
 		astView.setVisible( false );
-		this.desktop.add( astView );
+		desktop.add( astView );
 
 		symbolTableView.setVisible( false );
-		this.desktop.add( symbolTableView );
+		desktop.add( symbolTableView );
 
 		Debugger.setup( this );
 
@@ -540,7 +547,8 @@ public abstract class AsmPanel extends JPanel implements IDebuggerView
 
 		editor.getDocument().addDocumentListener( new DocumentListener() {
 
-			private void markDirty() {
+			private void markDirty() 
+			{
 				if ( documentListenerEnabled ) {
 					setEditorDirty( true );
 					binary = null;
@@ -713,11 +721,15 @@ public abstract class AsmPanel extends JPanel implements IDebuggerView
 			}
 		}
 
-		synchronized(emulator)
-		{
-			emulator.getMemory().bulkWrite( binaryStartAddress , binary , 0 , binary.length );
+		final Binary b;
+		synchronized( binary ) {
+		    b = binary;
 		}
-		info("Binary uploaded to "+HexDump.toHexBigEndian( binaryStartAddress ) );
+		driver.invokeAndWait( emulator -> 
+		{
+		    emulator.getMemory().bulkWrite( b.binaryStartAddress , b.binary , 0 , b.binary.length );
+		});
+		info("Binary uploaded to "+HexDump.toHexBigEndian( b.binaryStartAddress ) );
 		binaryUploadedToEmulator();
 	}
 
@@ -894,8 +906,8 @@ public abstract class AsmPanel extends JPanel implements IDebuggerView
 
 	private boolean compile()
 	{
-		binary = null;
-		binaryStartAddress = 0xffffffff;
+	    binary = null;
+	    
 		symbolTableView.setSymbolTable( null );
 
 		final String source = editor.getText();
@@ -911,8 +923,10 @@ public abstract class AsmPanel extends JPanel implements IDebuggerView
 			astView.setAST( ast );
 			doSyntaxHighlighting( ast );
 
-			binary = a.assemble( ast , sourceHelper );
-			binaryStartAddress = a.getOrigin();
+			final byte[] binary = a.assemble( ast , sourceHelper );
+			final int binaryStartAddress = a.getOrigin();
+
+			this.binary = new Binary(binaryStartAddress, binary);
 
 			symbolTableView.setSymbolTable( a.getSymbolTable() );
 
@@ -985,12 +999,8 @@ public abstract class AsmPanel extends JPanel implements IDebuggerView
 		this.displayed = yesNo;
 	}
 
-	public void setEmulator(Emulator emulator) {
-		this.emulator = emulator;
-	}
-
 	@Override
-	public void refresh(Emulator emulator) {
+	public void refresh() {
 		repaint();
 	}
 

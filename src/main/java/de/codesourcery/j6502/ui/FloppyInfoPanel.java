@@ -6,7 +6,7 @@ import java.awt.Graphics;
 
 import javax.swing.JPanel;
 
-import de.codesourcery.j6502.emulator.Emulator;
+import de.codesourcery.j6502.emulator.EmulatorDriver;
 import de.codesourcery.j6502.emulator.SerialDevice;
 import de.codesourcery.j6502.emulator.diskdrive.DiskHardware;
 import de.codesourcery.j6502.emulator.diskdrive.DiskHardware.ReadMode;
@@ -14,6 +14,7 @@ import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 
 public class FloppyInfoPanel extends JPanel implements IDebuggerView {
 
+    private final EmulatorDriver driver;
     private boolean isDisplayed = false;
     private Component peer;
     
@@ -23,7 +24,9 @@ public class FloppyInfoPanel extends JPanel implements IDebuggerView {
     private volatile boolean readMode = false;
     private volatile float headPosition;;
     
-    public FloppyInfoPanel() {
+    public FloppyInfoPanel(EmulatorDriver driver) 
+    {
+        this.driver = driver;
         Debugger.setup( this );
     }
     
@@ -68,9 +71,9 @@ public class FloppyInfoPanel extends JPanel implements IDebuggerView {
     }
 
     @Override
-    public void refresh(Emulator emulator) {
+    public void refresh() {
 
-        synchronized( emulator ) 
+        driver.invokeAndWait(emulator ->
         {
             final SerialDevice device = emulator.getBus().getDevice( 8 );
             if ( device instanceof DiskHardware ) 
@@ -83,7 +86,7 @@ public class FloppyInfoPanel extends JPanel implements IDebuggerView {
             } else {
                 this.gotDrive = false;
             }
-        }
+        });
         repaint();
     }
     

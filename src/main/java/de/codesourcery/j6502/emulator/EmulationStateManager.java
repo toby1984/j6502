@@ -21,43 +21,38 @@ public class EmulationStateManager
 
     public void restoreEmulationState(InputStream in ) throws IOException {
 
-        driver.setMode(Mode.SINGLE_STEP);
-        final EmulationState state = EmulationState.read( in );
-        final Emulator emulator = driver.emulator;
-        synchronized( emulator ) 
+        driver.invokeAndWait(emulator -> 
         {
+            final EmulationState state = EmulationState.read( in );
             emulator.reset();
-            
+
             // restore C64 memory
             emulator.getMemory().restoreState( state );
-            
+
             // restore C64 CPU state
             final EmulationStateEntry entry = state.getEntry( EntryType.C64_CPU );
             emulator.cpu.restoreState( entry.getPayload() );
-            
-            // FIXME: restore floppy state
-        }
+
+            // FIXME: restore floppy state as well
+        });
     }
 
     public void saveEmulationState(OutputStream out) throws IOException 
     {
-        driver.setMode(Mode.SINGLE_STEP);
-        
-        final EmulationState state = EmulationState.newInstance();
-        final Emulator emulator = driver.emulator;
-        synchronized( emulator ) 
+        driver.invokeAndWait(emulator -> 
         {
+            final EmulationState state = EmulationState.newInstance();
             // save C64 memory
             emulator.getMemory().saveState( state );
-            
+
             // save C64 CPU state
             final EmulationStateEntry entry = new EmulationStateEntry( EntryType.C64_CPU , (byte) 1 );
             entry.setPayload( emulator.cpu.getState() );
             state.add( entry );
-            
+
             // FIXME: save floppy state            
-        }
-        state.write( out );
-        System.out.println("=============\nState\n==========="+state);
+            state.write( out );
+            System.out.println("=============\nState\n==========="+state);
+        });
     }
 }

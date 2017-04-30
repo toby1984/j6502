@@ -10,18 +10,19 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
 
 import org.apache.commons.lang.StringUtils;
 
 import de.codesourcery.j6502.emulator.Emulator;
+import de.codesourcery.j6502.emulator.EmulatorDriver;
+import de.codesourcery.j6502.emulator.EmulatorDriver.CallbackWithResult;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.emulator.IMemoryRegion.MemoryType;
 import de.codesourcery.j6502.emulator.MemoryBreakpointsContainer;
@@ -34,7 +35,7 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
     private Component peer;
     private boolean isDisplayed;    
 
-    private final Emulator emulator;
+    private final EmulatorDriver driver;
 
     private final MyTableModel tableModel = new MyTableModel();
     private final JTable table = new JTable( tableModel );
@@ -86,13 +87,17 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
         @Override
         public void setValueAt(Object aValue, int rowIndex, int columnIndex) 
         {
+            final MemoryBreakpoint oldBp;
+            synchronized(data) 
+            {            
+                oldBp = item(rowIndex);
+            }
             // careful, do NOT change the lock ordering here , otherwise a deadlock may occur
-            synchronized( emulator ) 
+            driver.invokeAndWait( emulator -> 
             {
-                synchronized(data) 
+                MemoryBreakpoint newBp = oldBp;
+                synchronized(oldBp) 
                 {            
-                    final MemoryBreakpoint oldBp = item(rowIndex);
-                    MemoryBreakpoint newBp = oldBp;
                     switch( columnIndex ) 
                     {
                         case 0: // address
@@ -149,13 +154,15 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
                         default:
                             throw new RuntimeException("Invalid column index: "+columnIndex);
                     }
+                }
 
-                    if ( newBp != oldBp ) 
-                    {
+                if ( newBp != oldBp ) 
+                {
+                    synchronized( data ) {
                         data.set(rowIndex,newBp);
                     }
-                }
-            }
+                }                
+            });
         }
 
         @Override
@@ -218,16 +225,19 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
         }
     }
 
-    public MemoryBreakpointsPanel(final Emulator emulator) 
+    public MemoryBreakpointsPanel(final EmulatorDriver driver) 
     {
-        this.emulator = emulator;
+        this.driver = driver;
         setLayout( new GridBagLayout() );
 
-        final BiConsumer<MemoryBreakpointsContainer, MemoryBreakpoint> callback = (container,breakpoint) -> 
+        driver.invokeAndWait( emulator -> 
         {
-            emulator.getCPU().setBreakpointReached();
-        };
-        visitBreakpointContainers( emulator , container -> container.setCallback( callback ) );
+            final BiConsumer<MemoryBreakpointsContainer, MemoryBreakpoint> callback = (container,breakpoint) -> 
+            {
+                emulator.getCPU().setBreakpointReached();
+            };
+            emulator.visitBreakpointContainers( container -> container.setCallback( callback ) );
+        } );
 
         final GridBagConstraints cnstrs = new GridBagConstraints();
         cnstrs.fill = GridBagConstraints.BOTH;
@@ -263,16 +273,13 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
                     } );
                     if ( bpFound ) 
                     {
-                        synchronized( emulator ) 
+                        tableModel.doWithBreakpoints( breakpoints -> 
                         {
-                            tableModel.doWithBreakpoints( breakpoints -> 
-                            {
-                                breakpoints.removeAll( toRemove );
-                                toRemove.forEach( MemoryBreakpoint::remove );
-                                return true;
-                             });
-                        }
-                        refresh( emulator );                        
+                            breakpoints.removeAll( toRemove );
+                            toRemove.forEach( MemoryBreakpoint::remove );
+                            return true;
+                        });
+                        driver.invoke( emulator -> refresh( ) );                        
                     }
                 }
                 else if ( e.getKeyCode() == KeyEvent.VK_INSERT ) 
@@ -280,14 +287,17 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
                     final Integer address = Misc.parseHexAddress( JOptionPane.showInputDialog("Create breakpoint" , "$dc00" ) );
                     if ( address != null ) 
                     {
-                        visitBreakpointContainers( emulator , container -> 
+                        driver.invokeAndWait( emulator -> 
                         {
-                            if ( container.hasMemoryType( MemoryType.RAM) && container.getAddressRange().contains( address ) ) 
+                            emulator.visitBreakpointContainers( container -> 
                             {
-                                container.addReadWriteBreakpoint( address );
-                            }
+                                if ( container.hasMemoryType( MemoryType.RAM) && container.getAddressRange().contains( address ) ) 
+                                {
+                                    container.addReadWriteBreakpoint( address );
+                                }
+                            });
                         });
-                        refresh( emulator );
+                        driver.invoke( emulator -> refresh( ) );
                     }
                 }
             }
@@ -326,31 +336,21 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
     }
 
     @Override
-    public void refresh(Emulator emulator) {
-
+    public void refresh() {
+        
+        final List<MemoryBreakpoint> tmpBreakpoints = new ArrayList<>();
+        driver.invokeAndWait(emulator-> 
+        {
+            emulator.visitBreakpointContainers(  container -> container.visitBreakpoints( tmpBreakpoints::add ) );
+        });
+        
         tableModel.doWithBreakpoints( breakpoints -> 
         {
             breakpoints.clear();
-            final Consumer<MemoryBreakpoint> visitor = breakpoints::add;
-            visitBreakpointContainers( emulator , container -> container.visitBreakpoints( visitor ) );
+            breakpoints.addAll( tmpBreakpoints );
             return true;
         });
-        tableModel.fireTableDataChanged();
-    }
-
-    private void visitBreakpointContainers(Emulator emulator,Consumer<MemoryBreakpointsContainer> visitor)
-    {
-        synchronized(emulator) 
-        {
-            visitor.accept( emulator.getVIC().getBreakpointsContainer() );
-            visitor.accept( emulator.getCIA1().getBreakpointsContainer() );
-            visitor.accept( emulator.getCIA2().getBreakpointsContainer() );
-            final IMemoryRegion[] regions = emulator.getMemory().getRAMRegions();
-            for ( int i = 0 , len = regions.length ; i < len ; i++ ) 
-            {
-                visitor.accept( regions[i].getBreakpointsContainer() );
-            }
-        }
+        SwingUtilities.invokeLater( () -> tableModel.fireTableDataChanged() );
     }
 
     @Override
@@ -358,14 +358,14 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
     {
         return false;
     }
-    
+
     private IMemoryRegion getMemoryRegion(int address,MemoryType type) 
     {
-        switch( type ) 
+        final CallbackWithResult<IMemoryRegion> cb = new CallbackWithResult<>( emulator -> 
         {
-            case IOAREA:
-                synchronized(emulator) 
-                {
+            switch( type ) 
+            {
+                case IOAREA:
                     if ( emulator.getVIC().getAddressRange().contains( address ) ) 
                     {
                         return emulator.getVIC();
@@ -378,14 +378,14 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
                     {
                         return emulator.getCIA2();
                     }
-                }                    
-                throw new RuntimeException("Unable to locate I/O region for address "+Misc.to16BitHex(address));
-            case RAM:
-                synchronized(emulator) {
+                    throw new RuntimeException("Unable to locate I/O region for address "+Misc.to16BitHex(address));
+                case RAM:
                     return emulator.getMemory().getRAMRegion( address );
-                }
-            default:
-                throw new RuntimeException("Unsupported memory type for breakpoint: "+type);
-        }
+                default:
+                    throw new RuntimeException("Unsupported memory type for breakpoint: "+type);
+            }            
+        });
+        driver.invokeAndWait( cb );
+        return cb.getResult();
     }    
 }

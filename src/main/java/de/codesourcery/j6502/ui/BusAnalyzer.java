@@ -21,7 +21,6 @@ import javax.swing.JPanel;
 import javax.swing.Timer;
 
 import de.codesourcery.j6502.emulator.Bus;
-import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 
 public class BusAnalyzer extends JPanel implements IDebuggerView
@@ -404,7 +403,7 @@ public class BusAnalyzer extends JPanel implements IDebuggerView
     }
 
     @Override
-    public void refresh(Emulator emulator)
+    public void refresh()
     {
         repaint();
     }

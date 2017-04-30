@@ -184,7 +184,7 @@ public abstract class CPUStatusPanel extends BufferedView implements WindowLocat
     }
 
     @Override
-    public void refresh(Emulator emulator)
+    public void refresh()
     {
         final CPU cpu = getCPU();
         lines.clear();

@@ -15,8 +15,6 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import de.codesourcery.j6502.emulator.Emulator;
-
 public class WindowLocationHelper
 {
 	protected static final String SIZE_PREFIX = "window_size";
@@ -54,7 +52,7 @@ public class WindowLocationHelper
 
 		public void setDisplayed(boolean yesNo);
 
-		public void refresh(Emulator emulator);
+		public void refresh();
 
 		public boolean isRefreshAfterTick();
 

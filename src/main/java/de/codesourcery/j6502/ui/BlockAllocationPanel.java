@@ -15,7 +15,6 @@ import javax.swing.ToolTipManager;
 
 import de.codesourcery.j6502.emulator.D64File;
 import de.codesourcery.j6502.emulator.D64File.BAMEntry;
-import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 
 public class BlockAllocationPanel extends JPanel implements IDebuggerView {
@@ -92,7 +91,7 @@ public class BlockAllocationPanel extends JPanel implements IDebuggerView {
 	}
 	
 	@Override
-	public void refresh(Emulator emulator) {
+	public void refresh() {
 	}
 	
 	@Override

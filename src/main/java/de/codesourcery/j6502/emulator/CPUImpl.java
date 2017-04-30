@@ -1581,7 +1581,7 @@ In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SB
         if ( adrMode == imp  ) {
             return pimp;
         }
-        if ( adrMode == ind  ) {
+        if ( adrMode == ind || adrMode == indJmp  ) {
             return pind;
         }
         throw new RuntimeException("Unhandled addressing mode for opcode $"+HexDump.toHex( (byte) opcode ) );

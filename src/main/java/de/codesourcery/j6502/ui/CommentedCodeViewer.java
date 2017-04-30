@@ -39,10 +39,13 @@ import javax.swing.text.StyleConstants;
 import javax.swing.text.StyleContext;
 import javax.swing.text.StyledDocument;
 
-import de.codesourcery.j6502.emulator.Emulator;
+import de.codesourcery.j6502.emulator.EmulatorDriver;
+import de.codesourcery.j6502.emulator.EmulatorDriver.CallbackWithResult;
 
 public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.IDebuggerView  
 {
+    private final EmulatorDriver driver;
+    
     private final StyleContext styleContext = new StyleContext();    
     private final JTextPane editor = new JTextPane( createStyledDocument() );
 
@@ -116,9 +119,10 @@ public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.
             this.style = style;
         }
     }
-
-    public CommentedCodeViewer() 
+    
+    public CommentedCodeViewer(EmulatorDriver driver) 
     {
+        this.driver = driver;
         editor.setEditable( false );
         editor.setFocusable( true );
         editor.addKeyListener( keyListener );
@@ -370,9 +374,11 @@ public class CommentedCodeViewer extends JPanel implements WindowLocationHelper.
     }
 
     @Override
-    public void refresh(Emulator emulator) 
+    public void refresh() 
     {
-        highlightCurrentPC( emulator.getCPU().pc() );
+        final CallbackWithResult<Integer> cb = new CallbackWithResult<>( emulator -> emulator.getCPU().pc() );
+        driver.invokeAndWait( cb );
+        highlightCurrentPC( cb.getResult() );
     }
 
     private void highlightCurrentPC(int pc) 

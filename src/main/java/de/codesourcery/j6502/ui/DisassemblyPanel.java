@@ -24,7 +24,6 @@ import de.codesourcery.j6502.disassembler.Disassembler.Line;
 import de.codesourcery.j6502.emulator.Breakpoint;
 import de.codesourcery.j6502.emulator.BreakpointsController;
 import de.codesourcery.j6502.emulator.BreakpointsController.IBreakpointLister;
-import de.codesourcery.j6502.emulator.Emulator;
 import de.codesourcery.j6502.emulator.IMemoryRegion;
 import de.codesourcery.j6502.ui.Debugger.LineWithBounds;
 
@@ -88,7 +87,7 @@ public abstract class DisassemblyPanel extends BufferedView implements WindowLoc
     }
 
     @Override
-    public void refresh(Emulator emulator)
+    public void refresh()
     {
         doRefresh();
         repaint();
@@ -190,7 +189,7 @@ public abstract class DisassemblyPanel extends BufferedView implements WindowLoc
                         } else {
                             controller.addBreakpoint( Breakpoint.unconditionalBreakpoint( adr ) );
                         }
-                        refresh(null);
+                        refresh();
                     }
                 }
             }
@@ -200,27 +199,27 @@ public abstract class DisassemblyPanel extends BufferedView implements WindowLoc
     public void pageUp() {
         this.currentAddress = (short) ( this.currentAddress - bytesToDisassemble/2 );
         lines.clear();
-        refresh(null);
+        refresh();
     }
 
     public void lineUp() {
         this.currentAddress = (short) ( ( this.currentAddress -1 ));
         this.addressToMark = null;
         lines.clear();
-        refresh(null);
+        refresh();
     }
 
     public void lineDown() {
         this.currentAddress = (short) (  this.currentAddress + 1 );
         this.addressToMark = null;
         lines.clear();
-        refresh(null);
+        refresh();
     }
 
     public void pageDown() {
         this.currentAddress = (short) ( this.currentAddress + bytesToDisassemble/2 );
         lines.clear();
-        refresh(null);
+        refresh();
     }
 
     public void setAddress(short adr,Short addressToMark)

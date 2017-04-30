@@ -3,14 +3,17 @@ package de.codesourcery.j6502.emulator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.Validate;
 
 import de.codesourcery.j6502.Constants;
+import de.codesourcery.j6502.emulator.EmulatorDriver.ThrowingConsumer;
 import de.codesourcery.j6502.utils.Misc;
 
 public abstract class EmulatorDriver extends Thread
@@ -28,8 +31,45 @@ public abstract class EmulatorDriver extends Thread
     public double dummyValue; // just used to prevent the compiler from optimizing away our delay loop
 
     protected final ArrayBlockingQueue<Cmd> requestQueue = new ArrayBlockingQueue<>(10);
-    protected final ArrayBlockingQueue<Cmd> ackQueue = new ArrayBlockingQueue<>(10);
 
+    public interface ThrowingConsumer<X> 
+    {
+        public void accept(X obj) throws Exception;
+    }
+    
+    public static final class CallbackWithResult<T> implements ThrowingConsumer<Emulator>
+    {
+        private volatile T result;
+        private volatile boolean called;
+        private volatile boolean success;
+        
+        private final Function<Emulator,T> function;
+        
+        public CallbackWithResult(Function<Emulator,T> function) 
+        {
+            this.function = function;
+        }
+        
+        public T getResult() 
+        {
+            if ( ! called ) {
+                throw new IllegalStateException("getResult() invoked although no accept() not called yet ?");
+            }            
+            if ( ! success ) {
+                throw new IllegalStateException("getResult() invoked although no success ?");
+            }
+            return result;
+        }
+        
+        @Override
+        public void accept(Emulator obj) throws Exception 
+        {
+            called = true;
+            result = function.apply( obj );
+            success = true;
+        }
+    }    
+    
     protected Cmd startCommand(boolean ackRequired) {
         return new Cmd(CmdType.START,ackRequired);
     }
@@ -46,7 +86,7 @@ public abstract class EmulatorDriver extends Thread
         public void emulationStopped(Throwable t,boolean stoppedOnBreakpoint);
     }
 
-    protected static enum CmdType { START , STOP , MAX_SPEED, TRUE_SPEED, RUNNABLE }
+    protected static enum CmdType { START , STOP , MAX_SPEED, TRUE_SPEED, RUNNABLE , EXEC_SINGLE_STEP}
 
     protected final class StopCmd extends Cmd
     {
@@ -75,9 +115,9 @@ public abstract class EmulatorDriver extends Thread
 
     protected final class RunnableCmd extends Cmd {
 
-        public final Consumer<Emulator> visitor;
+        public final ThrowingConsumer<Emulator> visitor;
 
-        public RunnableCmd(Consumer<Emulator> visitor,boolean ackRequired)
+        public RunnableCmd(ThrowingConsumer<Emulator> visitor,boolean ackRequired)
         {
             super(CmdType.RUNNABLE, ackRequired);
             this.visitor = visitor;
@@ -100,10 +140,22 @@ public abstract class EmulatorDriver extends Thread
         public final long id = CMD_ID.incrementAndGet();
         public final CmdType type;
         private final boolean ackRequired;
+        private final Consumer<Emulator> ackCallback;
+        
+        private final CountDownLatch ackLatch = new CountDownLatch(1);
 
         public Cmd(CmdType type,boolean ackRequired) {
+            this(type,ackRequired,null);
+        }
+
+        public Cmd(CmdType type,boolean ackRequired,Consumer<Emulator> ackCallback) {
             this.type = type;
             this.ackRequired = ackRequired;
+            this.ackCallback = ackCallback;
+        }
+        
+        public void awaitAck() throws InterruptedException {
+            ackLatch.await();
         }
 
         public final boolean isAckRequired() {
@@ -145,17 +197,7 @@ public abstract class EmulatorDriver extends Thread
                 if ( Constants.EMULATORDRIVER_DEBUG_CMDS ) {
                     System.out.println("EmulatorDriver: Acknowledging "+this);
                 }				
-                while ( true ) 
-                {
-                    try 
-                    {
-                        ackQueue.put( this );
-                        break;
-                    } 
-                    catch (final InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
+                ackLatch.countDown();
             }
         }
 
@@ -179,6 +221,7 @@ public abstract class EmulatorDriver extends Thread
         this.emulator = emulator;
         setDaemon(true);
         setName("emulator-driver-thread");
+        start();
     }
 
     public Mode getMode()
@@ -203,12 +246,12 @@ public abstract class EmulatorDriver extends Thread
         sendCmd( cmd );
     }
 
-    public void invoke(Consumer<Emulator> visitor) 
+    public void invoke(ThrowingConsumer<Emulator> visitor) 
     {
         sendCmd( new RunnableCmd( visitor , false ) );
     }
 
-    public void invokeAndWait(Consumer<Emulator> visitor) 
+    public void invokeAndWait(ThrowingConsumer<Emulator> visitor) 
     {
         sendCmd( new RunnableCmd( visitor , true ) );
     }	
@@ -230,24 +273,16 @@ public abstract class EmulatorDriver extends Thread
     {
         cmd.enqueue();
 
-        if ( Constants.EMULATORDRIVER_DEBUG_CMDS && cmd.isAckRequired() ) {
-            System.out.println("EmulatorDriver: Awaiting ack for "+cmd);
-        }		
         while ( cmd.isAckRequired() )
         {
-            try {
-                final Cmd acked = ackQueue.take();
-                if ( acked.id == cmd.id ) {
-                    if ( Constants.EMULATORDRIVER_DEBUG_CMDS && cmd.isAckRequired() ) {
-                        System.out.println("EmulatorDriver: Received ack for "+cmd);
-                    }   				    
-                    break;
-                }
-                if ( Constants.EMULATORDRIVER_DEBUG_CMDS && cmd.isAckRequired() ) {
-                    System.out.println("EmulatorDriver: Pushing back ack for "+cmd);
-                } 				
-                ackQueue.put( acked );
-            } 
+            if ( Constants.EMULATORDRIVER_DEBUG_CMDS && cmd.isAckRequired() ) {
+                System.out.println("EmulatorDriver: Awaiting ack for "+cmd);
+            }               
+            try 
+            {
+                cmd.awaitAck();
+                break;
+            }
             catch (final InterruptedException e) 
             {
                 e.printStackTrace();
@@ -300,188 +335,178 @@ public abstract class EmulatorDriver extends Thread
         boolean runAtTrueSpeed = true;
 
         Cmd cmd = null;
-        
+
         BreakpointsController brkCtrl = getBreakPointsController();
         while( true )
         {
-            if ( isRunnable )
+            try 
             {
-                cmd = requestQueue.poll();
-                if ( cmd != null )
+                if ( isRunnable )
                 {
-                    if ( Constants.EMULATORDRIVER_DEBUG_CMDS ) {
-                        System.out.println("EmulatorDriver: (runnable) Received cmd "+cmd);
-                    }
-                    try 
+                    cmd = requestQueue.poll();
+                    if ( cmd != null )
                     {
-                        switch( cmd.type )
-                        {
-                            case MAX_SPEED:
-                                runAtTrueSpeed = false;
-                                continue;
-                            case STOP:
-                                isRunnable = false;                            
-                                continue;
-                            case TRUE_SPEED:
-                                runAtTrueSpeed = true;
-                                continue;
-                            case RUNNABLE:
-                                synchronized( emulator ) 
-                                {
-                                    ((RunnableCmd) cmd).visitor.accept( emulator );
-                                }
-                                continue; // start over as the Runnable might've issued a new command that needs processing
-                            case START:
-                                break;
-                           default:
-                               throw new RuntimeException("Unreachable code reached");
-                        }       
-                    } finally {
-                        cmd.ackIfNecessary();
-                    }
-                }
-            }
-            else
-            {
-                onStop( null , cmd instanceof StopCmd && ((StopCmd) cmd).stoppedAtBreakpoint );                    
-                while ( ! isRunnable )
-                {
-                    try
-                    {
-                        cmd = requestQueue.take();
-                    } 
-                    catch (final InterruptedException e) 
-                    {
-                        e.printStackTrace();
-                        continue;
-                    }                        
-                    if ( Constants.EMULATORDRIVER_DEBUG_CMDS ) {
-                        System.out.println("EmulatorDriver: (not runnable) Received cmd "+cmd);
-                    }					
-                    try 
-                    {
-                        switch( cmd.type )
-                        {
-                            case MAX_SPEED:
-                                runAtTrueSpeed = false;
-                                break;
-                            case START:
-                                isRunnable = true;
-                                break;
-                            case TRUE_SPEED:
-                                runAtTrueSpeed = true;
-                                break;
-                            case RUNNABLE:
-                                synchronized( emulator ) 
-                                {
-                                    ((RunnableCmd) cmd).visitor.accept( emulator );
-                                }
-                                continue; // start over as the Runnable might've enqueued a new command that needs processing                                
-                            case STOP: 
-                                break; // nothing to do here
-                            default:
-                                throw new RuntimeException("Unreachable code reached");
+                        if ( Constants.EMULATORDRIVER_DEBUG_CMDS ) {
+                            System.out.println("EmulatorDriver: (runnable) Received cmd "+cmd);
                         }
-                    } finally {
-                        cmd.ackIfNecessary();
-                    }
-                }
-
-                mostRecentException.set(null);                
-                cyclesUntilNextTick = Constants.EMULATORDRIVER_CALLBACK_INVOKE_CYCLES;
-                startTime = System.currentTimeMillis();
-                adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
-                brkCtrl = getBreakPointsController();
-                
-                onStart();
-            }
-
-            // delay loop
-            if ( runAtTrueSpeed ) 
-            {
-                double dummy = 0;
-                for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
-                    dummy += Math.sqrt( i );
-                }
-                this.dummyValue=dummy;
-            }
-
-            synchronized( emulator )
-            {
-                try
-                {
-                    emulator.doOneCycle(this);
-
-                    cyclesUntilNextTick--;
-
-                    if ( brkCtrl.checkIsAtBreakpoint() ) 
-                    {
-                        isRunnable = false;
-                        cmd = stopCommand( false , true ); // assign to cmd so that next loop iteration will know why we stopped execution
-                        // TODO: Deadlock prone ?? We're already holding the emulator lock here ....                        
-                        sendCmd( cmd );                        
-                    }
-                }
-                catch(final Throwable e)
-                {
-                    e.printStackTrace();
-                    if ( Constants.CPU_RECORD_BACKTRACE ) 
-                    {
-                        final int[] lastPCs = emulator.getCPU().getBacktrace();
-                        System.err.println("\n**********\n"
-                                + "Backtrace\n"+
-                                "**********\n");
-                        for ( int i = 0 , no = lastPCs.length ; i < lastPCs.length ; i++ , no-- ) 
+                        try 
                         {
-                            System.err.println( StringUtils.leftPad( Integer.toString( no ) , 3 , ' ' )+": "+Misc.to16BitHex( lastPCs[i] ));
+                            switch( cmd.type )
+                            {
+                                case MAX_SPEED:
+                                    runAtTrueSpeed = false;
+                                    continue;
+                                case STOP:
+                                    isRunnable = false;                            
+                                    continue;
+                                case TRUE_SPEED:
+                                    runAtTrueSpeed = true;
+                                    continue;
+                                case RUNNABLE:
+                                    ((RunnableCmd) cmd).visitor.accept( emulator );
+                                    continue; // start over as the Runnable might've issued a new command that needs processing
+                                case START:
+                                    break;
+                                default:
+                                    throw new RuntimeException("Unreachable code reached");
+                            }       
+                        } finally {
+                            cmd.ackIfNecessary();
+                        }
+                    }
+                }
+                else
+                {
+                    onStop( null , cmd instanceof StopCmd && ((StopCmd) cmd).stoppedAtBreakpoint );                    
+                    while ( ! isRunnable )
+                    {
+                        try
+                        {
+                            cmd = requestQueue.take();
+                        } 
+                        catch (final InterruptedException e) 
+                        {
+                            e.printStackTrace();
+                            continue;
+                        }                        
+                        if ( Constants.EMULATORDRIVER_DEBUG_CMDS ) {
+                            System.out.println("EmulatorDriver: (not runnable) Received cmd "+cmd);
+                        }					
+                        try 
+                        {
+                            switch( cmd.type )
+                            {
+                                case MAX_SPEED:
+                                    runAtTrueSpeed = false;
+                                    break;
+                                case START:
+                                    isRunnable = true;
+                                    break;
+                                case TRUE_SPEED:
+                                    runAtTrueSpeed = true;
+                                    break;
+                                case RUNNABLE:
+                                    ((RunnableCmd) cmd).visitor.accept( emulator );
+                                    continue; // start over as the Runnable might've enqueued a new command that needs processing                                
+                                case STOP: 
+                                    break; // nothing to do here
+                                default:
+                                    throw new RuntimeException("Unreachable code reached");
+                            }
+                        } finally {
+                            cmd.ackIfNecessary();
                         }
                     }
 
+                    mostRecentException.set(null);                
+                    cyclesUntilNextTick = Constants.EMULATORDRIVER_CALLBACK_INVOKE_CYCLES;
+                    startTime = System.currentTimeMillis();
+                    adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
+                    brkCtrl = getBreakPointsController();
+
+                    onStart();
+                }
+
+                // delay loop
+                if ( runAtTrueSpeed ) 
+                {
+                    double dummy = 0;
+                    for ( int i = delayIterationsCount ; i > 0 ; i-- ) {
+                        dummy += Math.sqrt( i );
+                    }
+                    this.dummyValue=dummy;
+                }
+
+                emulator.doOneCycle(this);
+
+                cyclesUntilNextTick--;
+
+                if ( brkCtrl.checkIsAtBreakpoint() ) 
+                {
                     isRunnable = false;
-                    mostRecentException.set(e);
-                    cyclesUntilNextTick = -1; // trigger UI callback invocation further below
-                    // TODO: Deadlock prone ?? We're already holding the emulator lock here ....                    
-                    sendCmd( stopCommand( false , false ) );
-                } 
-            }
-
-            if ( cyclesUntilNextTick < 0 )
-            {
-                if ( Constants.EMULATORDRIVER_INVOKE_CALLBACK ) {
-                    tick();
+                    cmd = stopCommand( false , true ); // assign to cmd so that next loop iteration will know why we stopped execution
+                    // TODO: Deadlock prone ?? We're already holding the emulator lock here ....                        
+                    sendCmd( cmd );                        
                 }
 
-                // adjust delay loop
-                final long now = System.currentTimeMillis();
-                final float cyclesPerSecond = Constants.EMULATORDRIVER_CALLBACK_INVOKE_CYCLES / ( (now - startTime ) / 1000f );
-                final float khz = cyclesPerSecond / 1000f;
-                if ( Constants.EMULATORDRIVER_PRINT_SPEED )
+                if ( cyclesUntilNextTick < 0 )
                 {
-                    System.out.println("CPU frequency: "+khz+" kHz (delay iterations: "+delayIterationsCount+") "+this.dummyValue);
-                }
-                if ( adjustDelayLoop && runAtTrueSpeed )
-                {
-                    if ( khz >= 1000 ) {
-                        delayIterationsCount++;
+                    if ( Constants.EMULATORDRIVER_INVOKE_CALLBACK ) {
+                        tick();
                     }
-                    else if ( khz < 950 )
+
+                    // adjust delay loop
+                    final long now = System.currentTimeMillis();
+                    final float cyclesPerSecond = Constants.EMULATORDRIVER_CALLBACK_INVOKE_CYCLES / ( (now - startTime ) / 1000f );
+                    final float khz = cyclesPerSecond / 1000f;
+                    if ( Constants.EMULATORDRIVER_PRINT_SPEED )
                     {
-                        delayIterationsCount--;
+                        System.out.println("CPU frequency: "+khz+" kHz (delay iterations: "+delayIterationsCount+") "+this.dummyValue);
+                    }
+                    if ( adjustDelayLoop && runAtTrueSpeed )
+                    {
+                        if ( khz >= 1000 ) {
+                            delayIterationsCount++;
+                        }
+                        else if ( khz < 950 )
+                        {
+                            delayIterationsCount--;
+                        }
+                    }
+                    startTime = now;
+                    cyclesUntilNextTick = Constants.EMULATORDRIVER_CALLBACK_INVOKE_CYCLES;
+                    adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
+                    brkCtrl = getBreakPointsController();
+                }
+            }
+            catch(final Throwable e)
+            {
+                e.printStackTrace();
+                if ( Constants.CPU_RECORD_BACKTRACE ) 
+                {
+                    final int[] lastPCs = emulator.getCPU().getBacktrace();
+                    System.err.println("\n**********\n"
+                            + "Backtrace\n"+
+                            "**********\n");
+                    for ( int i = 0 , no = lastPCs.length ; i < lastPCs.length ; i++ , no-- ) 
+                    {
+                        System.err.println( StringUtils.leftPad( Integer.toString( no ) , 3 , ' ' )+": "+Misc.to16BitHex( lastPCs[i] ));
                     }
                 }
-                startTime = now;
-                cyclesUntilNextTick = Constants.EMULATORDRIVER_CALLBACK_INVOKE_CYCLES;
-                adjustDelayLoop = currentMode.get() == Mode.CONTINOUS;
-                brkCtrl = getBreakPointsController();
-            }
-        }
+
+                isRunnable = false;
+                mostRecentException.set(e);
+                cyclesUntilNextTick = -1; // trigger UI callback invocation further below
+                // TODO: Deadlock prone ?? We're already holding the emulator lock here ....                    
+                sendCmd( stopCommand( false , false ) );
+            }             
+        } // end while (true)
     }
 
     public void singleStep(CPU cpu) throws RuntimeException
     {
         setMode(Mode.SINGLE_STEP);
-
-        synchronized( emulator )
+        invokeAndWait( emulator ->
         {
             mostRecentException.set(null);
             try 
@@ -498,7 +523,7 @@ public abstract class EmulatorDriver extends Thread
                 mostRecentException.set(e);
                 throw e;
             }
-        }
+        });
     }
 
     public Throwable getMostRecentException() {

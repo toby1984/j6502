@@ -163,4 +163,16 @@ public class Emulator
     public void setExternalHwBreakpointReached() {
         externalHwBreakpointReached = true;
     }
+    
+    public void visitBreakpointContainers(Consumer<MemoryBreakpointsContainer> visitor)
+    {
+        visitor.accept( getVIC().getBreakpointsContainer() );
+        visitor.accept( getCIA1().getBreakpointsContainer() );
+        visitor.accept( getCIA2().getBreakpointsContainer() );
+        final IMemoryRegion[] regions = getMemory().getRAMRegions();
+        for ( int i = 0 , len = regions.length ; i < len ; i++ ) 
+        {
+            visitor.accept( regions[i].getBreakpointsContainer() );
+        }
+    }    
 }
