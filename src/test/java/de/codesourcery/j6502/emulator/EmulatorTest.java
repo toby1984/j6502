@@ -760,7 +760,6 @@ ROR shifts all bits right one position. The Carry is shifted into bit 7 and the 
         e.reset();
         e.getCPU().pc( origin );
 
-        driver.start();
         ctrl.addBreakpoint( Breakpoint.unconditionalBreakpoint( (short) 0x45c0 ) );
         driver.setMode( Mode.CONTINOUS );
 

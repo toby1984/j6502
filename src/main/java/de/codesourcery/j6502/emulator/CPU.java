@@ -1,17 +1,21 @@
 package de.codesourcery.j6502.emulator;
 
+import static de.codesourcery.j6502.emulator.SerializationHelper.*;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang.StringUtils;
+
 import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.utils.HexDump;
-
-import static de.codesourcery.j6502.emulator.SerializationHelper.*;
+import de.codesourcery.j6502.utils.Misc;
 
 public class CPU
 {
@@ -22,7 +26,25 @@ public class CPU
 
 	private final IMemoryRegion memory;
 
-	public static enum IRQType { REGULAR , NMI , BRK , NONE };
+	public static enum IRQType 
+	{ 
+	    REGULAR(1) , NMI(2) , BRK(3) , NONE(4);
+	    
+	    public final int identifier;
+	    
+	    private IRQType(int id) {
+	        this.identifier = id;
+	    }
+	    
+	    public static IRQType fromIdentifier(int id) {
+	        for ( IRQType t : values() ) {
+	            if ( t.identifier == id ) {
+	                return t;
+	            }
+	        }
+	        throw new IllegalArgumentException("Unknown identifier: "+id);
+	    }
+	};
 
 	private IRQType interruptQueued = IRQType.NONE;
 
@@ -48,6 +70,7 @@ public class CPU
         final ByteArrayInputStream in = new ByteArrayInputStream(data);
         try 
         {
+            interruptQueued = IRQType.fromIdentifier( readInt( in ) );
             populateIntArray( backtraceRingBuffer , in );
             backtraceRingBufferElements = readInt( in );
             cycles = readLong( in );
@@ -72,6 +95,7 @@ public class CPU
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         try 
         {
+            writeInt( interruptQueued.identifier , out );
             writeIntArray( backtraceRingBuffer , out );
             writeInt( backtraceRingBufferElements , out );
             writeLong( cycles , out );
@@ -158,7 +182,7 @@ public class CPU
 	    this.sp = other.sp;
 	    this.flags = other.flags;
 	}
-
+	
 	public boolean matches(CPU other)
 	{
 	    boolean result= this.interruptQueued == other.interruptQueued
@@ -212,7 +236,7 @@ public class CPU
 	    switch( interruptQueued )
 	    {
             case BRK:
-                pushByte( CPU.Flag.BREAK.set( flags ) , memory ); // push processor flags
+                pushByte( (byte) (CPU.Flag.BREAK.set( flags ) | CPU.Flag.EXTENSION.set( flags ) ) , memory ); // push processor flags
                 pc = memory.readWord( CPU.BRK_VECTOR_LOCATION );
                 break;
             case NMI:
@@ -258,6 +282,15 @@ public class CPU
 		this.flags = f.clear( this.flags );
 	}
 
+	public void forceInterruptsDisabledFlag(boolean onOff) {
+	    if ( onOff ) {
+	        setFlag( Flag.IRQ_DISABLE );
+ 	    } else {
+ 	        clearFlag( Flag.IRQ_DISABLE );
+ 	    }
+	    interruptQueued = IRQType.NONE;
+	}
+	
 	public void setFlag(Flag f,boolean onOff) {
 		this.flags = onOff ? f.set( this.flags ) : f.clear( this.flags );
 	}
@@ -500,6 +533,21 @@ public class CPU
             result[i] = backtraceRingBuffer[ptr & Constants.CPU_BACKTRACE_RINGBUFFER_SIZE_MASK];
         }
         return result;
+    }
+    
+    public void printBacktrace(PrintStream out) 
+    {
+        if ( Constants.CPU_RECORD_BACKTRACE ) 
+        {
+            final int[] lastPCs = getBacktrace();
+            System.err.println("\n**********\n"
+                    + "Backtrace\n"+
+                    "**********\n");
+            for ( int i = 0 , no = lastPCs.length ; i < lastPCs.length ; i++ , no-- ) 
+            {
+                out.println( StringUtils.leftPad( Integer.toString( no ) , 3 , ' ' )+": "+Misc.to16BitHex( lastPCs[i] ));
+            }
+        }        
     }
     
     /**

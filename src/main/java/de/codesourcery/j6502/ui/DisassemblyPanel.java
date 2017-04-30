@@ -45,6 +45,8 @@ public abstract class DisassemblyPanel extends BufferedView implements WindowLoc
 
     private boolean isDisplayed;
     private Component peer;
+    
+    private final Debugger debugger;
 
     @Override
     protected void initGraphics(Graphics2D g) { Debugger.setup( g ); }
@@ -140,8 +142,9 @@ public abstract class DisassemblyPanel extends BufferedView implements WindowLoc
         }
     }
 
-    public DisassemblyPanel()
+    public DisassemblyPanel(Debugger debugger)
     {
+        this.debugger = debugger;
         setFocusable( true );
         setRequestFocusEnabled(true);
         requestFocus();
@@ -153,7 +156,15 @@ public abstract class DisassemblyPanel extends BufferedView implements WindowLoc
             @Override
             public void keyReleased(java.awt.event.KeyEvent e)
             {
-                if ( e.getKeyCode() == KeyEvent.VK_DOWN ) {
+                if ( e.getKeyCode() == KeyEvent.VK_ENTER ) 
+                {
+                    debugger.driver.invokeLater( emulator -> 
+                    {
+                       final int pc = debugger.getCPU().pc();
+                       setAddress( (short) pc, (short) pc );
+                    });
+                } 
+                else if ( e.getKeyCode() == KeyEvent.VK_DOWN ) {
                     lineDown();
                 } else if ( e.getKeyCode() == KeyEvent.VK_UP) {
                     lineUp();

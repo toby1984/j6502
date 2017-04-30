@@ -26,7 +26,6 @@ public final class CPUImpl
     protected boolean penaltyop, penaltyaddr;
 
     protected int ea, reladdr, value;
-    protected byte oldstatus;
 
     protected abstract class AbstractRunnable 
     {

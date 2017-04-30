@@ -246,15 +246,36 @@ public abstract class EmulatorDriver extends Thread
         sendCmd( cmd );
     }
 
-    public void invoke(ThrowingConsumer<Emulator> visitor) 
+    public void invokeLater(ThrowingConsumer<Emulator> visitor) 
     {
-        sendCmd( new RunnableCmd( visitor , false ) );
+        if ( isEmulatorThread() ) 
+        {
+            try {
+                visitor.accept( emulator );
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            sendCmd( new RunnableCmd( visitor , false ) );
+        }
     }
 
     public void invokeAndWait(ThrowingConsumer<Emulator> visitor) 
     {
-        sendCmd( new RunnableCmd( visitor , true ) );
+        if ( isEmulatorThread() ) {
+            try {
+                visitor.accept( emulator );
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            sendCmd( new RunnableCmd( visitor , true ) );
+        }
     }	
+    
+    public boolean isEmulatorThread() {
+        return Thread.currentThread() == this;
+    }
 
     public void setMaxSpeed() {
         sendCmd( new MaxSpeedCommand() );
@@ -445,7 +466,6 @@ public abstract class EmulatorDriver extends Thread
                 {
                     isRunnable = false;
                     cmd = stopCommand( false , true ); // assign to cmd so that next loop iteration will know why we stopped execution
-                    // TODO: Deadlock prone ?? We're already holding the emulator lock here ....                        
                     sendCmd( cmd );                        
                 }
 
@@ -482,17 +502,7 @@ public abstract class EmulatorDriver extends Thread
             catch(final Throwable e)
             {
                 e.printStackTrace();
-                if ( Constants.CPU_RECORD_BACKTRACE ) 
-                {
-                    final int[] lastPCs = emulator.getCPU().getBacktrace();
-                    System.err.println("\n**********\n"
-                            + "Backtrace\n"+
-                            "**********\n");
-                    for ( int i = 0 , no = lastPCs.length ; i < lastPCs.length ; i++ , no-- ) 
-                    {
-                        System.err.println( StringUtils.leftPad( Integer.toString( no ) , 3 , ' ' )+": "+Misc.to16BitHex( lastPCs[i] ));
-                    }
-                }
+                emulator.getCPU().printBacktrace( System.err );
 
                 isRunnable = false;
                 mostRecentException.set(e);

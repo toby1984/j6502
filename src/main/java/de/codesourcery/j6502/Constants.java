@@ -10,7 +10,7 @@ package de.codesourcery.j6502;
 public class Constants 
 {
     // various Memory implementations
-    public static final boolean MEMORY_SUPPORT_BREAKPOINTS = false; /* PERFORMANCE RELEVANT */
+    public static final boolean MEMORY_SUPPORT_BREAKPOINTS = true; /* PERFORMANCE RELEVANT */
     public static final boolean MEMORY_DEBUG_STATE_PERSISTENCE = true;
     
     // EmulatorDriver class constants
@@ -42,6 +42,7 @@ public class Constants
     public static final boolean VIC_DEBUG_TRIGGERED_INTERRUPTS = false;
     public static final boolean VIC_DEBUG_FPS = true;
     public static final boolean VIC_DEBUG_GRAPHIC_MODES = true;
+    public static final boolean VIC_DEBUG_SCROLLING = true;
     public static final boolean VIC_DEBUG_DRAW_RASTER_IRQ_LINE = true;
     public static final boolean VIC_DEBUG_SPRITES = true;
     public static final boolean VIC_DEBUG_MEMORY_LAYOUT = true;
@@ -50,6 +51,8 @@ public class Constants
     public static final boolean VIC_SPRITE_BACKGROUND_COLLISIONS = true;
     
     // CIA class constants
+    public static final boolean CIAS_DISABLED = false;
+    
     public static final boolean CIA_DEBUG = false;
     public static final boolean CIA_DEBUG_VERBOSE = false;
     public static final boolean CIA_DEBUG_TIMER_LOAD = false;

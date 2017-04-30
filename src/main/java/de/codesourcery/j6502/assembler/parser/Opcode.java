@@ -378,7 +378,7 @@ public enum Opcode
 				case ABSOLUTE:
 				case ZERO_PAGE:
 					writer.writeByte( (byte) 0x20 );
-					writer.writeWord( getWordValue( ins.child(0).child(0) ) );
+                    writer.writeWord( getWordValue( ins.child(0).child(0) ) );
 					break;
 				default:
 					throw new InvalidAddressingModeException( ins );

@@ -527,10 +527,13 @@ PRB 	Data Port B 	Monitoring/control of the 8 data lines of Port B. The lines ar
 
     public void tick(Emulator emulator,CPU cpu,boolean clockHigh)
     {
-        if ( clockHigh ) {
+        if ( clockHigh ) 
+        {
             keyboardBuffer.tick( this );
-            cia1.tick( cpu );
-            cia2.tick( cpu );
+            if ( ! Constants.CIAS_DISABLED ) {
+                cia1.tick( cpu );
+                cia2.tick( cpu );
+            }
 
             if (Constants.IEC_BUS_ENABLED) {
                 iecBus.tick(emulator);

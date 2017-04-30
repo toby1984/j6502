@@ -279,7 +279,7 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
                             toRemove.forEach( MemoryBreakpoint::remove );
                             return true;
                         });
-                        driver.invoke( emulator -> refresh( ) );                        
+                        driver.invokeLater( emulator -> refresh( ) );                        
                     }
                 }
                 else if ( e.getKeyCode() == KeyEvent.VK_INSERT ) 
@@ -297,7 +297,7 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
                                 }
                             });
                         });
-                        driver.invoke( emulator -> refresh( ) );
+                        driver.invokeLater( emulator -> refresh( ) );
                     }
                 }
             }
@@ -338,19 +338,20 @@ public class MemoryBreakpointsPanel extends JPanel implements IDebuggerView
     @Override
     public void refresh() {
         
-        final List<MemoryBreakpoint> tmpBreakpoints = new ArrayList<>();
-        driver.invokeAndWait(emulator-> 
+        driver.invokeLater(emulator-> 
         {
+            final List<MemoryBreakpoint> tmpBreakpoints = new ArrayList<>();
             emulator.visitBreakpointContainers(  container -> container.visitBreakpoints( tmpBreakpoints::add ) );
+            
+            tableModel.doWithBreakpoints( breakpoints -> 
+            {
+                breakpoints.clear();
+                breakpoints.addAll( tmpBreakpoints );
+                return true;
+            });
+            SwingUtilities.invokeLater( () -> tableModel.fireTableDataChanged() );            
+            
         });
-        
-        tableModel.doWithBreakpoints( breakpoints -> 
-        {
-            breakpoints.clear();
-            breakpoints.addAll( tmpBreakpoints );
-            return true;
-        });
-        SwingUtilities.invokeLater( () -> tableModel.fireTableDataChanged() );
     }
 
     @Override

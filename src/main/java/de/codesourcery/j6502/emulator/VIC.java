@@ -1231,11 +1231,15 @@ public class VIC extends IMemoryRegion implements IStatefulPart
     protected int memoryMapping;
     protected int enabledInterruptFlags;
     protected int triggeredInterruptFlags;
+    
+    private int xOffset;
+    private int yOffset;    
 
     protected int rasterIRQLine;
 
     protected int vicCtrl1;
     protected int vicCtrl2;
+    
     protected GraphicsMode graphicsMode = GraphicsMode.MODE_000;
 
     protected boolean displayEnabled=true;
@@ -1367,7 +1371,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         spriteBackgroundCollisionDetected= false;
 
         // TODO: Nasty hack with rasterIRQLine+4 because I'm not honoring cycle timings at all....fix this !!!
-        final int rasterPoint = isRasterIrqEnabled() ? rasterIRQLine+4 : -1;
+        final int rasterPoint = isRasterIrqEnabled() ? rasterIRQLine : -1;
 
         // render 4 pixels/clock phase = 8 pixel/clock cycle
         for ( int i = 0 ; i < 4 ; i++ )
@@ -1719,7 +1723,10 @@ display window.
 
         displayEnabled=true;
         displayEnabledNewState=true;
-        displayEnabledChanged=false;        
+        displayEnabledChanged=false;     
+        
+        xOffset = 0;
+        yOffset = 0;
 
         graphicsMode = GraphicsMode.get(this);
 
@@ -2111,16 +2118,25 @@ display window.
                         final GraphicsMode oldMode = this.graphicsMode;
                         this.vicCtrl1 = value & 0b0111_1111; // bit 7 is actually bit 8 of raster IRQ line
                         final GraphicsMode newMode = GraphicsMode.get(this);
-                        System.err.println("VIC_CTRL1 mode changed: "+oldMode+" -> "+newMode);
+                        System.err.println("VIC: Graphics mode changed: "+oldMode+" -> "+newMode);
                     }
                 }
+                // Bit 2..0: Offset in Rasterzeilen vom oberen Bildschirmrand
+                final int newYOffset = value & 0b111;
+                if ( Constants.VIC_DEBUG_SCROLLING && newYOffset != yOffset )  
+                {
+                    System.err.println("VIC: Y-offset changed: "+yOffset+" -> "+newYOffset);                    
+                } 
+                this.yOffset = newYOffset;
                 this.vicCtrl1 = value & 0xff;
                 setDisplayEnabled( (value & 1<<4) != 0 );
-                if ( (value & 1<<7) != 0 ) {
-                    rasterIRQLine |= 1<<8;
-                } else {
-                    rasterIRQLine &= ~(1<<8);
+                
+                final int newRasterIRQLine = (rasterIRQLine & 0xff) | (value & 0b1000_0000) << 1;
+                if ( Constants.VIC_DEBUG_INTERRUPTS && newRasterIRQLine != rasterIRQLine )
+                {
+                    System.err.println("VIC: Raster IRQ line changed (hi-bit), triggering IRQs in line "+newRasterIRQLine); 
                 }
+                rasterIRQLine = newRasterIRQLine;
                 this.graphicsMode = GraphicsMode.get( this );                
                 recalculateVerticalBorders();
                 break;
@@ -2135,6 +2151,14 @@ display window.
                         System.err.println("VIC_CTRL2 mode changed: "+oldMode+" -> "+newMode);
                     }
                 }
+                // Bit 2..0: Offset in Rasterzeilen vom linken Bildschirmrand
+                final int newXOffset = value & 0b111;
+                if ( Constants.VIC_DEBUG_SCROLLING && newXOffset != xOffset )  
+                {
+                    System.err.println("VIC: X-offset changed: "+xOffset+" -> "+newXOffset);                    
+                } 
+                this.xOffset = newXOffset;
+                
                 this.vicCtrl2 = value & 0xff;
                 this.graphicsMode = GraphicsMode.get( this );
                 recalculateHorizontalBorders();
@@ -2154,6 +2178,9 @@ display window.
                  */
                 rasterIRQLine &= ~0xff;
                 rasterIRQLine |= (value & 0xff);
+                if ( Constants.VIC_DEBUG_INTERRUPTS ) {
+                    System.out.println("VIC: Raster IRQ changed (lower 8 bit) , triggering IRQs @ row "+rasterIRQLine);
+                }                
                 break;
             case VIC_LIGHTPEN_X_COORDS:
                 lightpenX = value & 0xff;
@@ -2212,6 +2239,9 @@ display window.
 
         try 
         {
+            xOffset = readInt( out );
+            yOffset = readInt( out );
+            
             memoryMapping = readInt( out );            
             vicCtrl1 = readInt( out );
             vicCtrl2 = readInt( out  );
@@ -2301,6 +2331,9 @@ display window.
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         try 
         {
+            writeInt( xOffset , out );
+            writeInt( yOffset , out );
+            
             writeInt( memoryMapping , out );
             
             writeInt( vicCtrl1 , out );

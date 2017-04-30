@@ -192,6 +192,19 @@ public class Assembler
 			};
 
 			ast.visitParentFirst( visitor2 );
+			
+			// assert that all symbols have been resolved
+			if ( currentPassNo > 0 ) {
+			    
+			    final Consumer<IASTNode> sanityCheck = node -> 
+			    {
+			      if ( node instanceof IValueNode && ! ((IValueNode) node).isValueAvailable() ) 
+			      {
+			          throw new RuntimeException("Value unavailable for "+node);
+			      }
+			    };
+                ast.visitParentFirst( sanityCheck );
+			}
 
 			currentPassNo++;
 		}

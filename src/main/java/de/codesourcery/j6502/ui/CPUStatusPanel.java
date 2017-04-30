@@ -21,13 +21,18 @@ import javax.swing.SwingConstants;
 
 import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.emulator.CPU;
+import de.codesourcery.j6502.emulator.CPU.Flag;
 import de.codesourcery.j6502.emulator.Emulator;
+import de.codesourcery.j6502.emulator.EmulatorDriver;
 import de.codesourcery.j6502.emulator.EmulatorDriver.IEmulationListener;
+import de.codesourcery.j6502.emulator.EmulatorDriver.Mode;
 import de.codesourcery.j6502.utils.HexDump;
+import de.codesourcery.j6502.utils.Misc;
 
 // CPU status
 public abstract class CPUStatusPanel extends BufferedView implements WindowLocationHelper.IDebuggerView , IEmulationListener
 {
+    private final Debugger debugger;
     private Component peer;
     private boolean isDisplayed;
 
@@ -36,8 +41,9 @@ public abstract class CPUStatusPanel extends BufferedView implements WindowLocat
     
     private volatile boolean emulationRunning;
 
-    public CPUStatusPanel()
+    public CPUStatusPanel(Debugger debugger)
     {
+        this.debugger = debugger;
         setRequestFocusEnabled( true );
         setFocusable( true );
         
@@ -53,9 +59,29 @@ public abstract class CPUStatusPanel extends BufferedView implements WindowLocat
                 }
                 switch( e.getKeyChar() ) 
                 {
+                    case 'i':
+                        debugger.driver.setMode( Mode.SINGLE_STEP );
+                        if ( debugger.getCPU().isSet( Flag.IRQ_DISABLE ) ) {
+                            debugger.getCPU().forceInterruptsDisabledFlag( false );
+                        } else {
+                            debugger.getCPU().forceInterruptsDisabledFlag( true );
+                        }
+                        debugger.repaint();
+                        break;                    
                     case 'p':
-                        readValue("Change PC" , "$"+Integer.toHexString( getCPU().pc() ) , value -> getCPU().pc( value ) ); 
+                        readValue("Change PC" , "$"+Integer.toHexString( getCPU().pc() ) , value -> 
+                        {
+                            getCPU().pc( value );
+                            debugger.disassembly.setAddress( value.shortValue() , value.shortValue() );                             
+                        }); 
                         break;
+                    case 's':
+                        readValue("Change SP" , "$"+Integer.toHexString( getCPU().pc() ) , value -> 
+                        {
+                            getCPU().setSP( value );
+                            debugger.repaint();
+                        }); 
+                        break;                        
                     case 'a':
                         readValue("Change accumulator" , "$"+Integer.toHexString( getCPU().getAccumulator() ) , value -> getCPU().setAccumulator( value ) );
                         break;
@@ -126,16 +152,16 @@ public abstract class CPUStatusPanel extends BufferedView implements WindowLocat
             final int iValue;
             try 
             {
-                if ( value.startsWith("$" ) ) {
-                    iValue = Integer.parseInt( value.substring(1).toLowerCase() , 16 );
-                } else {
-                    iValue = Integer.parseInt( value );
-                }
+                iValue = Misc.parseHexAddress( value );
             } catch(NumberFormatException e) {
                 e.printStackTrace();
                 return;
             }
-            consumer.accept( iValue );
+            debugger.driver.invokeLater( emulator -> 
+            {
+                consumer.accept( iValue );
+                debugger.repaint();
+            });
         }
     }
     

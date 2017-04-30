@@ -72,6 +72,7 @@ import javax.swing.table.AbstractTableModel;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 
+import de.codesourcery.hex2raw.IntelHex;
 import de.codesourcery.j6502.Constants;
 import de.codesourcery.j6502.assembler.Assembler;
 import de.codesourcery.j6502.assembler.parser.Lexer;
@@ -105,7 +106,8 @@ import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.Misc;
 
-public class Debugger {
+public class Debugger 
+{
     protected static final int LINE_HEIGHT = 15;
 
     protected static final Color FG_COLOR = Color.GREEN;
@@ -127,7 +129,7 @@ public class Debugger {
     private final AtomicReference<IMemoryRegion> debugMemory = new AtomicReference<>(emulator.getMemory());    
     private DebugTarget debugTarget = DebugTarget.COMPUTER;
     
-    protected final EmulatorDriver driver = new EmulatorDriver(emulator) {
+    public final EmulatorDriver driver = new EmulatorDriver(emulator) {
 
         private long lastTick;
 
@@ -143,9 +145,11 @@ public class Debugger {
                                                             // handling queue
             {
                 lastTick = now;
-                try {
-                    SwingUtilities.invokeAndWait(() -> updateWindows(true));
-                } catch (Exception e) {
+                try 
+                {
+                    SwingUtilities.invokeLater(() -> updateWindows(true));
+                } 
+                catch (Exception e) {
                     e.printStackTrace();
                 }
             }
@@ -194,7 +198,7 @@ public class Debugger {
     private final FloppyInfoPanel floppyInfoPanel = new FloppyInfoPanel(driver);
     private final BreakpointModel bpModel = new BreakpointModel();
     private final ButtonToolbar toolbar = new ButtonToolbar();
-    private final DisassemblyPanel disassembly = new DisassemblyPanel() {
+    public final DisassemblyPanel disassembly = new DisassemblyPanel(this) {
 
         @Override
         public BreakpointsController getBreakpointsController() {
@@ -205,7 +209,7 @@ public class Debugger {
 
     private final HexDumpPanel hexPanel = new HexDumpPanel();
 
-    private final CPUStatusPanel cpuPanel = new CPUStatusPanel() {
+    private final CPUStatusPanel cpuPanel = new CPUStatusPanel(this) {
         @Override
         protected CPU getCPU() {
             return Debugger.this.getCPU();
@@ -261,8 +265,8 @@ public class Debugger {
         SwingUtilities.invokeLater(() -> new Debugger().run());
     }
 
-    public void run() {
-
+    public void run() 
+    {
         emulator.reset();
 
         final JInternalFrame toolbarFrame = wrap("Buttons", toolbar);
@@ -534,7 +538,7 @@ public class Debugger {
                                 return false;
                             }
                         }
-                        if (f.isFile() && !f.getName().endsWith(".bin")) {
+                        if (f.isFile() && ! (f.getName().toLowerCase().endsWith(".bin") | f.getName().toLowerCase().endsWith(".hex"))) {
                             return false;
                         }
                         return f.isDirectory() || f.isFile();
@@ -542,7 +546,7 @@ public class Debugger {
 
                     @Override
                     public String getDescription() {
-                        return ".bin";
+                        return ".bin,.hex";
                     }
 
                 });
@@ -643,12 +647,33 @@ public class Debugger {
             System.out.println("Address range: " + startAddress + " - " + endAddress + " , " + size + " bytes");
 
             final File file = new File(selectedFile.getText().trim());
-            if (mode == DialogMode.RESTORE) {
+            if (mode == DialogMode.RESTORE) 
+            {
                 driver.setMode(Mode.SINGLE_STEP);
-                driver.invokeAndWait(emulator -> {
-                    final int loaded = emulator.getMemory().restoreRAM(new FileInputStream(file), startAddress);
-                    SwingUtilities
-                            .invokeLater(() -> info("Restored " + loaded + " bytes from " + file.getAbsolutePath()));
+                driver.invokeAndWait(emulator -> 
+                {
+                    final int[] loaded = { 0 };
+                    if ( file.getName().toLowerCase().endsWith(".hex" ) ) 
+                    {
+                        final IntelHex conv = new IntelHex();
+                        
+                        try ( FileInputStream in = new FileInputStream(file) ) 
+                        {
+                            conv.parseHex( in , line -> 
+                            {
+                                System.out.println( line.len+" bytes @ "+Misc.to16BitHex( line.loadOffset ));
+                                emulator.getMemory().restoreRAM( new ByteArrayInputStream( line.data ), line.loadOffset );
+                                loaded[0] += line.len;
+                            });
+                        }                        
+                    } else {
+                        loaded[0] += emulator.getMemory().restoreRAM(new FileInputStream(file), startAddress);
+                    }
+                    SwingUtilities.invokeLater(() -> 
+                            {
+                                info("Restored " + loaded[0] + " bytes from " + file.getAbsolutePath());
+                                updateWindows( false );
+                            });
                 });
             } else {
                 driver.setMode(Mode.SINGLE_STEP);
@@ -1082,6 +1107,7 @@ public class Debugger {
         public final JToggleButton tapePlay = new JToggleButton("Tape: Play", false);
         public final JButton saveTape = new JButton("Save tape");
         public final JButton refreshUIButton = new JButton("Refresh UI");
+        public final JButton printBacktraceButton = new JButton("Show backtrace");
 
         private final KeyAdapter keyListener = new KeyAdapter() {
             public void keyReleased(KeyEvent e) {
@@ -1208,7 +1234,7 @@ public class Debugger {
             });
 
             toggleDisplayToolbar.addActionListener(event -> {
-                driver.invoke(emulator -> {
+                driver.invokeLater(emulator -> {
                     emulator.getVIC().setDisplayEnabled(!emulator.getVIC().isDisplayEnabled());
                 });
             });
@@ -1251,6 +1277,15 @@ public class Debugger {
                 trueSpeed[0] = !trueSpeed[0];
             });
 
+            printBacktraceButton.addActionListener( ev -> 
+            {
+                driver.invokeAndWait( emulator -> 
+                {
+                    getCPU().printBacktrace( System.out );
+                });
+                
+            });
+            
             tapePlay.addActionListener(ev -> {
                 driver.invokeAndWait(emulator -> {
                     emulator.tapeDrive.setKeyPressed(tapePlay.isSelected());
@@ -1273,7 +1308,7 @@ public class Debugger {
 
             final List<AbstractButton> allButtons = Arrays.asList(stopButton, runButton, singleStepButton,
                     stepOverButton, resetButton, breakOnIRQButton, loadButton, toggleSpeedButton, saveTape, tapePlay,
-                    refreshUIButton, toggleDisplayToolbar);
+                    refreshUIButton, toggleDisplayToolbar,printBacktraceButton);
             for (AbstractButton button : allButtons) {
                 button.setFocusable(false);
                 add(button);
@@ -1398,15 +1433,24 @@ public class Debugger {
         }
     }
 
-    protected void updateWindows(boolean isTick) {
-        synchronized (emulator) {
+    public void repaint() {
+        updateWindows(false);
+    }
+    
+    protected void updateWindows(boolean isTick) 
+    {
+        synchronized (emulator) 
+        {
             for (int i = views.size() - 1; i >= 0; i--) {
                 final IDebuggerView view = views.get(i);
-                if (view.isDisplayed() && (!isTick || view.isRefreshAfterTick())) {
+                if (view.isDisplayed() && ( ! isTick || view.isRefreshAfterTick() ) ) {
                     if (Constants.DEBUGGER_DEBUG_VIEW_PERFORMANCE) {
                         benchmark(view);
                     } else {
                         view.refresh();
+                        if (view instanceof Component) {
+                            ((Component) view).repaint();
+                        }                        
                     }
                 }
             }
@@ -1427,21 +1471,23 @@ public class Debugger {
                 }
             }
         }
-        if (!isTick) {
-            SwingUtilities.invokeLater(() -> {
-                for (int i = 0, len = views.size(); i < len; i++) {
-                    final IDebuggerView view = views.get(i);
-                    if (view.isDisplayed() && view instanceof Component) {
-                        ((Component) view).repaint();
-                    }
-                }
-            });
-        }
+//        if ( ! isTick ) 
+//        {
+//            for (int i = 0, len = views.size(); i < len; i++) {
+//                final IDebuggerView view = views.get(i);
+//                if (view.isDisplayed() && view instanceof Component) {
+//                    ((Component) view).repaint();
+//                }
+//            }
+//        }
     }
 
     private void benchmark(final IDebuggerView view) {
         final long now = System.nanoTime();
         view.refresh();
+        if ( view instanceof Component) {
+            ((Component) view).repaint();
+        }
         final long delta = System.nanoTime() - now;
 
         ViewMetrics metrics = viewPerformanceMetrics.get(view);
