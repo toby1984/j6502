@@ -655,11 +655,12 @@ public class VIC extends IMemoryRegion implements IStatefulPart
         @Override
         public void onStartOfLine() 
         {
-            pixelPtr = 0;
             visible = isRowVisible();
             if ( ! visible ) {
                 return;
             }
+            
+            pixelPtr = 0;            
             // calculate address of sprite row we need to render
             // System.out.println("Sprite #"+sprite.spriteNo+" is visible on y == "+beamY);
             int yDelta = beamY - SPRITE_DISPLAY_AREA_START_Y - sprite.y();
@@ -706,7 +707,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
                 return color;
             }
             // sprite display area is larger than graphics area
-            if ( isInSpriteArea(beamX, beamY) ) 
+            if ( isAnySpriteEnabled() && isInSpriteArea(beamX, beamY) ) 
             {
                 // advance sprite sequencers but ignore pixel colors
                 sprite0Sequencer.getRGBColor();     
@@ -1092,7 +1093,7 @@ public class VIC extends IMemoryRegion implements IStatefulPart
                 pixelColor = (currentVideoData & 1<<7) != 0 ? RGB_FG_COLORS[ currentColor & 0b1111 ] : rgbBackgroundColor;
                 currentVideoData <<= 1;
             }
-            return getFinalPixelColor( pixelColor );
+            return isAnySpriteEnabled() ? getFinalPixelColor( pixelColor ) : pixelColor;
         }
 
         private int videoData(int displayY)
@@ -2369,5 +2370,9 @@ display window.
         {
             throw new RuntimeException(e);
         }        
+    }
+    
+    protected boolean isAnySpriteEnabled() {
+        return spritesEnabled != 0;
     }
 }
