@@ -33,6 +33,7 @@ import de.codesourcery.j6502.emulator.IMemoryRegion.MemoryType;
 import de.codesourcery.j6502.emulator.exceptions.HLTException;
 import de.codesourcery.j6502.emulator.exceptions.InvalidOpcodeException;
 import de.codesourcery.j6502.utils.HexDump;
+import de.codesourcery.j6502.utils.Misc;
 import de.codesourcery.j6502.utils.SourceHelper;
 import junit.framework.TestCase;
 
@@ -46,28 +47,28 @@ public class EmulatorTest  extends TestCase
 
     public static final boolean TEST_PERFORMANCE = false;
 //
-    public void testCPUPerformance() throws IOException 
-    {
-        System.out.println("Performance 'Other CPU'");
-
-        final Memory memory = new Memory("test" , MemoryType.RAM , new AddressRange(0,65536));
-
-        final Assembler asm = new Assembler();
-        final CPU actualCPU = prepareTest( asm , memory );
-        final CPUImpl cpu = new CPUImpl( actualCPU , memory );
-
-        final Supplier<Long> toTest = () -> 
-        {
-            actualCPU.reset();
-            actualCPU.pc( asm.getOrigin() );
-            for ( int i = PERFORMANCE_INSTRUCTIONS ; i > 0 ; i-- ) {
-                cpu.executeInstruction();
-            }
-            return actualCPU.cycles;
-        };        
-
-        benchmark( toTest , 50 , 50 );
-    }
+//    public void testCPUPerformance() throws IOException 
+//    {
+//        System.out.println("Performance 'Other CPU'");
+//
+//        final Memory memory = new Memory("test" , MemoryType.RAM , new AddressRange(0,65536));
+//
+//        final Assembler asm = new Assembler();
+//        final CPU actualCPU = prepareTest( asm , memory );
+//        final CPUImpl cpu = new CPUImpl( actualCPU , memory );
+//
+//        final Supplier<Long> toTest = () -> 
+//        {
+//            actualCPU.reset();
+//            actualCPU.pc( asm.getOrigin() );
+//            for ( int i = PERFORMANCE_INSTRUCTIONS ; i > 0 ; i-- ) {
+//                cpu.executeInstruction();
+//            }
+//            return actualCPU.cycles;
+//        };        
+//
+//        benchmark( toTest , 50 , 50 );
+//    }
 
     private CPU prepareTest(Assembler a, IMemoryRegion memory) throws IOException 
     {
@@ -315,6 +316,11 @@ SBC #$02 ; After this instruction, C = 1, A = $29)
         execute("LDX #$10\n LDA #$01 STA ($44,X) CLC\n LDA #$01\n ADC ($44,X)").assertA( 0x02 ).assertFlags();
         execute("LDY #$10\n LDA #$01 STA ($44),Y CLC\n LDA #$01\n ADC ($44),Y").assertA( 0x02 ).assertFlags();
     }
+    
+    public void testADC4() 
+    {
+        execute("LDA #$00\n ADC #$00",CPU.Flag.OVERFLOW,CPU.Flag.CARRY,CPU.Flag.ZERO).assertA( 0x01 ).assertFlags();
+    }    
 
     public void testCPX()
     {
@@ -1171,8 +1177,17 @@ Absolute,X    LDY $4400,X   $BC  3   4+
         private long cyclesExecuted;
 
         private final boolean failOnBreak;
+        
+        private final CPU.Flag[] flags;
 
-        public Helper(String source) {
+        public Helper(String source) 
+        {
+            this(source,(CPU.Flag[]) null);
+        }
+        
+        public Helper(String source,CPU.Flag... flags ) 
+        {
+            this.flags = flags;
             this.source = source;
             this.failOnBreak = true;
         }
@@ -1195,6 +1210,7 @@ Absolute,X    LDY $4400,X   $BC  3   4+
         public Helper(String source, boolean failOnBreak ) {
             this.source = source;
             this.failOnBreak = failOnBreak;
+            this.flags = null;
         }
 
         public Helper assertFlags(CPU.Flag... flags)
@@ -1464,7 +1480,11 @@ Absolute,X    LDY $4400,X   $BC  3   4+
 
                 emulator.setMemoryProvider( provider );
                 emulator.getCPU().pc( PRG_LOAD_ADDRESS-ADDITIONAL_BYTES );
-
+                
+                if ( flags != null && flags.length > 0 ) 
+                {
+                    Arrays.stream( flags ).forEach( emulator.getCPU()::setFlag );
+                }
                 blocks.forEach( b -> b.run() );
                 
                 final EmulatorDriver driver = new EmulatorDriver( emulator ) {
@@ -1549,6 +1569,11 @@ Absolute,X    LDY $4400,X   $BC  3   4+
     {
         return new Helper(source);
     }
+    
+    private Helper execute(String source,CPU.Flag...flags)
+    {
+        return new Helper(source,flags);
+    }
 
     private Helper execute(String source,boolean failOnBreak)
     {
@@ -1584,4 +1609,44 @@ Absolute,X    LDY $4400,X   $BC  3   4+
             throw e;
         }
     }
+
+    public static void main(String[] args) {
+    
+        for ( int a = 0 ; a < 10 ; a++ ) {
+            for ( int b = 0 ; b < 10 ; b++ ) {
+                System.out.println( Misc.to8BitHex( a ) + " + "+Misc.to8BitHex( b )+" = "+Misc.to8BitHex( adcDecimal(a,b ) ));
+            }
+        }
+    }
+    
+    private static boolean carry;
+    private static boolean zero;
+    private static boolean negative;
+    
+    private static int adc(int a,int b) 
+    {
+        if ( carry ) 
+        {
+            a = adcDecimal( a , 1 );
+        } 
+        return adcDecimal(a,b);
+    }
+    
+    private static int adcDecimal(int a,int b) 
+    {
+        int loNibble = (a & 0xf) + (b & 0xf);
+        int carry = 0;
+        if (loNibble > 0x09 ) {
+            carry = 0x06;
+        }
+        int hiNibble = (a & 0xf0)+(b & 0xf0)+( carry != 0 ? 0x10 : 0);  
+        if (hiNibble > 0x90 ) {
+            carry += 0x60;
+        }
+        final int result = a+b+carry;
+        EmulatorTest.carry = result > 0x99;
+        EmulatorTest.zero = result == 0; 
+        EmulatorTest.negative = (result & 0x80) == 0x80;
+        return result & 0xff;
+    }    
 }

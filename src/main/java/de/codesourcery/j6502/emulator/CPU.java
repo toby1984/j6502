@@ -140,6 +140,10 @@ public class CPU
 		public byte clear(byte flags) { return (byte) (flags&~value); }
 		public byte set(byte flags) { return (byte) (flags | value); }
 
+		public byte OR(Flag other) {
+		    return (byte) (other.value | this.value);
+		}
+		
 		public static String toFlagString(byte bitMask)
 		{
 			StringBuilder result = new StringBuilder();
@@ -236,15 +240,15 @@ public class CPU
 	    switch( interruptQueued )
 	    {
             case BRK:
-                pushByte( (byte) (CPU.Flag.BREAK.set( flags ) | CPU.Flag.EXTENSION.set( flags ) ) , memory ); // push processor flags
+                pushByte( (byte)( CPU.Flag.EXTENSION.set( flags ) | CPU.Flag.BREAK.set( flags ) ), memory ); // push processor flags
                 pc = memory.readWord( CPU.BRK_VECTOR_LOCATION );
                 break;
             case NMI:
-                pushByte( flags , memory ); // push processor flags
+                pushByte( CPU.Flag.EXTENSION.set( flags ) , memory ); // push processor flags
                 pc = memory.readWord( CPU.NMI_VECTOR_LOCATION );
                 break;
             case REGULAR:
-                pushByte( flags , memory ); // push processor flags
+                pushByte( CPU.Flag.EXTENSION.set( flags )  , memory ); // push processor flags
                 pc = memory.readWord( CPU.IRQ_VECTOR_LOCATION );
                 break;
             default:
@@ -326,7 +330,7 @@ public class CPU
 		setY(0);
 		clearInterruptQueued();
 		sp = 0x1ff;
-		setFlagBits( CPU.Flag.IRQ_DISABLE.set( (byte) 0) );
+		setFlagBits( CPU.Flag.IRQ_DISABLE.OR( CPU.Flag.EXTENSION ) );
 	}
 	
 	public void setBreakOnInterrupt() {

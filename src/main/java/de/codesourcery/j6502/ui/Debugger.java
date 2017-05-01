@@ -11,6 +11,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.HeadlessException;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -45,6 +46,7 @@ import java.util.function.Function;
 
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
@@ -103,6 +105,7 @@ import de.codesourcery.j6502.emulator.diskdrive.DiskHardware;
 import de.codesourcery.j6502.emulator.tapedrive.TapeFile;
 import de.codesourcery.j6502.ui.KeyboardInputListener.JoystickPort;
 import de.codesourcery.j6502.ui.WindowLocationHelper.IDebuggerView;
+import de.codesourcery.j6502.ui.WindowLocationHelper.ViewConfiguration;
 import de.codesourcery.j6502.utils.HexDump;
 import de.codesourcery.j6502.utils.Misc;
 
@@ -115,6 +118,9 @@ public class Debugger
     protected static final int VERTICAL_LINE_SPACING = 2;
     protected static final Font MONO_FONT = new Font("Monospaced", Font.PLAIN, 12);
 
+    protected static final String CONFIG_KEY_LAST_STATE_FILE = "last.state.file";
+    protected static final String CONFIG_KEY_LAST_MEMORY_FILE = "last.memory.file";
+    
     protected static enum DebugTarget {
         COMPUTER, FLOPPY_8;
     }
@@ -124,11 +130,11 @@ public class Debugger
     private final BreakpointsController c64BreakpointsController = new BreakpointsController(emulator.getCPU(),emulator.getMemory());
     private final AtomicReference<BreakpointsController> breakpointsController = new AtomicReference<>(c64BreakpointsController);    
     private BreakpointsController floppyBreakpointsController;
-    
+
     private final AtomicReference<CPU> debugCPU = new AtomicReference<>(emulator.getCPU());
     private final AtomicReference<IMemoryRegion> debugMemory = new AtomicReference<>(emulator.getMemory());    
     private DebugTarget debugTarget = DebugTarget.COMPUTER;
-    
+
     public final EmulatorDriver driver = new EmulatorDriver(emulator) {
 
         private long lastTick;
@@ -138,11 +144,11 @@ public class Debugger
             final long now = System.currentTimeMillis();
             long age = now - lastTick;
             if (age > Constants.DEBUGGER_UI_REFRESH_MILLIS) // do not post more
-                                                            // than 60 events /
-                                                            // second to not
-                                                            // overload the
-                                                            // Swing Event
-                                                            // handling queue
+                // than 60 events /
+                // second to not
+                // overload the
+                // Swing Event
+                // handling queue
             {
                 lastTick = now;
                 try 
@@ -162,7 +168,7 @@ public class Debugger
     };
 
     protected final EmulationStateManager emulationStateManager = new EmulationStateManager(driver);
-    
+
     protected static final class ViewMetrics {
         public final String viewIdentifier;
         private double totalMs = 0;
@@ -446,11 +452,15 @@ public class Debugger
             };
         }
 
-        public SaveRestoreMemoryDialog(DialogMode mode) {
+        public SaveRestoreMemoryDialog(DialogMode mode) 
+        {
             super((Frame) null, mode == DialogMode.RESTORE ? "Restore memory" : "Save memory");
             setModal(true);
             this.mode = mode;
 
+            final Optional<File> last = getFile( CONFIG_KEY_LAST_MEMORY_FILE );
+            last.map( File::getAbsolutePath ).ifPresent( selectedFile::setText );
+            
             final JTextField startAddressField = new JTextField();
             final JTextField endAddressField = new JTextField();
             final JTextField sizeField = new JTextField();
@@ -527,8 +537,9 @@ public class Debugger
             });
             selectedFile.setColumns(20);
             final JButton selectFileButton = new JButton("Select file...");
-            selectFileButton.addActionListener(ev -> {
-                final JFileChooser chooser = new JFileChooser();
+            selectFileButton.addActionListener(ev -> 
+            {
+                final JFileChooser chooser = createFileChooser( getFile( CONFIG_KEY_LAST_MEMORY_FILE ) );
                 chooser.setFileFilter(new FileFilter() {
 
                     @Override
@@ -556,7 +567,8 @@ public class Debugger
                 } else {
                     result = chooser.showSaveDialog(this);
                 }
-                if (result == JFileChooser.APPROVE_OPTION) {
+                if (result == JFileChooser.APPROVE_OPTION) 
+                {
                     File tmp = chooser.getSelectedFile();
                     if (!isValidFile(tmp.getAbsolutePath())) {
                         error("File " + tmp.getAbsolutePath() + " is either no regular file or empty");
@@ -571,15 +583,16 @@ public class Debugger
             cancelButton.addActionListener(ev -> {
                 dispose();
             });
-            final JButton saveButton = new JButton(mode == DialogMode.SAVE ? "Save" : "Restore");
-            saveButton.addActionListener(ev -> {
+            final JButton submitButton = new JButton(mode == DialogMode.SAVE ? "Save" : "Restore");
+            submitButton.addActionListener(ev -> {
                 try {
                     onClick();
+                    rememberFile(CONFIG_KEY_LAST_MEMORY_FILE, new File( selectedFile.getText() ) );
                     dispose();
                 } catch (Exception e) {
                     e.printStackTrace();
                     error((mode == DialogMode.RESTORE ? "Loading" : "Saving") + " to file " + selectedFile.getText()
-                            + " failed: " + e.getMessage());
+                    + " failed: " + e.getMessage());
                 }
             });
 
@@ -590,8 +603,11 @@ public class Debugger
             getContentPane().add(new JLabel("File:"), cnstrs);
             cnstrs = cnstrs(1, 0, 1, 1);
             cnstrs.fill = GridBagConstraints.HORIZONTAL;
+            cnstrs.weightx=0.7;
             getContentPane().add(selectedFile, cnstrs);
             cnstrs = cnstrs(2, 0, 1, 1);
+            cnstrs.fill = GridBagConstraints.HORIZONTAL;            
+            cnstrs.weightx=0.3;
             getContentPane().add(selectFileButton, cnstrs);
             // second row
             cnstrs = cnstrs(0, 1, 1, 1);
@@ -614,13 +630,13 @@ public class Debugger
             // fifth row
             final JPanel buttonPanel = new JPanel();
             buttonPanel.add(cancelButton);
-            buttonPanel.add(saveButton);
+            buttonPanel.add(submitButton);
             buttonPanel.setLayout(new FlowLayout());
             cnstrs = cnstrs(0, 4, 3, 1);
             cnstrs.fill = GridBagConstraints.HORIZONTAL;
             getContentPane().add(buttonPanel, cnstrs);
 
-            setPreferredSize(new Dimension(320, 200));
+            setMinimumSize(new Dimension(420, 200));
             pack();
         }
 
@@ -656,7 +672,7 @@ public class Debugger
                     if ( file.getName().toLowerCase().endsWith(".hex" ) ) 
                     {
                         final IntelHex conv = new IntelHex();
-                        
+
                         try ( FileInputStream in = new FileInputStream(file) ) 
                         {
                             conv.parseHex( in , line -> 
@@ -670,17 +686,17 @@ public class Debugger
                         loaded[0] += emulator.getMemory().restoreRAM(new FileInputStream(file), startAddress);
                     }
                     SwingUtilities.invokeLater(() -> 
-                            {
-                                info("Restored " + loaded[0] + " bytes from " + file.getAbsolutePath());
-                                updateWindows( false );
-                            });
+                    {
+                        timedInfo("Restored " + loaded[0] + " bytes from " + file.getAbsolutePath());
+                        updateWindows( false );
+                    });
                 });
             } else {
                 driver.setMode(Mode.SINGLE_STEP);
                 driver.invokeAndWait(emulator -> {
                     int saved = emulator.getMemory().saveRAM(AddressRange.range(startAddress, startAddress + size - 1),
                             new FileOutputStream(file));
-                    SwingUtilities.invokeLater(() -> info("Saved " + saved + " bytes to " + file.getAbsolutePath()));
+                    SwingUtilities.invokeLater(() -> timedInfo("Saved " + saved + " bytes to " + file.getAbsolutePath()));
                 });
             }
         }
@@ -692,8 +708,8 @@ public class Debugger
             result.gridy = y;
             result.gridwidth = width;
             result.gridheight = height;
-            result.weightx = 1;
-            result.weighty = 1;
+            result.weightx = 0;
+            result.weighty = 0;
             return result;
         }
     }
@@ -706,23 +722,51 @@ public class Debugger
         new SaveRestoreMemoryDialog(DialogMode.RESTORE).setVisible(true);
     }
 
-    private void saveEmulatorState() throws IOException {
-        final JFileChooser chooser = new JFileChooser();
-        if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
-            try (FileOutputStream out = new FileOutputStream(chooser.getSelectedFile())) {
+    private void saveEmulatorState() throws IOException 
+    {
+        final JFileChooser chooser = createFileChooser( getFile(CONFIG_KEY_LAST_STATE_FILE) );
+        if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) 
+        {
+            final File file = chooser.getSelectedFile();
+            try (FileOutputStream out = new FileOutputStream(file)) {
                 emulationStateManager.saveEmulationState(out);
-                info("Saved state to " + chooser.getSelectedFile().getAbsolutePath());
+                info("Saved state to " + file.getAbsolutePath());
+                rememberFile(CONFIG_KEY_LAST_STATE_FILE , file );
             }
         }
     }
+    
+    private JFileChooser createFileChooser(Optional<File> previousFile) {
+        final JFileChooser result = new JFileChooser();
+        previousFile.ifPresent( result::setSelectedFile );
+        return result;
+    }
 
-    private void restoreEmulatorState() throws IOException {
-        final JFileChooser chooser = new JFileChooser();
-        if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-            try (FileInputStream in = new FileInputStream(chooser.getSelectedFile())) {
+    private void restoreEmulatorState() throws IOException 
+    {
+        final JFileChooser chooser = createFileChooser( getFile(CONFIG_KEY_LAST_STATE_FILE) );
+        if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) 
+        {
+            final File file = chooser.getSelectedFile();
+            try (FileInputStream in = new FileInputStream(file)) 
+            {
                 emulationStateManager.restoreEmulationState(in);
                 info("Restored state from " + chooser.getSelectedFile().getAbsolutePath());
+                rememberFile(CONFIG_KEY_LAST_STATE_FILE,file);
             }
+        }
+    }
+    
+    private Optional<File> getFile(String key) 
+    {
+        final String file = loc.getConfigProperties().get( key );
+        return StringUtils.isBlank( file ) ? Optional.empty() : Optional.of( new File(file) );
+    }
+    
+    private void rememberFile(String key,File file) 
+    {
+        if ( file != null ) {
+            loc.getConfigProperties().put(key,file.getAbsolutePath());
         }
     }
 
@@ -912,7 +956,7 @@ public class Debugger
     private void doWithFloppy(Consumer<DiskHardware> consumer) {
         driver.invokeAndWait(emulator -> {
             emulator.getMemory().ioArea.iecBus.getDevices().stream().filter(dev -> dev instanceof DiskHardware)
-                    .map(dev -> (DiskHardware) dev).findFirst().ifPresent(consumer);
+            .map(dev -> (DiskHardware) dev).findFirst().ifPresent(consumer);
         });
     }
 
@@ -1283,9 +1327,9 @@ public class Debugger
                 {
                     getCPU().printBacktrace( System.out );
                 });
-                
+
             });
-            
+
             tapePlay.addActionListener(ev -> {
                 driver.invokeAndWait(emulator -> {
                     emulator.tapeDrive.setKeyPressed(tapePlay.isSelected());
@@ -1436,7 +1480,7 @@ public class Debugger
     public void repaint() {
         updateWindows(false);
     }
-    
+
     protected void updateWindows(boolean isTick) 
     {
         synchronized (emulator) 
@@ -1463,7 +1507,7 @@ public class Debugger
                     for (ViewMetrics metrics : viewPerformanceMetrics.values()) {
 
                         buffer.append(Thread.currentThread().getName()).append(":").append(metrics.viewIdentifier)
-                                .append(": ").append(DF.format(metrics.getAverageTimeMs())).append(" ms\n");
+                        .append(": ").append(DF.format(metrics.getAverageTimeMs())).append(" ms\n");
                     }
                     ;
                     System.out.print(buffer);
@@ -1471,15 +1515,15 @@ public class Debugger
                 }
             }
         }
-//        if ( ! isTick ) 
-//        {
-//            for (int i = 0, len = views.size(); i < len; i++) {
-//                final IDebuggerView view = views.get(i);
-//                if (view.isDisplayed() && view instanceof Component) {
-//                    ((Component) view).repaint();
-//                }
-//            }
-//        }
+        //        if ( ! isTick ) 
+        //        {
+        //            for (int i = 0, len = views.size(); i < len; i++) {
+        //                final IDebuggerView view = views.get(i);
+        //                if (view.isDisplayed() && view instanceof Component) {
+        //                    ((Component) view).repaint();
+        //                }
+        //            }
+        //        }
     }
 
     private void benchmark(final IDebuggerView view) {
@@ -2059,7 +2103,23 @@ public class Debugger
         JOptionPane.showMessageDialog(null, msg, "Error", JOptionPane.ERROR_MESSAGE);
     }
 
-    protected static void info(String msg) {
+    public static void info(String msg) {
         JOptionPane.showMessageDialog(null, msg, "Info", JOptionPane.INFORMATION_MESSAGE);
+    }
+    
+    public static void timedInfo(String msg) 
+    {
+            final JOptionPane pane = new JOptionPane(msg, JOptionPane.INFORMATION_MESSAGE,JOptionPane.DEFAULT_OPTION);
+            final JDialog dialog = pane.createDialog(null,"Info");
+            dialog.setModal( false );
+            dialog.setVisible(true);
+
+            final Timer[] timer = {null};
+            timer[0] = new Timer(1000 , ev -> 
+            {
+                timer[0].stop();
+                dialog.dispose();
+            });
+            timer[0].start();
     }
 }
