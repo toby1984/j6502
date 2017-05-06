@@ -152,6 +152,8 @@ Indirect,Y    CMP ($44),Y   $D1  2   5+
 
     public void testSBC() {
 
+        execute("SEC\n LDA #208\n SBC #112").assertA( 96 ).assertFlags(CPU.Flag.OVERFLOW, CPU.Flag.CARRY ); // carry = 0 => BORROW
+        
         // SEC ; 0 - 1 = -1, returns V = 0
         // LDA #$00
         // SBC #$01
@@ -171,18 +173,20 @@ M7 	N7 	C6     C7 	B	S7 	V	Borrow / Overflow	                    Hex	Unsigned	  
          */
         // carry clear => borrow    => CLC
         // carry set   => no borrow => SEC
-        execute("SEC\n LDA #80\n SBC #240").assertA( 96 ).assertFlags(); // carry = 1 => NO BORROW
-        execute("SEC\n LDA #80\n SBC #176").assertA( 160 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW); // carry = 0 => BORROW
+
         execute("SEC\n LDA #80\n SBC #112").assertA( 224 ).assertFlags(CPU.Flag.NEGATIVE); // carry = 0 => BORROW
         execute("SEC\n LDA #80\n SBC #48").assertA( 32 ).assertFlags(CPU.Flag.CARRY); // carry = 0 => BORROW
 
         execute("SEC\n LDA #208\n SBC #240").assertA( 224 ).assertFlags(CPU.Flag.NEGATIVE); // carry = 0 => BORROW
         execute("SEC\n LDA #208\n SBC #176").assertA( 32 ).assertFlags(CPU.Flag.CARRY); // carry = 0 => BORROW
 
-        execute("SEC\n LDA #208\n SBC #112").assertA( 96 ).assertFlags(CPU.Flag.OVERFLOW, CPU.Flag.CARRY ); // carry = 0 => BORROW
         execute("SEC\n LDA #208\n SBC #48").assertA( 160 ).assertFlags(CPU.Flag.NEGATIVE, CPU.Flag.CARRY ); // carry = 0 => BORROW
         
-        execute("SEC\n LDA #$ff\n SBC #$9d").assertA( 0x62 ).assertFlags(CPU.Flag.CARRY ); // carry = 0 => BORROW        
+        execute("SEC\n LDA #$ff\n SBC #$9d").assertA( 0x62 ).assertFlags(CPU.Flag.CARRY ); // carry = 0 => BORROW       
+        
+        execute("SEC\n LDA #80\n SBC #240").assertA( 96 ).assertFlags(); // carry = 1 => NO BORROW
+        
+        execute("SEC\n LDA #80\n SBC #176").assertA( 160 ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW); // carry = 0 => BORROW
     }
 
     public void testADC3() {
@@ -235,28 +239,28 @@ M7 	N7 	C6 	    C7 	S7 	V	Carry / Overflow	                    Hex	            U
         /// TAKEN FROM http://www.6502.org/tutorials/decimal_mode.html
 
         /*
-CLD      ; Binary mode (binary addition: 88 + 70 + 1 = 159)
-SEC      ; Note: carry is set, not clear!
-LDA #$58 ; 88
-ADC #$46 ; 70 (after this instruction, C = 0, A = $9F = 159)         
-         */
-        execute("CLD\n SEC\n LDA #$58\n ADC #$46\n").assertA( 0x9f ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW);
-
-        /*
-SED      ; Decimal mode (BCD addition: 58 + 46 + 1 = 105)
-SEC      ; Note: carry is set, not clear!
-LDA #$58
-ADC #$46 ; After this instruction, C = 1, A = $05         
-         */
-        execute("SED\n SEC\n LDA #$58\n ADC #$46\n").assertA( 0x05 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.OVERFLOW,CPU.Flag.DECIMAL_MODE);
-
-        /*
 SED      ; Decimal mode (BCD addition: 12 + 34 = 46)
 CLC
 LDA #$12
 ADC #$34 ; After this instruction, C = 0, A = $46         
          */
         execute("SED\n CLC\n LDA #$12\n ADC #$34\n").assertA( 0x46 ).assertFlags(CPU.Flag.DECIMAL_MODE);
+        
+        /*
+SED      ; Decimal mode (BCD addition: 58 + 46 + 1 = 105)
+SEC      ; Note: carry is set, not clear!
+LDA #$58
+ADC #$46 ; After this instruction, C = 1, A = $05         
+         */
+        execute("SED\n SEC\n LDA #$58\n ADC #$46\n").assertA( 0x05 ).assertFlags(CPU.Flag.CARRY,CPU.Flag.DECIMAL_MODE);
+        
+        /*
+CLD      ; Binary mode (binary addition: 88 + 70 + 1 = 159)
+SEC      ; Note: carry is set, not clear!
+LDA #$58 ; 88
+ADC #$46 ; 70 (after this instruction, C = 0, A = $9F = 159)         
+         */
+        execute("CLD\n SEC\n LDA #$58\n ADC #$46\n").assertA( 0x9f ).assertFlags(CPU.Flag.NEGATIVE,CPU.Flag.OVERFLOW);
 
         /*
 SED      ; Decimal mode (BCD addition: 15 + 26 = 41)
@@ -299,11 +303,13 @@ SBC #$02 ; After this instruction, C = 1, A = $29)
     }
 
     public void testADC() {
-        // b4( %10110100 ) = 180
+
+        execute("LDA #$ff\n CLC\n ADC #$01").assertA( 0x00 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY);
+        
         execute("SEC\n LDA #$03\n ADC #$03").assertA( 0x07 ).assertFlags();
 
         execute("LDA #$01\n CLC\n ADC #$01").assertA( 0x02 ).assertFlags();
-        execute("LDA #$ff\n CLC\n ADC #$01").assertA( 0x00 ).assertFlags(CPU.Flag.ZERO,CPU.Flag.CARRY);
+
         execute("LDA #$7f\n CLC\n ADC #$01").assertA( 0x80 ).assertFlags(CPU.Flag.OVERFLOW , CPU.Flag.NEGATIVE );
 
         execute("LDA #$01\n STA $44\n CLC\n LDA #$01\n ADC $44").assertA( 0x02 ).assertFlags();
@@ -1610,43 +1616,52 @@ Absolute,X    LDY $4400,X   $BC  3   4+
         }
     }
 
-    public static void main(String[] args) {
+    private static boolean cpuCarry;
     
-        for ( int a = 0 ; a < 10 ; a++ ) {
-            for ( int b = 0 ; b < 10 ; b++ ) {
-                System.out.println( Misc.to8BitHex( a ) + " + "+Misc.to8BitHex( b )+" = "+Misc.to8BitHex( adcDecimal(a,b ) ));
+    public static void main(String[] args) {
+        
+        for ( int a = 0 ; a < 100 ; a++ ) 
+        {
+            for ( int b = 1 ; b < 100 ; b++ ) 
+            {
+                cpuCarry = true;
+                int result1 = a - b;
+                if ( result1 < 0 ) {
+                    result1 += 100;
+                }
+                int bcdA = Integer.parseInt( Integer.toString( a ) , 16 );
+                int bcdB = Integer.parseInt( Integer.toString( b ) , 16 );
+                int result2 = Integer.parseInt( Integer.toHexString( bcdSub( bcdA , bcdB ) ) );
+                System.out.println( a+" - "+b+" = "+Misc.to8BitHex( bcdA )+" - "+Misc.to8BitHex( bcdB )+", expected "+result1+" , got "+result2);
+                if ( result1 != result2 ) {
+                    System.err.println("ERROR");
+                    System.exit(1);;
+                }
             }
         }
     }
     
-    private static boolean carry;
-    private static boolean zero;
-    private static boolean negative;
-    
-    private static int adc(int a,int b) 
+    private static int bcdSub(int a,int b) 
     {
-        if ( carry ) 
-        {
-            a = adcDecimal( a , 1 );
-        } 
-        return adcDecimal(a,b);
-    }
-    
-    private static int adcDecimal(int a,int b) 
-    {
-        int loNibble = (a & 0xf) + (b & 0xf);
-        int carry = 0;
-        if (loNibble > 0x09 ) {
-            carry = 0x06;
+        /*
+3a. AL = (A & $0F) - (B & $0F) + C-1
+3b. If AL < 0, then AL = ((AL - $06) & $0F) - $10
+3c. A = (A & $F0) - (B & $F0) + AL
+3d. If A < 0, then A = A - $60
+3e. The accumulator result is the lower 8 bits of A         
+         */
+        int resultLow = (a & 0xf) - ( b & 0xf ) + ( cpuCarry ? 0 : 1 );
+        boolean isCarry = resultLow < 0;
+        cpuCarry = isCarry;
+        if ( isCarry ) {
+            resultLow = ( ( resultLow - 0x06 ) & 0x0f) - 0x10;
         }
-        int hiNibble = (a & 0xf0)+(b & 0xf0)+( carry != 0 ? 0x10 : 0);  
-        if (hiNibble > 0x90 ) {
-            carry += 0x60;
+        int resultHi = (a & 0xf0) - ( b & 0xf0 ) + resultLow;
+        isCarry = resultHi < 0 ;
+        cpuCarry = isCarry;
+        if ( isCarry ) {
+            resultHi -= 0x60;
         }
-        final int result = a+b+carry;
-        EmulatorTest.carry = result > 0x99;
-        EmulatorTest.zero = result == 0; 
-        EmulatorTest.negative = (result & 0x80) == 0x80;
-        return result & 0xff;
-    }    
+        return resultHi & 0xff;
+    }     
 }

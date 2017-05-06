@@ -367,152 +367,111 @@ public final class CPUImpl
     }    
 
     //instruction handler functions
-    protected final AbstractRunnable adcNew = new AbstractRunnable() {
+    protected final AbstractRunnable adcNew = new AbstractRunnable() 
+    {
+        @Override
+        public void run() 
+        {
+            penaltyop = true;
+            value = getvalue();
+            final int accu = cpu.getAccumulator();
+            final int b = value;
+            
+            int result;
+            if ( cpu.isSet( Flag.DECIMAL_MODE ) ) 
+            {
+                result = bcdAdd( accu , b );
+            } else {
+                final int carry = cpu.isSet( Flag.CARRY) ? 1 : 0;
+                final int resultUnsigned = accu + b + carry;
+                result = signExtend( accu ) + signExtend( b ) + carry;
+                cpu.setFlag(Flag.CARRY , resultUnsigned > 255 );
+            }
+            saveaccum(result);
+            
+            cpu.setFlag(Flag.NEGATIVE , (result & 0b1000_0000) != 0 );
+            cpu.setFlag(Flag.ZERO , (result & 0xff) == 0 );
+            cpu.setFlag(Flag.OVERFLOW , result < -128 || result > 127);
+        }
+    };
+    
+    private int bcdAdd(int a,int b) 
+    {
+        int resultLow = (a & 0xf) + ( b & 0xf ) + ( cpu.isSet( Flag.CARRY ) ? 1 : 0 );
+        boolean isCarry = resultLow > 0x09;
+        cpu.setFlag( Flag.CARRY , isCarry );
+        if ( isCarry ) {
+            resultLow += 0x06;
+        }
+        int resultHi = (a & 0xf0) + ( b & 0xf0 ) + ( isCarry ? 0x10 : 0 );
+        isCarry = (resultHi & 0xf0) > 0x90;
+        cpu.setFlag( Flag.CARRY , isCarry );
+        if ( isCarry ) {
+            resultHi += 0x60;
+        }
+        return (resultHi & 0xf0) << 8 | (resultLow & 0x0f);
+    }
+    
+    private int bcdSub(int a,int b) 
+    {
+        /*
+3a. AL = (A & $0F) - (B & $0F) + C-1
+3b. If AL < 0, then AL = ((AL - $06) & $0F) - $10
+3c. A = (A & $F0) - (B & $F0) + AL
+3d. If A < 0, then A = A - $60
+3e. The accumulator result is the lower 8 bits of A         
+         */
+        int resultLow = (a & 0xf) - ( b & 0xf ) + ( cpu.isSet(Flag.CARRY) ? 0 : 1 );
+        boolean isCarry = resultLow < 0;
+        cpu.setFlag(Flag.CARRY , isCarry );
+        if ( isCarry ) {
+            resultLow = ( ( resultLow - 0x06 ) & 0x0f) - 0x10;
+        }
+        int resultHi = (a & 0xf0) - ( b & 0xf0 ) + resultLow;
+        isCarry = resultHi < 0 ;
+        cpu.setFlag( Flag.CARRY , isCarry );
+        if ( isCarry ) {
+            resultHi -= 0x60;
+        }
+        return resultHi & 0xff;
+    } 
+    
+    private static int signExtend(int a) 
+    {
+        final byte v = (byte) a;
+        return v;
+    }
+    
+    protected final AbstractRunnable sbcNew = new AbstractRunnable() {
 
         @Override
         public void run() 
         {
             penaltyop = true;
             value = getvalue();
-            int a = cpu.getAccumulator();
-            int result = a + value + (cpu.isSet( Flag.CARRY ) ? 1 : 0);
+            final int accu = cpu.getAccumulator();
+            final int b = value;
             
-            carrycalc(result);
-            zerocalc(result);
-            overflowcalc(result, a, value);
-            signcalc(result);
-            
+            final int result;
             if ( cpu.isSet( Flag.DECIMAL_MODE ) ) 
             {
-                clearcarry();
-                
-                if ((a & 0x0F) > 0x09) {
-                    a += 0x06;
-                }
-                if ((a & 0xF0) > 0x90) {
-                    a += 0x60;
-                    setcarry();
-                }
+                result = bcdSub( accu , b );
+            } 
+            else 
+            {
+                final int carry = cpu.isSet( Flag.CARRY) ? 0 : 1;
+                final int resultUnsigned = accu - b - carry;
+                result = signExtend( accu ) - signExtend( b ) - carry;
+                cpu.setFlag(Flag.CARRY , (resultUnsigned & 0b1_0000_0000) == 0 );
             }
+            
+            cpu.setFlag(Flag.NEGATIVE , (result & 0b1000_0000) != 0 );
+            cpu.setFlag(Flag.ZERO , (result & 0xff) == 0 );
+            cpu.setFlag(Flag.OVERFLOW , result < -128 || result > 127);
             saveaccum(result);
         }
-    };
+    };    
     
-    protected final AbstractRunnable adcOld = new AbstractRunnable() {
-        @Override
-        public void run() {
-            penaltyop = true;
-            value = getvalue();
-
-            if ( cpu.isSet( Flag.DECIMAL_MODE) )
-            {
-                /*
-                 * - When the carry is clear, ADC NUM performs the calculation A = A + NUM
-                 * - When the carry is set, ADC NUM performs the calculation A = A + NUM + 1
-                 * - When the carry is clear, SBC NUM performs the calculation A = A - NUM - 1
-                 * - When the carry is set, SBC NUM performs the calculation A = A - NUM
-                 *
-                 * The only difference is that ADC and SBC perform a binary calculation in binary mode, and perform a BCD calculation in decimal mode.
-                 *
-                 * The ADC and SBC instructions affect the accumulator and the C, N, V, and Z flags.
-                 *  In decimal mode, the accumulator contains the result of the addition or subtraction, as expected.
-                 *  In decimal mode, after an ADC, the carry is set if the result was greater than 99 ($99)
-                 *  and clear otherwise, and after a SBC, the carry is clear if the result was less than 0 and set otherwise. A few examples are in order:
-                 *
-                 *  In binary mode, subtraction has a wraparound effect.
-                 *  For example $00 - $01 = $FF (and the carry is clear).
-                 *  In decimal mode, there is a similar wraparound effect: $00 - $01 = $99, and the carry is clear.
-                 *
-                 *  In binary mode, the Z flag simply indicates where the result of the instruction is non-zero (Z flag clear) or zero (Z flag set).
-                 *  In decimal mode, the Z flag has the same meaning.
-                 *
-                 *  A common (and correct) interpretation of the N flag is that it contains the value of the high bit (i.e. bit 7) of the result of the instruction.
-                 *  This interpretation is the meaning of the N flag in decimal mode.
-                 */
-
-                // TODO: Implement BCD mode according to http://www.6502.org/tutorials/decimal_mode.html
-
-                /*
-1a. AL = (A & $0F) + (B & $0F) + C
-1b. If AL >= $0A, then AL = ((AL + $06) & $0F) + $10
-1c. A = (A & $F0) + (B & $F0) + AL
-1d. Note that A can be >= $100 at this point
-1e. If (A >= $A0), then A = A + $60
-1f. The accumulator result is the lower 8 bits of A
-1g. The carry result is 1 if A >= $100, and is 0 if A < $100
-                 */
-
-                int a = cpu.getAccumulator();
-                int b = value;
-                int c = ( cpu.isSet( Flag.CARRY ) ? 1 : 0 );
-
-                int al = ( a & 0x0f ) + ( b & 0x0f ) + c;
-                if ( al >= 0x0a ) {
-                    al = (( al + 0x06 ) & 0x0f ) + 0x10;
-                }
-                a = ( a & 0xf0 ) + ( b & 0xf0 ) + al;
-                if ( a >= 0xa0 ) {
-                    a = a + 0x60;
-                }
-                cpu.setAccumulator( a & 0xff );
-                cpu.setFlag( Flag.CARRY , a >= 0x100 );
-
-                /*
-2a. AL = (A & $0F) + (B & $0F) + C
-2b. If AL >= $0A, then AL = ((AL + $06) & $0F) + $10
-2c. A = (A & $F0) + (B & $F0) + AL, using signed (twos complement) arithmetic
-2e. The N flag result is 1 if bit 7 of A is 1, and is 0 if bit 7 if A is 0
-2f. The V flag result is 1 if A < -128 or A > 127, and is 0 if -128 <= A <= 127
-                 */
-
-                byte t1 = (byte) (a & 0xf0);
-                byte t2 = (byte) (b & 0xf0);
-                int tmpA = t1 + t2 + al;
-                cpu.setFlag(CPU.Flag.NEGATIVE , (tmpA & 0b1000_0000) != 0 );
-                cpu.setFlag(CPU.Flag.OVERFLOW , (a < -128 || a > 127 ) );
-
-                return;
-            }
-            adc( cpu.getAccumulator() , value , cpu.isSet(Flag.CARRY) ? 1 : 0 );
-        }
-    };
-
-    private int bcdToBinary(int value ) {
-        if ( (value & 0b1111) > 9 || ( ( value >>> 4 ) & 0b1111 ) > 9 ) {
-            throw new RuntimeException("Invalid BCD: "+Integer.toHexString( value ) );
-        }
-
-        int hi = (value & 0b1111_0000) >>> 4;
-        int lo = (value & 0b0000_1111);
-        return hi*10 + lo;
-    }
-
-    private int binaryToBcd(int binary ) {
-
-        if ( binary < 0 || binary > 99 ) {
-            throw new RuntimeException("Binary value out of BCD range: "+Integer.toHexString( binary ) );
-        }
-
-        int hi = binary/10;
-        int lo = binary - (hi*10);
-        return hi << 4 | lo;
-    }	
-
-    protected void adc(int a,int b,int carry)
-    {
-        int result = (a & 0xff) + (b & 0xff) + carry;
-        boolean c6 = ( ( (a & 0b0111_1111) + (b & 0b0111_1111) + carry) & 0x80 ) != 0;
-
-        boolean m7 = (a & 0b1000_0000) != 0;
-        boolean n7 = (b & 0b1000_0000) != 0;
-
-        cpu.setFlag( Flag.CARRY , ((result & 0x100) != 0) );
-        cpu.setFlag( Flag.OVERFLOW, (!m7&!n7&c6) | (m7&n7&!c6));
-        cpu.setFlag( Flag.NEGATIVE , ( result & 0b1000_0000) != 0 );
-        cpu.setFlag( Flag.ZERO , ( result & 0xff) == 0 );
-        cpu.setAccumulator(result);
-    }
-
     protected final AbstractRunnable and = new AbstractRunnable() {
         @Override
         public void run() {
@@ -1095,90 +1054,6 @@ public final class CPUImpl
         public void run() {
             value = pull16();
             cpu.pc( value + 1 );
-        }
-    };
-
-    protected final AbstractRunnable sbcNew = new AbstractRunnable() {
-
-        @Override
-        public void run() 
-        {
-            penaltyop = true;
-            value = getvalue() ^ 0x00FF;
-            int a = cpu.getAccumulator();
-            
-            int result = a + value + (cpu.isSet( Flag.CARRY ) ? 1 : 0 );
-
-            carrycalc(result);
-            zerocalc(result);
-            overflowcalc(result, a, value);
-            signcalc(result);
-
-            if ( cpu.isSet( Flag.DECIMAL_MODE ) ) 
-            {
-                clearcarry();
-
-                a -= 0x66;
-                if ((a & 0x0F) > 0x09) {
-                    a += 0x06;
-                }
-                if ((a & 0xF0) > 0x90) {
-                    a += 0x60;
-                    setcarry();
-                }
-            }
-
-            saveaccum(result);
-        }
-    };
-
-    protected final AbstractRunnable sbcOld = new AbstractRunnable() {
-        @Override
-        public void run() {
-            penaltyop = true;
-            value = getvalue();
-
-            int a = cpu.getAccumulator();
-
-            if ( cpu.isSet( Flag.DECIMAL_MODE) )
-            {
-                // TODO: Implement BCD according to http://www.6502.org/tutorials/decimal_mode.html
-
-                /*
-In decimal mode, like binary mode, the carry (the C flag) affects the ADC and SBC instructions. Specifically:
-
-        When the carry is clear, SBC NUM performs the calculation A = A - NUM - 1
-        When the carry is set, SBC NUM performs the calculation A = A - NUM
-
-                 */
-                int valueBin = bcdToBinary( value );
-                if ( cpu.isNotSet( Flag.CARRY ) ) {
-                    valueBin++;
-                }
-                int accBin = bcdToBinary( a );
-
-                boolean carry = true;
-                for ( int i = 0 ; i < valueBin ; i++ ) {
-                    accBin--;
-                    if ( accBin == -1 ) {
-                        // after a SBC, the carry is clear if the result was less than 0 and set otherwise
-                        carry = false;
-                        accBin = 99;
-                    }
-                }
-                cpu.setFlag( Flag.CARRY , carry);
-                cpu.setFlag( Flag.ZERO , accBin == 0 );
-                cpu.setFlag( Flag.NEGATIVE , (accBin & 1<<7) != 0 );
-                cpu.setAccumulator( binaryToBcd( accBin ) );
-                return;
-            }
-
-            /*
-             * ADC: Carry set   = +1 ,
-             * SBC: Carry clear = -1
-             */
-            final int carry = cpu.isSet( CPU.Flag.CARRY) ? 1: 0;
-            adc( a , ( ~value & 0xff ) , carry );
         }
     };
 
