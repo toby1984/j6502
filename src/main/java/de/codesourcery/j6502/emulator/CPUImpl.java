@@ -395,21 +395,27 @@ public final class CPUImpl
         }
     };
     
+    /*
+1a. AL = (A & $0F) + (B & $0F) + C
+1b. If AL >= $0A, then AL = ((AL + $06) & $0F) + $10
+1c. A = (A & $F0) + (B & $F0) + AL
+1d. Note that A can be >= $100 at this point
+1e. If (A >= $A0), then A = A + $60
+1f. The accumulator result is the lower 8 bits of A
+1g. The carry result is 1 if A >= $100, and is 0 if A < $100     
+     */
     private int bcdAdd(int a,int b) 
     {
         int resultLow = (a & 0xf) + ( b & 0xf ) + ( cpu.isSet( Flag.CARRY ) ? 1 : 0 );
-        boolean isCarry = resultLow > 0x09;
-        cpu.setFlag( Flag.CARRY , isCarry );
-        if ( isCarry ) {
-            resultLow += 0x06;
+        if ( resultLow > 0x09 ) {
+            resultLow = ((resultLow + 0x06) & 0x0F) + 0x10;
         }
-        int resultHi = (a & 0xf0) + ( b & 0xf0 ) + ( isCarry ? 0x10 : 0 );
-        isCarry = (resultHi & 0xf0) > 0x90;
-        cpu.setFlag( Flag.CARRY , isCarry );
-        if ( isCarry ) {
-            resultHi += 0x60;
+        int result = ( a & 0xf0 ) + ( b & 0xf0 ) + resultLow;
+        if ( result >= 0xa0 ) {
+            result += 0x60;
         }
-        return (resultHi & 0xf0) << 8 | (resultLow & 0x0f);
+        cpu.setFlag(Flag.CARRY , result >= 0x100 );
+        return result & 0xff;
     }
     
     private int bcdSub(int a,int b) 

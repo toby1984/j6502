@@ -124,9 +124,17 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
                 writeByte(i,(byte) 0);
             }
         }
-        
-        public int readByteNoSideEffects(int offset) {
-            return readByte(offset);
+
+        public int readByteNoSideEffects(int offset) 
+        {
+            switch( offset & 0xffff) 
+            {
+                case 0:
+                case 1:
+                    return readByte(offset);
+                default:
+                    return super.readByteNoSideEffects(offset);
+            }
         }
 
         @Override
@@ -640,7 +648,7 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
         final int realOffset = wrappedOffset - region.getAddressRange().getStartAddress();
         region.writeByte( realOffset , value );
     }
-    
+
     @Override
     public void writeByteNoSideEffects(int offset, byte value) {
         final int wrappedOffset = offset & 0xffff;
@@ -740,7 +748,7 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
             writeByte( offset , low );
             writeByte( offset+1 , hi );
         }
-        
+
         @Override
         public void writeByteNoSideEffects(int offset, byte value) {
             final int wrappedOffset = offset & 0xffff;
@@ -856,7 +864,7 @@ public final class MemorySubsystem extends IMemoryRegion implements IStatefulPar
                 System.out.println("Saving "+entry.payloadLength()+" bytes of RAM...");
             }            
             state.add( entry );
-            
+
             // save I/O area
             ioArea.saveState( state );
         } 
